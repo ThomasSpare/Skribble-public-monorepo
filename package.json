@@ -1,0 +1,53 @@
+{
+  "name": "skribble-workspace",
+  "version": "1.0.0",
+  "description": "Skribble - Music Collaboration Platform",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "start:frontend": "cd frontend && npm run start",
+    "start:backend": "cd backend && npm run start",
+    "test": "npm run test:backend",
+    "test:backend": "cd backend && npm run test",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint:backend": "cd backend && npm run lint",
+    "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "clean": "rm -rf node_modules frontend/node_modules backend/node_modules frontend/.next backend/dist",
+    "clean-install": "npm run clean && npm run install-all"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "author": "Skribble Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skribble/skribble-platform"
+  },
+  "keywords": [
+    "music",
+    "collaboration",
+    "audio",
+    "annotation",
+    "producer",
+    "artist",
+    "DAW",
+    "workflow"
+  ]
+}

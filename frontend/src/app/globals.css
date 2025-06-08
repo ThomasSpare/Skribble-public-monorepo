@@ -1,0 +1,455 @@
+/* frontend/src/app/globals.css */
+@import url('https://fonts.googleapis.com/css2?family=Madimi+One:wght@400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Root variables for consistent theming */
+:root {
+  --skribble-sky: #C6D8FF;
+  --skribble-azure: #71A9F7;
+  --skribble-purple: #6B5CA5;
+  --skribble-plum: #72195A;
+  --skribble-dark: #4C1036;
+  
+  --font-madimi: 'Madimi One', sans-serif;
+  --font-inter: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-inter);
+  background: linear-gradient(135deg, var(--skribble-dark) 0%, var(--skribble-plum) 100%);
+  min-height: 100vh;
+  color: var(--skribble-sky);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography classes */
+.font-madimi {
+  font-family: var(--font-madimi) !important;
+  font-weight: 400;
+}
+
+.font-inter {
+  font-family: var(--font-inter) !important;
+}
+
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+
+/* Custom animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes pulse-dots {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes waveform-pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.2);
+  }
+}
+
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes bubble-float {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  33% {
+    transform: translateY(-3px) rotate(1deg);
+  }
+  66% {
+    transform: translateY(-1px) rotate(-1deg);
+  }
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+}
+
+/* Animation utility classes */
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: .5;
+  }
+}
+
+.animate-pulse-dots {
+  animation: pulse-dots 1.5s ease-in-out infinite;
+}
+
+.animate-waveform-pulse {
+  animation: waveform-pulse 2s ease-in-out infinite;
+}
+
+.animate-gradient-shift {
+  animation: gradient-shift 3s ease infinite;
+  background-size: 200% 200%;
+}
+
+.animate-bubble-float {
+  animation: bubble-float 4s ease-in-out infinite;
+}
+
+/* Skribble component styles */
+.skribble-chat-bubble {
+  position: relative;
+  background: var(--skribble-azure);
+  border-radius: 12px 12px 12px 3px;
+  box-shadow: 0 4px 12px rgba(113, 169, 247, 0.4);
+}
+
+.skribble-chat-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 15px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 8px solid var(--skribble-azure);
+}
+
+.skribble-gradient-text {
+  background: linear-gradient(45deg, var(--skribble-azure), var(--skribble-purple));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.skribble-gradient-border {
+  position: relative;
+  background: linear-gradient(var(--skribble-plum), var(--skribble-plum)) padding-box,
+              linear-gradient(45deg, var(--skribble-azure), var(--skribble-purple)) border-box;
+  border: 2px solid transparent;
+}
+
+.skribble-glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.skribble-waveform {
+  background: linear-gradient(to right, 
+    var(--skribble-purple) 0%, 
+    var(--skribble-azure) 25%, 
+    var(--skribble-sky) 50%, 
+    var(--skribble-azure) 75%, 
+    var(--skribble-purple) 100%
+  );
+}
+
+/* Button styles - Removed @apply */
+.btn-primary {
+  background: linear-gradient(to right, var(--skribble-azure), var(--skribble-purple));
+  color: white;
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  transition: all 0.3s;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 10px 25px -3px rgba(113, 169, 247, 0.25);
+  transform: scale(1.05);
+}
+
+.btn-secondary {
+  border: 1px solid var(--skribble-azure);
+  color: var(--skribble-azure);
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  transition: all 0.3s;
+}
+
+.btn-secondary:hover {
+  background-color: var(--skribble-azure);
+  color: white;
+}
+
+.btn-ghost {
+  color: var(--skribble-sky);
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.3s;
+}
+
+.btn-ghost:hover {
+  color: var(--skribble-azure);
+  background-color: rgba(113, 169, 247, 0.1);
+}
+
+/* Card styles - Removed @apply */
+.card-default {
+  background-color: rgba(114, 25, 90, 0.3);
+  backdrop-filter: blur(12px);
+  border-radius: 1rem;
+  border: 1px solid rgba(113, 169, 247, 0.2);
+  transition: all 0.3s;
+}
+
+.card-default:hover {
+  border-color: rgba(113, 169, 247, 0.4);
+}
+
+.card-glass {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 1rem;
+}
+
+.card-hover:hover {
+  transform: scale(1.05);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Form styles - Removed @apply */
+.input-default {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background-color: rgba(114, 25, 90, 0.3);
+  border: 1px solid rgba(113, 169, 247, 0.3);
+  border-radius: 0.5rem;
+  color: var(--skribble-sky);
+  transition: all 0.3s;
+}
+
+.input-default::placeholder {
+  color: rgba(113, 169, 247, 0.5);
+}
+
+.input-default:focus {
+  border-color: var(--skribble-azure);
+  box-shadow: 0 0 0 3px rgba(113, 169, 247, 0.2);
+  outline: none;
+}
+
+.label-default {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--skribble-azure);
+  margin-bottom: 0.5rem;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--skribble-dark);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--skribble-purple);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--skribble-azure);
+}
+
+/* Selection styles */
+::selection {
+  background: var(--skribble-azure);
+  color: white;
+}
+
+::-moz-selection {
+  background: var(--skribble-azure);
+  color: white;
+}
+
+/* Focus styles for accessibility */
+.focus-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--skribble-azure), 0 0 0 6px var(--skribble-dark);
+}
+
+/* Loading animation */
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--skribble-azure);
+  border-top: 2px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Responsive typography */
+@media (max-width: 768px) {
+  .responsive-text-lg {
+    font-size: 1rem;
+  }
+  
+  .responsive-text-xl {
+    font-size: 1.125rem;
+  }
+  
+  .responsive-text-2xl {
+    font-size: 1.25rem;
+  }
+  
+  .responsive-text-3xl {
+    font-size: 1.5rem;
+  }
+  
+  .responsive-text-4xl {
+    font-size: 1.875rem;
+  }
+  
+  .responsive-text-5xl {
+    font-size: 2.25rem;
+  }
+}
+
+/* Print styles */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --skribble-sky: #ffffff;
+    --skribble-azure: #0066ff;
+    --skribble-purple: #6600cc;
+    --skribble-plum: #330066;
+    --skribble-dark: #000000;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .animate-float,
+  .animate-pulse-dots,
+  .animate-waveform-pulse,
+  .animate-gradient-shift,
+  .animate-bubble-float {
+    animation: none !important;
+  }
+}
+
+.annotation-tooltip-type {
+  @apply text-xs text-skribble-purple mt-1 capitalize;
+  font-size: 0.6875rem;
+  opacity: 0.8;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Canvas cursor styles for better UX */
+.waveform-canvas {
+  cursor: crosshair;
+}
+
+.waveform-canvas:hover {
+  cursor: pointer;
+}
+
+.waveform-canvas.dragging {
+  cursor: grabbing;
+}
+
+/* Annotation priority colors for consistency */
+:root {
+  --annotation-critical: #ef4444;
+  --annotation-high: #f59e0b;
+  --annotation-medium: #eab308;
+  --annotation-low: #22c55e;
+  --annotation-issue: #ef4444;
+  --annotation-approval: #22c55e;
+  --annotation-marker: #f59e0b;
+  --annotation-voice: #8b5cf6;
+  --annotation-section: #06b6d4;
+  --annotation-comment: #71A9F7;
+}

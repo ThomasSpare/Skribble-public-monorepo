@@ -177,21 +177,12 @@ export default function ProjectPage() {
   useEffect(() => {
   if (project && project.audioFiles && project.audioFiles.length > 0) {
     const currentAudio = project.audioFiles.find(af => af.isActive) || project.audioFiles[0];
-    console.log('=== PROJECT AUDIO DEBUG ===');
-    console.log('Project:', project.title);
-    console.log('Audio files:', project.audioFiles);
-    console.log('Current audio file:', currentAudio);
-    console.log('File URL from database:', currentAudio?.fileUrl);
-    console.log('NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
-    console.log('Full audio URL being passed to player:', `${process.env.NEXT_PUBLIC_API_URL}${currentAudio?.fileUrl}`);
     
     // Test if the URL is accessible
     if (currentAudio?.fileUrl) {
       const testUrl1 = `${process.env.NEXT_PUBLIC_API_URL}${currentAudio.fileUrl}`;
       const testUrl2 = `${process.env.NEXT_PUBLIC_API_URL}/api/upload/audio/${currentAudio.filename}`;
-      
-      console.log('Testing URL 1 (current):', testUrl1);
-      console.log('Testing URL 2 (alternative):', testUrl2);
+    
       
       fetch(testUrl1, { method: 'HEAD' })
         .then(response => {

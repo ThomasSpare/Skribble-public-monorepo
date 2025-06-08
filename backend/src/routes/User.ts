@@ -1,7 +1,7 @@
 // backend/src/models/User.ts
 import { pool } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
-import { User } from '../../../shared/types';
+import { User } from '../types/index';
 
 interface PostgresError extends Error {
   code?: string;

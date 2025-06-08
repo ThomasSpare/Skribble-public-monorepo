@@ -30,15 +30,10 @@ router.post('/', [ // filepath: backend/src/routes/annotations.ts
   body('parentId').optional().isUUID(),
   body('mentions').optional().isArray()
 ], async (req: Request, res: Response) => {
-  console.log('=== ANNOTATION POST ROUTE HIT ===');
-  console.log('Request body:', req.body);
-  console.log('User from token:', req.user);
-  console.log('Headers:', req.headers);
 
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         error: {
@@ -48,8 +43,6 @@ router.post('/', [ // filepath: backend/src/routes/annotations.ts
         }
       });
     }
-
-    console.log('✅ Annotation validation passed, creating...');
 
     // Extract data from the request body
     const { audioFileId, timestamp, text, annotationType, priority, parentId, mentions } = req.body;
@@ -77,7 +70,6 @@ router.post('/', [ // filepath: backend/src/routes/annotations.ts
     });
 
   } catch (error) {
-    console.error('❌ Annotation creation error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -94,11 +86,6 @@ router.get('/audio/:audioFileId', [
   authenticateToken,
   param('audioFileId').isUUID()
 ], async (req: Request, res: Response) => {
-  console.log('=== GET ANNOTATIONS ROUTE HIT ===');
-  console.log('Audio File ID:', req.params.audioFileId);
-  console.log('Query params:', req.query);
-  console.log('User:', req.user);
-
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -170,8 +157,6 @@ router.get('/audio/:audioFileId', [
     const annotations = Object.keys(filters).length > 0
       ? await AnnotationModel.findWithFilters(audioFileId, filters)
       : await AnnotationModel.findByAudioFileId(audioFileId);
-
-    console.log(`Found ${annotations.length} annotations`);
 
     res.json({
       success: true,

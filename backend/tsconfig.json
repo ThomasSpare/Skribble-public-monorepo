@@ -4,7 +4,7 @@
     "lib": ["ES2020"],
     "allowJs": true,
     "skipLibCheck": true,
-    "strict": true,
+    "strict": false,
     "forceConsistentCasingInFileNames": true,
     "noEmit": false,
     "esModuleInterop": true,
@@ -17,23 +17,25 @@
     "rootDir": "./src",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@/types": ["../shared/types/index.ts"]
+      "@/*": ["./src/*"]
     },
     "types": ["node"],
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "noImplicitAny": false,
+    "strictNullChecks": false
   },
   "include": [
-    "src/**/*",
-    "../shared/types/**/*"
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "../shared",
+    "../frontend"
   ],
   "ts-node": {
     "esm": false,

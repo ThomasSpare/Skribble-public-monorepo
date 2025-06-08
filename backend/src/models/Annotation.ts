@@ -1,7 +1,7 @@
 // backend/src/models/Annotation.ts
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../config/database';
-import { Annotation, User } from '../../../shared/types';
+import { Annotation, User } from '../types/index';
 
 interface CreateAnnotationData {
   audioFileId: string;

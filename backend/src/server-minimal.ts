@@ -13,8 +13,6 @@ import projectRoutes from './routes/projects';
 import annotationRoutes from './routes/annotations';
 import userRoutes from './routes/users';
 import collaborationRoutes from './routes/collaboration';
-import stripeRoutes from './routes/stripe';
-import webhookRoutes from './routes/webhooks';
 
 const app = express();
 const server = createServer(app);
@@ -50,8 +48,6 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/annotations', annotationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/collaboration', collaborationRoutes);
-app.use('/api/stripe', stripeRoutes);
-app.use('/api/webhooks', webhookRoutes);
 
 // Static file serving for uploads
 app.use('/uploads', express.static('./uploads'));

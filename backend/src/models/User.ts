@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
-import { User } from '../../../shared/types';
+import { User } from '../types/index';
 
 
 // Database connection (you'll need to set this up)

@@ -30,9 +30,7 @@ export const initializeDatabase = async (): Promise<void> => {
     console.log('✅ Database connected successfully');
     
     // Run a simple query to verify
-    const result = await client.query('SELECT NOW()');
-    console.log(`📊 Database timestamp: ${result.rows[0].now}`);
-    
+    const result = await client.query('SELECT NOW()');    
     client.release();
   } catch (error) {
     console.error('❌ Database connection failed:', error);

@@ -230,11 +230,9 @@ export default function DashboardPage() {
   };
 
   const initializeDashboard = async () => {
-    console.log('Initializing dashboard...');
     
     const token = localStorage.getItem('skribble_token');
     if (!token) {
-      console.log('No token found, redirecting to login');
       router.push('/login');
       return;
     }
@@ -249,11 +247,8 @@ export default function DashboardPage() {
         }
       });
 
-      console.log('User response status:', userResponse.status);
-
       if (!userResponse.ok) {
         if (userResponse.status === 401) {
-          console.log('Token invalid, clearing and redirecting to login');
           localStorage.removeItem('skribble_token');
           localStorage.removeItem('skribble_refresh_token');
           router.push('/login');
@@ -263,11 +258,9 @@ export default function DashboardPage() {
       }
 
       const userData = await userResponse.json();
-      console.log('User data received:', userData);
 
       if (userData.success && userData.data) {
         setUser(userData.data);
-        console.log('User set successfully:', userData.data);
         
         // Now fetch projects with annotation counts
         await fetchProjects(token);
@@ -284,7 +277,6 @@ export default function DashboardPage() {
 
   // ✨ FIXED: Function to enrich projects with real annotation counts
   const enrichProjectsWithAnnotations = async (projects: Project[], token: string): Promise<Project[]> => {
-    console.log('🎵 Enriching projects with annotation counts...');
     
     const enrichedProjects = await Promise.all(
       projects.map(async (project) => {
@@ -303,9 +295,7 @@ export default function DashboardPage() {
             if (response.ok) {
               const data = await response.json();
               const annotationCount = data.success ? (data.data?.length || 0) : 0;
-              
-              console.log(`📝 Project "${project.title}": ${annotationCount} annotations`);
-              
+                          
               return {
                 ...project,
                 annotations: annotationCount
@@ -326,8 +316,6 @@ export default function DashboardPage() {
         }
       })
     );
-    
-    console.log('✅ Projects enriched with annotation counts:', enrichedProjects);
     return enrichedProjects;
   };
 
@@ -343,7 +331,6 @@ export default function DashboardPage() {
         return;
       }
 
-      console.log('🔄 Fetching projects with annotation counts...');
       
       const projectsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects`, {
         headers: {
@@ -356,7 +343,6 @@ export default function DashboardPage() {
         if (projectsData.success) {
           // ✨ FIXED: Enrich projects with real annotation counts
           const enrichedProjects = await enrichProjectsWithAnnotations(projectsData.data || [], authToken);
-          console.log('📊 Setting projects with annotation counts:', enrichedProjects);
           setProjects(enrichedProjects);
           setError(null);
         }
@@ -373,7 +359,6 @@ export default function DashboardPage() {
   };
 
   const handleUploadComplete = (projectData: UploadCompleteData) => {
-    console.log('Upload completed, received project data:', projectData);
     
     const newProject: Project = {
       ...projectData.project,

@@ -122,7 +122,6 @@ class MigrationRunner {
         return;
       }
       
-      console.log(`📝 Found ${pending.length} pending migration(s):`);
       pending.forEach(migration => console.log(`   - ${migration}`));
       
       // Execute pending migrations

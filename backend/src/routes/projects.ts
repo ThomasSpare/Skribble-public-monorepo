@@ -73,17 +73,10 @@ router.post('/', [
 
 // Get user's projects
 router.get('/', authenticateToken, async (req, res) => {
-  console.log('=== GET PROJECTS ROUTE HIT ===');
-  console.log('User:', req.user);
-  console.log('Query params:', req.query);
-
   try {
     const userId = req.user!.userId;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
-
-    console.log(`Fetching projects for user ${userId}, limit: ${limit}, offset: ${offset}`);
-
     // Get projects where user is creator or collaborator
     const projectsQuery = `
       SELECT DISTINCT 
@@ -112,7 +105,6 @@ router.get('/', authenticateToken, async (req, res) => {
     `;
 
     const projectsResult = await pool.query(projectsQuery, [userId, limit, offset]);
-    console.log(`Found ${projectsResult.rows.length} projects`);
 
     // Get additional data for each project
     const projects = await Promise.all(
@@ -262,8 +254,6 @@ router.get('/', authenticateToken, async (req, res) => {
         }
       })
     );
-
-    console.log(`Successfully processed ${projects.length} projects`);
 
     res.json({
       success: true,
@@ -460,7 +450,6 @@ router.get('/:id', [
       updatedAt: row.updated_at
     };
 
-    console.log(`Successfully fetched project: ${project.title}`);
 
     res.json({
       success: true,

@@ -46,7 +46,6 @@ router.put('/profile',
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        console.log('❌ Validation errors:', errors.array());
         return res.status(400).json({
           success: false,
           error: {
@@ -58,8 +57,6 @@ router.put('/profile',
 
       const userId = req.user.userId;
       const { username, role, profileImage } = req.body;
-
-      console.log('📝 Profile update request:', { userId, username, role, profileImage });
 
       // Check if username is available (if changing) - direct query
       if (username) {
@@ -115,9 +112,6 @@ router.put('/profile',
                   profile_image, created_at, updated_at
       `;
 
-      console.log('💾 Executing update query:', updateQuery);
-      console.log('💾 With values:', updateValues);
-
       const result = await pool.query(updateQuery, updateValues);
 
       if (result.rows.length === 0) {
@@ -137,8 +131,6 @@ router.put('/profile',
         createdAt: result.rows[0].created_at,
         updatedAt: result.rows[0].updated_at
       };
-
-      console.log('✅ User updated successfully:', updatedUser.id);
 
       res.json({
         success: true,

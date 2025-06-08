@@ -37,7 +37,6 @@ export const setupSocketEvents = (io: Server) => {
 
   io.on('connection', (socket) => {
     const user = (socket as any).user as AuthenticatedSocket;
-    console.log(`🔌 User connected: ${user.userId}`);
 
     // Join project room
     socket.on('join-project', (projectId: string) => {
@@ -49,9 +48,7 @@ export const setupSocketEvents = (io: Server) => {
         userId: user.userId,
         email: user.email
       });
-      
-      console.log(`👥 User ${user.userId} joined project ${projectId}`);
-    });
+          });
 
     // Leave project room
     socket.on('leave-project', (projectId: string) => {

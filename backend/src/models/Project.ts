@@ -1,7 +1,7 @@
 // backend/src/models/Project.ts
 import { v4 as uuidv4 } from 'uuid';
 import { pool } from '../config/database';
-import { Project, ProjectSettings, User, ProjectCollaborator, AudioFile } from '../../../shared/types';
+import { Project, ProjectSettings, User, ProjectCollaborator, AudioFile } from '../types/index';
 
 interface CreateProjectData {
   title: string;

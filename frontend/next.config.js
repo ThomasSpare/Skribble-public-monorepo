@@ -4,6 +4,12 @@ const nextConfig = {
     optimizePackageImports: ["lucide-react"],
   },
   images: {
+    // Configure image domains for Next.js
+    domains: [
+      "localhost",
+      "skribble-public-monorepo-backend-production.up.railway.app", // Update this!
+      "api.dicebear.com",
+    ],
     remotePatterns: [
       // Local development
       {

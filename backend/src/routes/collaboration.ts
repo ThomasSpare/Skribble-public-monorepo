@@ -509,7 +509,6 @@ router.get('/projects/:projectId/collaborators', [
           createdAt: row.user_created_at
         },
         role: row.role,
-        permissions: JSON.parse(row.permissions),
         invitedBy: row.invited_by,
         inviterName: row.inviter_name,
         invitedAt: row.invited_at,
@@ -523,6 +522,81 @@ router.get('/projects/:projectId/collaborators', [
     res.status(500).json({
       success: false,
       error: { message: 'Failed to get collaborators', code: 'GET_COLLABORATORS_ERROR' }
+    });
+  }
+});
+
+router.get('/projects/:projectId/collaborators/:collaboratorId', [
+  authenticateToken,
+  param('projectId').isUUID(),
+  param('collaboratorId').isUUID()
+], async (req: Request, res: Response) => {
+  try {
+    const { projectId, collaboratorId } = req.params;
+    const userId = req.user!.userId;
+
+    // Verify access
+    const accessCheck = await pool.query(`
+      SELECT 1 FROM projects p
+      LEFT JOIN project_collaborators pc ON p.id = pc.project_id
+      WHERE p.id = $1 AND (p.creator_id = $2 OR (pc.user_id = $2 AND pc.status = 'accepted'))
+    `, [projectId, userId]);
+
+    if (accessCheck.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'Access denied', code: 'ACCESS_DENIED' }
+      });
+    }
+
+    // Get specific collaborator
+    const collaborator = await pool.query(`
+      SELECT pc.*, u.username, u.email, u.role as user_role, 
+             u.profile_image, u.created_at as user_created_at,
+             inviter.username as inviter_name
+      FROM project_collaborators pc
+      JOIN users u ON pc.user_id = u.id
+      LEFT JOIN users inviter ON pc.invited_by = inviter.id
+      WHERE pc.project_id = $1 AND pc.id = $2
+    `, [projectId, collaboratorId]);
+
+    if (collaborator.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Collaborator not found', code: 'COLLABORATOR_NOT_FOUND' }
+      });
+    }
+
+    const row = collaborator.rows[0];
+    res.json({
+      success: true,
+      data: {
+        id: row.id,
+        projectId: row.project_id,
+        userId: row.user_id,
+        user: {
+          id: row.user_id,
+          username: row.username,
+          email: row.email,
+          role: row.user_role,
+          profileImage: row.profile_image,
+          createdAt: row.user_created_at
+        },
+        role: row.role,
+        permissions: JSON.parse(row.permissions),
+        invitedBy: row.invited_by,
+        inviterName: row.inviter_name,
+        invitedAt: row.invited_at,
+        acceptedAt: row.accepted_at,
+        status: row.status
+      }
+    });
+
+  } catch (error) {
+    console.error('Get collaborator error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to get collaborator', code: 'GET_COLLABORATOR_ERROR' }
     });
   }
 });

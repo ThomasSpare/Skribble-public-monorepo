@@ -1,0 +1,20 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacksConfig]
+[build.nixpacksConfig.build]
+cmds = [
+  "rm -f package-lock.json",
+  "npm install --legacy-peer-deps",
+  "npm run build"
+]
+
+[deploy]
+startCommand = "npm start"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+[environments.production.variables]
+NODE_ENV = "production"

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import AudioUpload from '@/components/AudioUpload';
 import ProjectMenu from '@/components/ProjectMenu';
+import SettingsModal from '@/components/SettingsModal';
 
 interface User {
   id: string;
@@ -28,6 +29,11 @@ interface User {
   username: string;
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: string;
+  profileImage?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastLogin?: string; // Optional field for last login time
+  lastActive?: string; // Optional field for last active time
 }
 
 interface ProjectCollaborator {
@@ -102,6 +108,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [currentTime, setCurrentTime] = useState<Date>(new Date()); // ✨ NEW: For live countdown
+  const [showSettings, setShowSettings] = useState(false);
 
   // ✨ NEW: Live countdown timer
   useEffect(() => {
@@ -228,6 +235,7 @@ export default function DashboardPage() {
     alert('Failed to set deadline');
   }
 };
+
 
   const initializeDashboard = async () => {
     
@@ -587,6 +595,13 @@ export default function DashboardPage() {
                 <LogOut className="w-4 h-4" />
                 Logout
               </button>
+              <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-2 rounded-lg hover:bg-skribble-plum/30 text-skribble-azure transition-colors"
+                  title="Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
             </div>
           </div>
         </div>
@@ -822,6 +837,14 @@ export default function DashboardPage() {
         <AudioUpload 
           onClose={() => setShowUpload(false)}
           onUploadComplete={handleUploadComplete}
+        />
+      )}
+      {showSettings && user && (
+        <SettingsModal
+          user={user}
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onUserUpdate={setUser}
         />
       )}
     </div>

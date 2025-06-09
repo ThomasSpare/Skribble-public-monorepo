@@ -35,7 +35,7 @@
         "./src/styles/*"
       ],
       "@/types": [
-        "../shared/types/index.ts"
+        "../src/types/index.ts"
       ]
     },
     "target": "ES2017"

@@ -5,26 +5,35 @@ const nextConfig = {
   },
   images: {
     remotePatterns: [
+      // Local development
       {
         protocol: "http",
         hostname: "localhost",
         port: "5000",
-        pathname: "/images/**",
+        pathname: "/uploads/**",
       },
+      // Railway backend (replace with your actual Railway backend URL)
       {
         protocol: "https",
-        hostname: "localhost",
-        port: "5000",
-        pathname: "/images/**",
+        hostname: "skribble-public-monorepo-backend-production.up.railway.app", // Update this!
+        pathname: "/uploads/**",
+      },
+      // Profile images
+      {
+        protocol: "https",
+        hostname: "api.dicebear.com",
+        pathname: "/**",
       },
     ],
-    domains: ["localhost", "api.dicebear.com"], // ✅ Combined into one array
   },
   eslint: {
     dirs: ["src"],
   },
   typescript: {
     ignoreBuildErrors: false,
+  },
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   },
 };
 

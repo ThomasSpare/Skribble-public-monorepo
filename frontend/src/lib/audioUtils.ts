@@ -26,6 +26,7 @@ export interface DAWMarker {
   username?: string;
 }
 
+
 // DAW Export formats
 export type DAWExportFormat = 'wav-cues' | 'reaper-rpp' | 'logic-markers' | 'ableton-als' | 'pro-tools-ptxt';
 
@@ -47,6 +48,7 @@ export function generateEnhancedDAWMarkers(annotations: any[]): DAWMarker[] {
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
+
 
 /**
  * Format marker label for DAW display

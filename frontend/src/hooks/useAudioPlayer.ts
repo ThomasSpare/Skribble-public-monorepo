@@ -1,6 +1,5 @@
 // frontend/src/hooks/useAudioPlayer.ts
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { loadAndDecodeAudio, generateWaveform, AudioMetadata } from '@/lib/audioUtils';
 
 export interface AudioPlayerState {
   isPlaying: boolean;
@@ -14,6 +13,35 @@ export interface AudioPlayerState {
   error: string | null;
 }
 
+  export interface AudioMetadata {
+  duration: number;
+  sampleRate: number;
+  channels: number;
+  format: string;
+}
+
+export async function loadAndDecodeAudio(audioContext: AudioContext, url: string): Promise<AudioBuffer> {
+  const response = await fetch(url);
+  const arrayBuffer = await response.arrayBuffer();
+  return await audioContext.decodeAudioData(arrayBuffer);
+}
+
+export async function generateWaveform(audioBuffer: AudioBuffer, samples: number): Promise<number[]> {
+  const channelData = audioBuffer.getChannelData(0);
+  const blockSize = Math.floor(channelData.length / samples);
+  const waveform = [];
+
+  for (let i = 0; i < samples; i++) {
+    const start = blockSize * i;
+    let sum = 0;
+    for (let j = 0; j < blockSize; j++) {
+      sum += Math.abs(channelData[start + j]);
+    }
+    waveform.push(sum / blockSize);
+  }
+
+  return waveform;
+}
 export interface AudioPlayerControls {
   play: () => Promise<void>;
   pause: () => void;

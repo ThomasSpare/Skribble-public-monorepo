@@ -384,7 +384,7 @@ export default function AnnotationSystem({
             </div>
             
             <SoundMonitor
-              analyser={analyser}
+              analyser={analyser ?? null}
               isPlaying={isPlaying}
               currentTime={currentTime}
               audioBuffer={audioBuffer}

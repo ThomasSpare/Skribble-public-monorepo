@@ -214,7 +214,7 @@ export default function EnhancedWaveformPlayer({
       
     } catch (error) {
       console.error('Error initializing audio:', error);
-      setError(`Failed to load audio: ${error.message}`);
+      setError(`Waveform generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
       setIsGeneratingWaveform(false);
@@ -706,7 +706,7 @@ export default function EnhancedWaveformPlayer({
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
-      setError(`Playback failed: ${error.message}`);
+      setError(`Playback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

@@ -271,6 +271,15 @@ export default function IntegratedWaveformPlayer({
   }
 }, [audioFileId, isViewOnly, disableAnnotationFetching]);
 
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) {
+      return error.message;
+    }
+    if (typeof error === 'string') {
+      return error;
+    }
+    return 'Unknown error occurred';
+  };
 
   const cleanup = () => {
     if (animationFrameRef.current) {
@@ -296,182 +305,8 @@ export default function IntegratedWaveformPlayer({
       }
     }
   };
-
-
-  // Initialize audio and generate waveform
-  const initializeAudio = async () => {
-  console.log('Initializing audio...', { audioUrl, userInteracted });
   
-  if (!audioRef.current) {
-    console.error('Audio ref not available');
-    return;
-  }
-
-  setIsLoading(true);
-  setIsGeneratingWaveform(true);
-  setError(null);
-  setIsAudioReady(false);
-
-  try {
-    const audio = audioRef.current;
-    
-    audio.pause();
-    audio.currentTime = 0;
-    
-    // Set CORS and preload settings
-    audio.crossOrigin = "anonymous";
-    audio.preload = "metadata";
-    audio.volume = volume;
-    audio.muted = isMuted;
-
-    const audioLoadPromise = new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Audio loading timeout after 15 seconds'));
-      }, 15000);
-
-      const onLoadedMetadata = () => {
-        clearTimeout(timeout);
-        console.log('Audio metadata loaded:', {
-          duration: audio.duration,
-          readyState: audio.readyState,
-          networkState: audio.networkState,
-          src: audio.src
-        });
-        
-        setDuration(audio.duration);
-        onLoadComplete?.(audio.duration);
-        resolve();
-      };
-
-      const onCanPlayThrough = () => {
-        console.log('Audio can play through');
-        setIsAudioReady(true);
-      };
-
-      const onError = (e: Event) => {
-        clearTimeout(timeout);
-        console.error('Audio loading error:', audio.error, e);
-        console.error('Audio error details:', {
-          code: audio.error?.code,
-          message: audio.error?.message,
-          src: audio.src
-        });
-        reject(new Error(`Audio loading failed: ${audio.error?.message || 'Unknown error'}`));
-      };
-
-      const onLoadStart = () => {
-        console.log('Audio load started');
-      };
-
-      const onProgress = () => {
-        console.log('Audio loading progress:', {
-          buffered: audio.buffered.length > 0 ? audio.buffered.end(0) : 0,
-          duration: audio.duration
-        });
-      };
-
-      audio.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
-      audio.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
-      audio.addEventListener('error', onError, { once: true });
-      audio.addEventListener('loadstart', onLoadStart, { once: true });
-      audio.addEventListener('progress', onProgress);
-      
-      // Cleanup function
-      const cleanup = () => {
-        audio.removeEventListener('loadedmetadata', onLoadedMetadata);
-        audio.removeEventListener('canplaythrough', onCanPlayThrough);
-        audio.removeEventListener('error', onError);
-        audio.removeEventListener('loadstart', onLoadStart);
-        audio.removeEventListener('progress', onProgress);
-      };
-      
-      // Store cleanup for later use
-      (resolve as any).cleanup = cleanup;
-      (reject as any).cleanup = cleanup;
-    });
-
-    console.log('Setting audio source to:', audioUrl);
-    audio.src = audioUrl;
-    audio.load();
-
-    await audioLoadPromise;
-
-    // Try to setup Web Audio API (but don't fail if it doesn't work)
-    try {
-      await setupWebAudio();
-    } catch (webAudioError) {
-      console.warn('Web Audio API setup failed, but basic playback should still work:', webAudioError);
-    }
-
-    // Generate waveform
-    try {
-      await generateWaveform();
-    } catch (waveformError) {
-      console.warn('Waveform generation failed, but audio should still play:', waveformError);
-    }
-    
-  } catch (error) {
-    console.error('Error initializing audio:', error);
-    setError(`Failed to load audio: ${error.message}`);
-  } finally {
-    setIsLoading(false);
-    setIsGeneratingWaveform(false);
-  }
-};
-
-  const handleAnnotationCreated = useCallback((newAnnotation: AnnotationType) => {
-  setAnnotations(prev => [...prev, newAnnotation]);
-  }, []);
-
-  const handleAnnotationUpdated = useCallback((updatedAnnotation: AnnotationType) => {
-    setAnnotations(prev => 
-      prev.map(ann => ann.id === updatedAnnotation.id ? updatedAnnotation : ann)
-    );
-  }, []);
-
-  const handleAnnotationDeleted = useCallback((annotationId: string) => {
-    setAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
-  }, []);
-
-  const setupWebAudio = async () => {
-      if (!audioRef.current || sourceRef.current) return;
-
-      try {
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-          console.log('AudioContext created, state:', audioContextRef.current.state);
-        }
-
-        const audioContext = audioContextRef.current;
-
-        // Always try to resume the AudioContext after user interaction
-        if (audioContext.state === 'suspended') {
-          console.log('Resuming suspended AudioContext...');
-          await audioContext.resume();
-          console.log('AudioContext resumed, new state:', audioContext.state);
-        }
-
-        // Only create the source if it doesn't exist
-        if (!sourceRef.current) {
-          sourceRef.current = audioContext.createMediaElementSource(audioRef.current);
-          analyserRef.current = audioContext.createAnalyser();
-          
-          analyserRef.current.fftSize = 2048;
-          analyserRef.current.smoothingTimeConstant = 0.8;
-          
-          sourceRef.current.connect(analyserRef.current);
-          analyserRef.current.connect(audioContext.destination);
-          
-          console.log('Web Audio API setup successful, context state:', audioContext.state);
-        }
-      } catch (error) {
-        console.error('Web Audio API setup failed:', error);
-        // Don't throw the error - let the audio work without Web Audio API
-        console.warn('Continuing without Web Audio API features');
-      }
-    };
-
-
+  
   const generateWaveform = async () => {
   if (!userInteracted) {
     console.log('Skipping waveform generation - no user interaction yet');
@@ -559,6 +394,181 @@ export default function IntegratedWaveformPlayer({
     console.log('Using fallback waveform with', fallback.length, 'samples');
   }
 };
+
+  const setupWebAudio = async () => {
+      if (!audioRef.current || sourceRef.current) return;
+
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          console.log('AudioContext created, state:', audioContextRef.current.state);
+        }
+
+        const audioContext = audioContextRef.current;
+
+        // Always try to resume the AudioContext after user interaction
+        if (audioContext.state === 'suspended') {
+          console.log('Resuming suspended AudioContext...');
+          await audioContext.resume();
+          console.log('AudioContext resumed, new state:', audioContext.state);
+        }
+        
+        // Only create the source if it doesn't exist
+        if (!sourceRef.current) {
+          sourceRef.current = audioContext.createMediaElementSource(audioRef.current);
+          analyserRef.current = audioContext.createAnalyser();
+          
+          analyserRef.current.fftSize = 2048;
+          analyserRef.current.smoothingTimeConstant = 0.8;
+          
+          sourceRef.current.connect(analyserRef.current);
+          analyserRef.current.connect(audioContext.destination);
+          
+          console.log('Web Audio API setup successful, context state:', audioContext.state);
+        }
+      } catch (error) {
+        console.error('Web Audio API setup failed:', error);
+        // Don't throw the error - let the audio work without Web Audio API
+        console.warn('Continuing without Web Audio API features');
+      }
+    };
+  // Initialize audio and generate waveform
+    const initializeAudio = async () => {
+    console.log('Initializing audio...', { audioUrl, userInteracted });
+    
+    if (!audioRef.current) {
+      console.error('Audio ref not available');
+      return;
+    }
+  
+    setIsLoading(true);
+    setIsGeneratingWaveform(true);
+    setError(null);
+    setIsAudioReady(false);
+  
+    try {
+      const audio = audioRef.current;
+      
+      audio.pause();
+      audio.currentTime = 0;
+      
+      // Set CORS and preload settings
+      audio.crossOrigin = "anonymous";
+      audio.preload = "metadata";
+      audio.volume = volume;
+      audio.muted = isMuted;
+  
+      const audioLoadPromise = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Audio loading timeout after 15 seconds'));
+        }, 15000);
+  
+        const onLoadedMetadata = () => {
+          clearTimeout(timeout);
+          console.log('Audio metadata loaded:', {
+            duration: audio.duration,
+            readyState: audio.readyState,
+            networkState: audio.networkState,
+            src: audio.src
+          });
+          
+          setDuration(audio.duration);
+          onLoadComplete?.(audio.duration);
+          resolve();
+        };
+        
+        const onCanPlayThrough = () => {
+          console.log('Audio can play through');
+          setIsAudioReady(true);
+        };
+        
+        const onError = (e: Event) => {
+          clearTimeout(timeout);
+          console.error('Audio loading error:', audio.error, e);
+          console.error('Audio error details:', {
+            code: audio.error?.code,
+            message: audio.error?.message,
+            src: audio.src
+          });
+          reject(new Error(`Audio loading failed: ${audio.error?.message || 'Unknown error'}`));
+        };
+  
+        const onLoadStart = () => {
+          console.log('Audio load started');
+        };
+  
+        const onProgress = () => {
+          console.log('Audio loading progress:', {
+            buffered: audio.buffered.length > 0 ? audio.buffered.end(0) : 0,
+            duration: audio.duration
+          });
+        };
+  
+        audio.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+        audio.addEventListener('canplaythrough', onCanPlayThrough, { once: true });
+        audio.addEventListener('error', onError, { once: true });
+        audio.addEventListener('loadstart', onLoadStart, { once: true });
+        audio.addEventListener('progress', onProgress);
+        
+        // Cleanup function
+        const cleanup = () => {
+          audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+          audio.removeEventListener('canplaythrough', onCanPlayThrough);
+          audio.removeEventListener('error', onError);
+          audio.removeEventListener('loadstart', onLoadStart);
+          audio.removeEventListener('progress', onProgress);
+        };
+        
+        // Store cleanup for later use
+        (resolve as any).cleanup = cleanup;
+        (reject as any).cleanup = cleanup;
+      });
+  
+      console.log('Setting audio source to:', audioUrl);
+      audio.src = audioUrl;
+      audio.load();
+  
+      await audioLoadPromise;
+  
+      // Try to setup Web Audio API (but don't fail if it doesn't work)
+      try {
+        await setupWebAudio();
+      } catch (webAudioError) {
+        console.warn('Web Audio API setup failed, but basic playback should still work:', webAudioError);
+      }
+  
+      // Generate waveform
+      try {
+        await generateWaveform();
+      } catch (waveformError) {
+        console.warn('Waveform generation failed, but audio should still play:', waveformError);
+      }   
+    } catch (error) {
+      console.error('Error initializing audio:', error);
+      setError(`Failed to load audio: ${getErrorMessage(error)}`);
+    } finally {
+      setIsLoading(false);
+      setIsGeneratingWaveform(false);
+    }
+  };
+
+  const handleAnnotationCreated = useCallback((newAnnotation: AnnotationType) => {
+  setAnnotations(prev => [...prev, newAnnotation]);
+  }, []);
+
+  const handleAnnotationUpdated = useCallback((updatedAnnotation: AnnotationType) => {
+    setAnnotations(prev => 
+      prev.map(ann => ann.id === updatedAnnotation.id ? updatedAnnotation : ann)
+    );
+  }, []);
+
+  const handleAnnotationDeleted = useCallback((annotationId: string) => {
+    setAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
+  }, []);
+
+
+
+
 
   // Calculate visible waveform based on zoom and scroll
   const getVisibleWaveform = useCallback(() => {
@@ -1099,7 +1109,7 @@ const drawWaveform = useCallback(() => {
   }
   
   // Draw annotations on top
-  drawAnnotations(ctx, width, height, visibleDuration);
+  drawAnnotations(ctx, width, height);
   
 }, [waveformData, currentTime, duration, zoomLevel, scrollOffset, gridMode, bpm, gridOffset]);
 
@@ -1273,7 +1283,7 @@ const drawWaveform = useCallback(() => {
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
-      setError(`Playback failed: ${error.message}`);
+      setError(`Playback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 

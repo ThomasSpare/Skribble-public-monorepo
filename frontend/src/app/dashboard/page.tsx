@@ -59,7 +59,7 @@ interface AudioFile {
 interface Project {
   id: string;
   title: string;
-  creatorId: string;
+  creatorId?: string;
   creator?: {
     username: string;
   };
@@ -81,7 +81,7 @@ interface UploadCompleteData {
   project: {
     id: string;
     title: string;
-    creatorId?: string;
+    creatorId: string;
     createdAt: string;
     updatedAt: string;
   };
@@ -173,61 +173,61 @@ export default function DashboardPage() {
   };
 
   // ✨ NEW: Set project deadline
-  const handleSetDeadline = async (project: Project) => {
-    const deadlineInput = prompt(
-      'Set project deadline (YYYY-MM-DD HH:MM or YYYY-MM-DD):',
-      project.deadline ? new Date(project.deadline).toISOString().slice(0, 16) : ''
-    );
+  const handleSetDeadline = async (project: Project): Promise<void> => {
+  const deadlineInput = prompt(
+    'Set project deadline (YYYY-MM-DD HH:MM or YYYY-MM-DD):',
+    project.deadline ? new Date(project.deadline).toISOString().slice(0, 16) : ''
+  );
+  
+  if (!deadlineInput) return;
+  
+  try {
+    const deadline = new Date(deadlineInput);
+    if (isNaN(deadline.getTime())) {
+      alert('Invalid date format. Please use YYYY-MM-DD HH:MM or YYYY-MM-DD');
+      return;
+    }
     
-    if (!deadlineInput) return;
+    if (deadline <= new Date()) {
+      alert('Deadline must be in the future');
+      return;
+    }
     
-    try {
-      const deadline = new Date(deadlineInput);
-      if (isNaN(deadline.getTime())) {
-        alert('Invalid date format. Please use YYYY-MM-DD HH:MM or YYYY-MM-DD');
-        return;
-      }
-      
-      if (deadline <= new Date()) {
-        alert('Deadline must be in the future');
-        return;
-      }
-      
-      const token = localStorage.getItem('skribble_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${project.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          deadline: deadline.toISOString()
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          // Update project in state
-          setProjects(prev => 
-            prev.map(p => 
-              p.id === project.id 
-                ? { ...p, deadline: deadline.toISOString() }
-                : p
-            )
-          );
-          alert('Deadline set successfully!');
-        } else {
-          alert('Failed to set deadline');
-        }
+    const token = localStorage.getItem('skribble_token');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${project.id}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        deadline: deadline.toISOString()
+      })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        // Update project in state
+        setProjects(prev => 
+          prev.map(p => 
+            p.id === project.id 
+              ? { ...p, deadline: deadline.toISOString() }
+              : p
+          )
+        );
+        alert('Deadline set successfully!');
       } else {
         alert('Failed to set deadline');
       }
-    } catch (error) {
-      console.error('Error setting deadline:', error);
+    } else {
       alert('Failed to set deadline');
     }
-  };
+  } catch (error) {
+    console.error('Error setting deadline:', error);
+    alert('Failed to set deadline');
+  }
+};
 
   const initializeDashboard = async () => {
     
@@ -359,31 +359,27 @@ export default function DashboardPage() {
   };
 
   const handleUploadComplete = (projectData: UploadCompleteData) => {
-    
     const newProject: Project = {
       ...projectData.project,
+      creatorId: projectData.project.creatorId || user?.id || '', // ✅ Provide fallback
       status: 'active',
       annotations: 0, // New project starts with 0 annotations
       collaborators: [],
-      audioFiles: [projectData.audioFile],
-      lastUpdated: 'Just now',
-      duration: projectData.audioFile.duration 
-        ? (() => {
-            const duration = projectData.audioFile.duration;
-            const minutes = Math.floor(duration / 60);
-            const seconds = Math.floor(duration % 60);
-            return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-          })()
-        : '0:00'
+      audioFiles: projectData.audioFile ? [{
+        id: projectData.audioFile.id,
+        duration: projectData.audioFile.duration
+      }] : [],
+      lastUpdated: new Date().toISOString(),
+      duration: projectData.audioFile.duration ? 
+        `${Math.floor(projectData.audioFile.duration / 60)}:${String(Math.floor(projectData.audioFile.duration % 60)).padStart(2, '0')}` : 
+        '0:00'
     };
-    
+
     setProjects(prev => [newProject, ...prev]);
     setShowUpload(false);
     
-    // Refresh projects to get accurate annotation counts after a short delay
-    setTimeout(() => {
-      fetchProjects();
-    }, 1000);
+    // Redirect to the new project
+    router.push(`/project/${newProject.id}`);
   };
 
   // ✨ FIXED: Enhanced stats calculation with real annotation counts
@@ -413,7 +409,7 @@ export default function DashboardPage() {
   };
 
   // ✨ FIXED: Project action handlers
-  const handleDelete = async (project: Project) => {
+  const handleDelete = async (project: Project): Promise<void> => {
     if (!confirm(`Are you sure you want to delete "${project.title}"? This action cannot be undone.`)) {
       return;
     }
@@ -438,7 +434,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleInvite = async (project: Project) => {
+    const handleInvite = async (project: Project): Promise<void> => {
     console.log('Generating invite link for project:', project.title);
     const token = localStorage.getItem('skribble_token');
     
@@ -484,15 +480,15 @@ export default function DashboardPage() {
     }
   };
 
-  const handleShare = async (project: Project) => {
-    const shareUrl = `${window.location.origin}/share/${project.shareLink || project.id}`;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      alert('Share link copied to clipboard!');
-    } catch (error) {
-      prompt('Copy this share link:', shareUrl);
-    }
-  };
+  const handleShare = async (project: Project): Promise<void> => {
+  const shareUrl = `${window.location.origin}/share/${project.shareLink || project.id}`;
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    alert('Share link copied to clipboard!');
+  } catch (error) {
+    prompt('Copy this share link:', shareUrl);
+  }
+};
 
   const handleLogout = () => {
     localStorage.removeItem('skribble_token');

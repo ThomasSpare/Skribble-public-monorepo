@@ -50,7 +50,7 @@ export default function SoundMonitor({
   const [volumeWarnings, setVolumeWarnings] = useState<{ L: boolean; R: boolean }>({ L: false, R: false });
   
   // New gain control states
-  const [meterGain, setMeterGain] = useState(3.0); // Default 3x gain
+  const [meterGain, setMeterGain] = useState(1.0); // Default 3x gain
   const [meterMode, setMeterMode] = useState<'rms' | 'peak' | 'both'>('both');
   const [showSettings, setShowSettings] = useState(false);
   const [holdPeaks, setHoldPeaks] = useState(true);

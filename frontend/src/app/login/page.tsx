@@ -154,17 +154,6 @@ export default function LoginPage() {
             </Link>
           </div>
         </div>
-
-        {/* Demo Credentials (for testing) */}
-        <div className="mt-6 p-4 bg-skribble-azure/10 rounded-lg border border-skribble-azure/20">
-          <p className="text-sm text-skribble-azure text-center mb-2">
-            <strong>Demo Account:</strong>
-          </p>
-          <div className="text-xs text-skribble-purple text-center space-y-1">
-            <div>Email: producer@test.com</div>
-            <div>Password: securepass123</div>
-          </div>
-        </div>
       </div>
     </div>
   );

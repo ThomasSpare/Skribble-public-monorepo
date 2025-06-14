@@ -15,8 +15,6 @@ import {
 } from 'lucide-react';
 import IntegratedWaveformPlayer from '@/components/IntegratedWaveformPlayer';
 import Image from 'next/image';
-import CollaboratorsMenu from '@/components/CollaboratorsMenu';
-import CollaboratorsMenuPortal from '@/components/CollaboratorsMenuPortal';
 
 interface User {
   id: string;
@@ -73,22 +71,21 @@ export default function ProjectPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentAudioFile, setCurrentAudioFile] = useState<any>(null);
-  const [showCollaborators, setShowCollaborators] = useState(false);
-
+  
   useEffect(() => {
     initializePage();
   }, [projectId]);
-
+  
   const initializePage = async () => {
     const token = localStorage.getItem('skribble_token');
     if (!token) {
       router.push('/login');
       return;
     }
-
+    
     try {
       setIsLoading(true);
-
+      
       // Fetch user data
       const userResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
         headers: {
@@ -99,7 +96,7 @@ export default function ProjectPage() {
       if (!userResponse.ok) {
         throw new Error('Failed to fetch user data');
       }
-
+      
       const userData = await userResponse.json();
       if (userData.success) {
         setUser(userData.data);
@@ -111,7 +108,7 @@ export default function ProjectPage() {
           'Authorization': `Bearer ${token}`
         }
       });
-
+      
       if (!projectResponse.ok) {
         if (projectResponse.status === 404) {
           setError('Project not found');
@@ -139,7 +136,7 @@ export default function ProjectPage() {
           setCurrentAudioFile(sortedFiles[0]);
         }
       }
-
+      
     } catch (error) {
       console.error('Error initializing project page:', error);
       setError('Failed to load project data');
@@ -147,7 +144,30 @@ export default function ProjectPage() {
       setIsLoading(false);
     }
   };
-
+  
+  const handleVersionChange = (versionData: any) => {
+  console.log('🔄 Version change from VersionControl:', versionData);
+  
+  // Convert the version data structure to match your audioFile structure
+  const audioFile = {
+    id: versionData.id,
+    projectId: versionData.projectId || projectId,
+    version: versionData.version || `v${versionData.version_number}`,
+    filename: versionData.filename,
+    originalFilename: versionData.originalFilename || versionData.original_filename,
+    fileUrl: versionData.file_url || versionData.fileUrl,
+    duration: versionData.duration,
+    sampleRate: versionData.sampleRate || versionData.sample_rate,
+    fileSize: versionData.fileSize || versionData.file_size,
+    mimeType: versionData.mimeType || versionData.mime_type,
+    uploadedAt: versionData.uploadedAt || versionData.uploaded_at,
+    isActive: versionData.isActive || versionData.is_current_version || false
+  };
+  
+  console.log('🔄 Converted audio file:', audioFile);
+  setCurrentAudioFile(audioFile);
+};
+  
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -180,12 +200,21 @@ export default function ProjectPage() {
   useEffect(() => {
   if (project && project.audioFiles && project.audioFiles.length > 0) {
     const currentAudio = project.audioFiles.find(af => af.isActive) || project.audioFiles[0];
+    console.log('=== PROJECT AUDIO DEBUG ===');
+    console.log('Project:', project.title);
+    console.log('Audio files:', project.audioFiles);
+    console.log('Current audio file:', currentAudio);
+    console.log('File URL from database:', currentAudio?.fileUrl);
+    console.log('NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
+    console.log('Full audio URL being passed to player:', `${process.env.NEXT_PUBLIC_API_URL}${currentAudio?.fileUrl}`);
     
     // Test if the URL is accessible
     if (currentAudio?.fileUrl) {
       const testUrl1 = `${process.env.NEXT_PUBLIC_API_URL}${currentAudio.fileUrl}`;
       const testUrl2 = `${process.env.NEXT_PUBLIC_API_URL}/api/upload/audio/${currentAudio.filename}`;
-    
+      
+      console.log('Testing URL 1 (current):', testUrl1);
+      console.log('Testing URL 2 (alternative):', testUrl2);
       
       fetch(testUrl1, { method: 'HEAD' })
         .then(response => {
@@ -252,25 +281,9 @@ export default function ProjectPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark">
       {/* Header */}
-      <header className="relative border-b border-skribble-azure/20 bg-skribble-dark/50 backdrop-blur-md">
+      <header className="border-b border-skribble-azure/20 bg-skribble-dark/50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
-      {/* Logo */}
-            <div className="flex items-center gap-8 px-2">
-            {/* Animated Logo - Same as landing page but medium size */}
-            <div className="relative">
-              <h1 className="font-madimi text-2xl text-skribble-sky">
-              Skribble
-              </h1>
-              <div className="absolute -top-2 -right-1 bg-skribble-azure rounded-lg rounded-bl-sm px-2 py-1 shadow-lg animate-float">
-              <div className="flex items-center gap-1">
-              <div className="w-1 h-1 bg-white rounded-full animate-pulse"></div>
-              <div className="w-1 h-1 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-              <div className="w-1 h-1 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-              </div>
-              </div>
-            </div>
-            </div>
             {/* Back Button and Title */}
             <div className="flex items-center gap-4">
               <button
@@ -320,6 +333,7 @@ export default function ProjectPage() {
                     console.error('Error generating share link:', error);
                     alert('Failed to generate share link');
                   }
+                  onClose();
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2 text-skribble-sky hover:bg-skribble-azure/20 rounded-lg transition-colors text-sm"
               >
@@ -339,50 +353,21 @@ export default function ProjectPage() {
                 </a>
               )}
               
-              {/* Collaborators Button */}
-                    <div className="relative">
-                    <button
-                      onClick={() => setShowCollaborators(!showCollaborators)}
-                      className="flex items-center gap-2 left-5 px-3 py-2 bg-skribble-azure/20 hover:bg-skribble-azure/30 text-skribble-azure rounded-lg transition-colors"
-                    >
-                      <Users className="w-5 h-5" />
-                      <span className="text-sm">
-                      {project?.collaborators?.length || 0}
-                      </span>
-                    </button>
-                    
-                    {/* Collaborators Menu */}
-                    {/* Collaborators Menu */}
-                    <CollaboratorsMenuPortal>
-                      <div className="absolute right-4 top-2 mt-2 z-[9999]">
-                        <CollaboratorsMenu
-                          projectId={projectId}
-                          currentUserId={user?.id || ''}
-                          isProjectCreator={project?.creatorId === user?.id}
-                          isOpen={showCollaborators}
-                          onClose={() => setShowCollaborators(false)}
-                          onRemoveCollaborator={(collaboratorId) => {
-                            setProject(prev => prev ? {
-                              ...prev,
-                              collaborators: prev.collaborators.filter(c => c.id !== collaboratorId)
-                            } : null);
-                          }}
-                        />
-                      </div>
-                    </CollaboratorsMenuPortal>
-                    </div>
-                        
-                        <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
-                          <Settings className="w-5 h-5" />
-                        </button>
-                        
-                        <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </header>
+              <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
+                <Users className="w-5 h-5" />
+              </button>
+              
+              <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
+                <Settings className="w-5 h-5" />
+              </button>
+              
+              <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
+                <MoreVertical className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
 
       {/* Main Content */}
       <main className="w-full mx-auto px-6 py-8">
@@ -390,22 +375,24 @@ export default function ProjectPage() {
           {/* Main Player Area */}
           <div className="flex-1 min-w-0">
             {currentAudioFile ? (
-              <IntegratedWaveformPlayer
-                audioUrl={`${process.env.NEXT_PUBLIC_API_URL}/upload/audio/${currentAudioFile.filename}`}
-                audioFileId={currentAudioFile.id}
-                projectId={project.id}
-                title={`${project.title} - ${currentAudioFile.version}`}
-                currentUser={user}
-                onLoadComplete={(duration) => {
-                  console.log('Audio loaded, duration:', duration);
-                }}
-              />
-            ) : (
-              <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">
-                <p className="text-skribble-azure text-lg mb-4">No audio files found</p>
-                <p className="text-skribble-purple text-sm">Upload an audio file to get started with annotations</p>
-              </div>
-            )}
+                <IntegratedWaveformPlayer
+                  key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
+                  audioUrl={`${process.env.NEXT_PUBLIC_API_URL}/upload/audio/${currentAudioFile.filename}`}
+                  audioFileId={currentAudioFile.id}
+                  projectId={project.id}
+                  title={`${project.title} - ${currentAudioFile.version}`}
+                  currentUser={user}
+                  onVersionChange={handleVersionChange}
+                  onLoadComplete={(duration) => {
+                    console.log('Audio loaded, duration:', duration);
+                  }}
+                />
+              ) : (
+                <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">
+                  <p className="text-skribble-azure text-lg mb-4">No audio files found</p>
+                  <p className="text-skribble-purple text-sm">Upload an audio file to get started with annotations</p>
+                </div>
+              )}
           </div>
           {/* Sidebar */}
           <div className="flex flex-col gap-8 w-full lg:w-96">
@@ -510,33 +497,67 @@ export default function ProjectPage() {
             {/* All Versions */}
             {project.audioFiles.length > 1 && (
               <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 w-full">
-                <h3 className="font-madimi text-lg text-skribble-sky mb-4">All Versions</h3>
+                <h3 className="font-madimi text-lg text-skribble-sky mb-4">
+                  All Versions ({project.audioFiles.length})
+                </h3>
                 <div className="space-y-2">
                   {project.audioFiles
                     .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
-                    .map((file) => (
-                    <button
+                    .map((file, index) => (
+                    <div
                       key={file.id}
-                      onClick={() => setCurrentAudioFile(file)}
-                      className={`w-full text-left p-3 rounded-lg border transition-all ${
+                      className={`p-3 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
                         currentAudioFile?.id === file.id
-                          ? 'border-skribble-azure bg-skribble-azure/10'
+                          ? 'border-skribble-azure bg-skribble-azure/10 shadow-lg'
                           : 'border-skribble-azure/20 hover:border-skribble-azure/40'
                       }`}
+                      onClick={() => {
+                        console.log('🔄 Switching to version:', file.version, file.id);
+                        setCurrentAudioFile(file);
+                      }}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-skribble-sky font-mono text-sm">{file.version}</span>
-                        {file.isActive && (
-                          <span className="bg-green-500/20 text-green-200 px-2 py-0.5 rounded-full text-xs">
-                            Active
+                        <div className="flex items-center space-x-2">
+                          <span className="text-skribble-sky font-mono text-sm font-semibold">
+                            {file.version}
                           </span>
-                        )}
+                          {file.isActive && (
+                            <span className="bg-green-500/20 text-green-200 px-2 py-0.5 rounded-full text-xs">
+                              Active
+                            </span>
+                          )}
+                          {currentAudioFile?.id === file.id && (
+                            <span className="bg-skribble-azure/20 text-skribble-azure px-2 py-0.5 rounded-full text-xs">
+                              Playing
+                            </span>
+                          )}
+                          {index === 0 && (
+                            <span className="bg-skribble-purple/20 text-skribble-purple px-2 py-0.5 rounded-full text-xs">
+                              Latest
+                            </span>
+                          )}
+                        </div>
+                        
+                        <div className="text-xs text-skribble-azure">
+                          Click to load
+                        </div>
                       </div>
+                      
                       <div className="text-xs text-skribble-azure">
                         {formatFileSize(file.fileSize)} • {new Date(file.uploadedAt).toLocaleDateString()}
                       </div>
-                    </button>
+                      
+                      {/* Optional: Add hover effect instructions */}
+                      <div className="text-xs text-skribble-purple/70 mt-1">
+                        {file.originalFilename || file.filename}
+                      </div>
+                    </div>
                   ))}
+                </div>
+                
+                {/* Add helpful text */}
+                <div className="mt-4 text-xs text-skribble-azure/70 text-center">
+                  💡 Click any version above to switch audio tracks
                 </div>
               </div>
             )}

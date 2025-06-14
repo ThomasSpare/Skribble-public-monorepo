@@ -1,9 +1,10 @@
-// frontend/src/components/IntegratedWaveformPlayer.tsx - PART 1
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Clock, SkipBack, SkipForward, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, ChevronUp } from 'lucide-react';
+import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, ChevronUp } from 'lucide-react';
 import AnnotationSystem from './AnnotationSystem';
 import { exportForDAW, DAWExportFormat } from '@/lib/audioUtils';
 import { Music2, ChevronDown } from 'lucide-react';
+import VersionControl from './VersionControl';
+import { version } from 'os';
 
 
 interface WaveformPlayerProps {
@@ -16,6 +17,7 @@ interface WaveformPlayerProps {
   disableAnnotationFetching?: boolean;
   onTimeUpdate?: (currentTime: number) => void;
   onLoadComplete?: (duration: number) => void;
+   onVersionChange?: (versionData: any) => void;
   currentUser?: {
     id: string;
     username: string;
@@ -61,6 +63,8 @@ interface HoveredAnnotation {
   createdAt: string;   
 }
 
+
+
 export default function IntegratedWaveformPlayer({ 
   audioUrl, 
   audioFileId,
@@ -71,6 +75,7 @@ export default function IntegratedWaveformPlayer({
   title = "Audio Track",
   onTimeUpdate,
   onLoadComplete,
+  onVersionChange,
   currentUser
 }: WaveformPlayerProps) {
   // Audio player state
@@ -89,6 +94,10 @@ export default function IntegratedWaveformPlayer({
   const [showDAWExportMenu, setShowDAWExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const dawExportMenuRef = useRef<HTMLDivElement>(null);
+  const [showVersionControl, setShowVersionControl] = useState(false);
+  const [currentVersion, setCurrentVersion] = useState<any>(null);
+  const [audioUrlState, setAudioUrlState] = useState<string>(audioUrl);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 
 
@@ -433,8 +442,8 @@ export default function IntegratedWaveformPlayer({
       }
     };
   // Initialize audio and generate waveform
-    const initializeAudio = async () => {
-    console.log('Initializing audio...', { audioUrl, userInteracted });
+  const initializeAudio = async (newAudioUrl: string = audioUrlState) => {
+    console.log('Initializing audio...', { audioUrl: newAudioUrl, userInteracted });
     
     if (!audioRef.current) {
       console.error('Audio ref not available');
@@ -524,8 +533,8 @@ export default function IntegratedWaveformPlayer({
         (reject as any).cleanup = cleanup;
       });
   
-      console.log('Setting audio source to:', audioUrl);
-      audio.src = audioUrl;
+      console.log('Setting audio source to:', newAudioUrl);
+      audio.src = newAudioUrl;
       audio.load();
   
       await audioLoadPromise;
@@ -565,10 +574,6 @@ export default function IntegratedWaveformPlayer({
   const handleAnnotationDeleted = useCallback((annotationId: string) => {
     setAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
   }, []);
-
-
-
-
 
   // Calculate visible waveform based on zoom and scroll
   const getVisibleWaveform = useCallback(() => {
@@ -630,6 +635,62 @@ export default function IntegratedWaveformPlayer({
     
     return markers;
   }, [duration, zoomLevel, scrollOffset]);
+
+const handleVersionChange = useCallback((newVersion: any) => {
+  console.log('Version changed to:', newVersion);
+  setCurrentVersion(newVersion);
+
+  // Clear annotations immediately
+  setAnnotations([]);
+
+  // Update the audio URL with the new version
+  if (newVersion.file_url) {
+    console.log('Switching to new audio URL:', newVersion.file_url);
+
+    // Update the audio source
+    setAudioUrlState(newVersion.file_url);
+
+    // Reset player state
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setIsLoading(true);
+    setIsGeneratingWaveform(true);
+    setError(null);
+
+    // If audio element exists, update it directly
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.src = newVersion.file_url;
+      audioRef.current.load();
+    }
+
+    // Regenerate waveform for new audio
+    initializeAudio(newVersion.file_url)
+      .then(() => {
+        setIsGeneratingWaveform(false);
+        setIsAudioReady(true);
+        setIsLoading(false);
+        console.log('✅ Waveform generated for new version');
+      })
+      .catch(error => {
+        console.error('❌ Error generating waveform for new version:', error);
+        setError(`Failed to load version: ${getErrorMessage(error)}`);
+        setIsGeneratingWaveform(false);
+        setIsLoading(false);
+      });
+  }
+}, [generateWaveform, getErrorMessage, initializeAudio]);
+  
+
+  const handleVersionError = useCallback((message: string) => {
+  setErrorMessage(message);
+  console.error('Version control error:', message);
+  // Clear error after 5 seconds
+  setTimeout(() => setErrorMessage(null), 5000);
+}, []);
+
+
 
   // Format time for display
   const formatRulerTime = (seconds: number) => {
@@ -1515,7 +1576,27 @@ const drawWaveform = useCallback(() => {
                 Generating waveform...
               </div>
             )}
-            
+            <button
+              onClick={() => setShowVersionControl(!showVersionControl)}
+              className="p-2 text-gray-400 hover:text-white transition-colors"
+              title="Version History"
+            >
+              <History className="w-5 h-5" />
+            </button>
+              {errorMessage && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-red-800">{errorMessage}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
            {!isViewOnly ? (
               <button
                 onClick={() => setShowAnnotations(!showAnnotations)}
@@ -1925,6 +2006,16 @@ const drawWaveform = useCallback(() => {
           audioBuffer={null}
         />
       )}
+        {showVersionControl && (
+          <div className="mt-6">
+            <VersionControl
+              projectId={projectId}
+              currentUser={currentUser}
+              onVersionChange={onVersionChange || (() => {})} // 🔑 Pass the prop through
+              onError={handleVersionError}
+            />
+          </div>
+        )}
     </div>
   );
 

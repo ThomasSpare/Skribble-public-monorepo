@@ -35,7 +35,6 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
   const addDebugInfo = (message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     setDebugInfo(prev => [...prev, `[${timestamp}] ${message}`]);
-    console.log(`[AudioUpload] ${message}`);
   };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {

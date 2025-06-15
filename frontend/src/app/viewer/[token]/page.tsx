@@ -28,7 +28,6 @@ export default function ViewerPage() {
   useEffect(() => {
     async function fetchProject() {
       try {
-        console.log('Fetching project with token:', token);
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/viewer/${token}`);
         
         if (!response.ok) {
@@ -37,7 +36,6 @@ export default function ViewerPage() {
         }
         
         const data = await response.json();
-        console.log('Viewer project data:', data);
         
         if (data.success) {
           setProject(data.data);

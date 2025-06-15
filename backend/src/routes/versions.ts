@@ -24,10 +24,6 @@ async function getNextVersionNumber(projectId: string): Promise<number> {
 router.post('/:projectId/versions', 
   authenticateToken, 
   (req: Request, res: Response) => {
-    logWithTimestamp('=== NEW VERSION UPLOAD STARTED ===');
-    logWithTimestamp('Project ID:', req.params.projectId);
-    logWithTimestamp('User:', req.user);
-
     // Set response timeout
     const responseTimeout = setTimeout(() => {
       if (!res.headersSent) {
@@ -92,13 +88,6 @@ router.post('/:projectId/versions',
       const { projectId } = req.params;
       const { versionNotes } = req.body;
       const userId = req.user!.userId;
-      
-      logWithTimestamp('📝 Version upload details:', {
-        projectId,
-        versionNotes,
-        filename: req.file.originalname,
-        size: req.file.size
-      });
 
       const client = await pool.connect();
       
@@ -126,7 +115,6 @@ router.post('/:projectId/versions',
         
         // Get next version number
         const nextVersion = await getNextVersionNumber(projectId);
-        logWithTimestamp('📊 Next version number:', nextVersion);
         
         // Mark all previous versions as not current
         await client.query(`
@@ -169,9 +157,7 @@ router.post('/:projectId/versions',
         `, [now, projectId]);
         
         await client.query('COMMIT');
-        
-        logWithTimestamp('✅ Version upload completed successfully');
-        
+                
         res.json({
           success: true,
           data: {
@@ -207,9 +193,7 @@ router.get('/:projectId/versions', authenticateToken, async (req: Request, res: 
   try {
     const { projectId } = req.params;
     const userId = req.user!.userId;
-    
-    logWithTimestamp('📋 Fetching versions for project:', projectId);
-    
+        
     // Check if user has access to this project
     const accessCheck = await pool.query(`
       SELECT p.creator_id, pc.role 
@@ -248,9 +232,7 @@ router.get('/:projectId/versions', authenticateToken, async (req: Request, res: 
     `;
     
     const result = await pool.query(versionsQuery, [projectId]);
-    
-    logWithTimestamp('✅ Found versions:', result.rows.length);
-    
+        
     res.json({
       success: true,
       data: {
@@ -277,10 +259,7 @@ router.post('/:projectId/versions/:versionNumber/activate',
   authenticateToken, 
   async (req: Request, res: Response) => {
     const { projectId, versionNumber } = req.params;
-    const userId = req.user!.userId;
-    
-    logWithTimestamp('🔄 Switching to version:', { projectId, versionNumber });
-    
+    const userId = req.user!.userId;    
     const client = await pool.connect();
     
     try {

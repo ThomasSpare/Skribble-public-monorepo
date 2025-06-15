@@ -56,9 +56,7 @@ export const setupSocketEvents = (io: Server) => {
       
       // Notify others in the project
       socket.to(`project:${projectId}`).emit('user-left', user.userId);
-      
-      console.log(`👋 User ${user.userId} left project ${projectId}`);
-    });
+          });
 
     // Handle new annotations
     socket.on('new-annotation', (annotationData) => {
@@ -156,9 +154,7 @@ export const setupSocketEvents = (io: Server) => {
     });
 
     // Handle disconnection
-    socket.on('disconnect', () => {
-      console.log(`🔌 User disconnected: ${user.userId}`);
-      
+    socket.on('disconnect', () => {      
       if (user.projectId) {
         socket.to(`project:${user.projectId}`).emit('user-left', user.userId);
       }
@@ -174,6 +170,4 @@ export const setupSocketEvents = (io: Server) => {
   io.on('connect_error', (error) => {
     console.error('Socket connection error:', error);
   });
-
-  console.log('🔄 Socket.IO events configured');
 };

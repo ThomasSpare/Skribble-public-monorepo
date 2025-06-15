@@ -138,11 +138,11 @@ export default function VersionControl({
     };
 
   const getFileIcon = (mimeType: string) => {
-    if (mimeType.includes('wav')) return '🎵';
+    if (mimeType.includes('wav')) return '✪';
     if (mimeType.includes('mp3')) return '🎶';
-    if (mimeType.includes('flac')) return '🎼';
+    if (mimeType.includes('flac')) return '✪';
     if (mimeType.includes('aiff')) return '🎹';
-    return '🎤';
+    return '💾';
   };
 
  if (isLoading) {

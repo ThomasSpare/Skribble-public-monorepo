@@ -443,7 +443,6 @@ export default function DashboardPage() {
   };
 
     const handleInvite = async (project: Project): Promise<void> => {
-    console.log('Generating invite link for project:', project.title);
     const token = localStorage.getItem('skribble_token');
     
     try {
@@ -503,20 +502,6 @@ export default function DashboardPage() {
     localStorage.removeItem('skribble_refresh_token');
     router.push('/login');
   };
-
-  // ✨ FIXED: Debug function (accessible via browser console)
-  const debugAnnotationCounts = () => {
-    console.log('📊 Current annotation counts per project:');
-    projects.forEach(project => {
-      console.log(`${project.title}: ${project.annotations} annotations`);
-    });
-    console.log(`📈 Total annotations: ${stats.totalAnnotations}`);
-  };
-
-  // Make debug function available in browser console
-  useEffect(() => {
-    (window as any).debugAnnotationCounts = debugAnnotationCounts;
-  }, [projects]);
 
   // Show loading spinner while initializing
   if (isLoadingUser) {

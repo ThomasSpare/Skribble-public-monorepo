@@ -82,7 +82,7 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
     cb(null, true);
   } else {
     logWithTimestamp('❌ File type rejected:', file.mimetype);
-    cb(new Error(`Invalid file type: ${file.mimetype}. Allowed: ${allowedExts.join(', ')}`), false);
+    cb(null, false);
   }
 };
 
@@ -158,8 +158,6 @@ export const validateUploadedFile = (file: Express.Multer.File): boolean => {
 
     // Check if file is readable
     fs.accessSync(file.path, fs.constants.R_OK);
-    
-    logWithTimestamp('✅ File validation passed:', file.path);
     return true;
   } catch (error) {
     logWithTimestamp('❌ File validation failed:', error);

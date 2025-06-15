@@ -58,14 +58,12 @@ export default function EnhancedWaveformPlayer({
   // Enable audio on any user interaction
   useEffect(() => {
     const enableAudio = () => {
-      console.log('User interaction detected, enabling audio...');
       setUserInteracted(true);
       
       // Try to initialize audio context immediately
       if (!audioContextRef.current) {
         try {
           audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-          console.log('Audio context created successfully');
         } catch (error) {
           console.error('Failed to create audio context:', error);
         }
@@ -123,7 +121,6 @@ export default function EnhancedWaveformPlayer({
 
   // Initialize audio and generate waveform
   const initializeAudio = async () => {
-    console.log('Initializing audio...', { audioUrl, userInteracted });
     
     if (!audioRef.current) {
       console.error('Audio ref not available');
@@ -155,20 +152,13 @@ export default function EnhancedWaveformPlayer({
         }, 15000); // 15 second timeout
 
         const onLoadedMetadata = () => {
-          clearTimeout(timeout);
-          console.log('Audio metadata loaded:', {
-            duration: audio.duration,
-            readyState: audio.readyState,
-            networkState: audio.networkState
-          });
-          
+          clearTimeout(timeout);  
           setDuration(audio.duration);
           onLoadComplete?.(audio.duration);
           resolve();
         };
 
         const onCanPlayThrough = () => {
-          console.log('Audio can play through');
           setIsAudioReady(true);
         };
 
@@ -236,7 +226,6 @@ export default function EnhancedWaveformPlayer({
       // Resume context if suspended
       if (audioContext.state === 'suspended') {
         await audioContext.resume();
-        console.log('Audio context resumed');
       }
 
       // Create source and analyser
@@ -250,7 +239,6 @@ export default function EnhancedWaveformPlayer({
       sourceRef.current.connect(analyserRef.current);
       analyserRef.current.connect(audioContext.destination);
       
-      console.log('Web Audio API setup successful');
     } catch (error) {
       console.error('Web Audio API setup failed:', error);
       throw error;
@@ -260,25 +248,16 @@ export default function EnhancedWaveformPlayer({
   // Generate waveform data from audio file
   const generateWaveform = async () => {
     if (!userInteracted) {
-      console.log('Skipping waveform generation - no user interaction yet');
       return;
     }
 
-    try {
-      console.log('Generating waveform from:', audioUrl);
-      
+    try {      
       // Create temporary audio context for decoding
       const tempAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
       
       const response = await fetch(audioUrl);
       const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await tempAudioContext.decodeAudioData(arrayBuffer);
-      
-      console.log('Audio decoded successfully:', {
-        duration: audioBuffer.duration,
-        sampleRate: audioBuffer.sampleRate,
-        channels: audioBuffer.numberOfChannels
-      });
+      const audioBuffer = await tempAudioContext.decodeAudioData(arrayBuffer);  
       
       // Use the decoded duration as the authoritative source
       const actualDuration = audioBuffer.duration;
@@ -338,23 +317,19 @@ export default function EnhancedWaveformPlayer({
     };
 
     const handleDurationChange = () => {
-      console.log('Duration changed to:', audio.duration);
       setDuration(audio.duration);
     };
 
     const handleEnded = () => {
-      console.log('Audio ended');
       setIsPlaying(false);
       setCurrentTime(0);
     };
 
     const handlePause = () => {
-      console.log('Audio paused');
       setIsPlaying(false);
     };
 
     const handlePlay = () => {
-      console.log('Audio playing');
       setIsPlaying(true);
     };
 
@@ -684,17 +659,14 @@ export default function EnhancedWaveformPlayer({
       // Ensure audio context is running
       if (audioContextRef.current?.state === 'suspended') {
         await audioContextRef.current.resume();
-        console.log('Audio context resumed for playback');
       }
 
       if (isPlaying) {
         audio.pause();
-        console.log('Audio paused');
       } else {
         // Ensure audio is loaded and ready
         if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
           await audio.play();
-          console.log('Audio playing');
         } else {
           console.warn('Audio not ready, loading...');
           audio.load();
@@ -715,8 +687,6 @@ export default function EnhancedWaveformPlayer({
     
     const audio = audioRef.current;
     const clampedTime = Math.max(0, Math.min(time, duration));
-    
-    console.log('Seeking to:', clampedTime);
     audio.currentTime = clampedTime;
   };
 

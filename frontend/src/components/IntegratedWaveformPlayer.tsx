@@ -175,18 +175,15 @@ export default function IntegratedWaveformPlayer({
   // Enable audio on any user interaction
   useEffect(() => {
     const enableAudio = async () => {
-      console.log('User interaction detected, enabling audio...');
       setUserInteracted(true);
       
       // Try to create and resume AudioContext immediately on user interaction
       if (!audioContextRef.current) {
         try {
           audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-          console.log('Audio context created successfully, state:', audioContextRef.current.state);
           
           if (audioContextRef.current.state === 'suspended') {
             await audioContextRef.current.resume();
-            console.log('Audio context resumed, new state:', audioContextRef.current.state);
           }
         } catch (error) {
           console.error('Failed to create/resume audio context:', error);
@@ -231,23 +228,18 @@ export default function IntegratedWaveformPlayer({
 
   useEffect(() => {
   if (disableAnnotationFetching) {
-    console.log('Annotation fetching disabled, using initial annotations');
     return; // Skip fetching if disabled
   }
 
   async function fetchAnnotations() {
-    try {
-      console.log('Fetching annotations for audioFileId:', audioFileId, 'isViewOnly:', isViewOnly);
-      
+    try {      
       // For view-only mode, don't fetch annotations as they should come from initialAnnotations
       if (isViewOnly) {
-        console.log('View-only mode: using initial annotations');
         return;
       }
 
       const token = localStorage.getItem('skribble_token');
       if (!token) {
-        console.log('No auth token available');
         return;
       }
 
@@ -265,7 +257,6 @@ export default function IntegratedWaveformPlayer({
       const data = await response.json();
       
       if (data.success) {
-        console.log('Successfully fetched annotations:', data.data.length);
         setAnnotations(data.data);
       } else {
         console.error('Failed to fetch annotations:', data.error);
@@ -318,13 +309,10 @@ export default function IntegratedWaveformPlayer({
   
   const generateWaveform = async () => {
   if (!userInteracted) {
-    console.log('Skipping waveform generation - no user interaction yet');
     return;
   }
 
-  try {
-    console.log('Generating waveform from:', audioUrl);
-    
+  try {    
     // Create a new AudioContext specifically for waveform generation
     let tempAudioContext;
     try {
@@ -335,7 +323,6 @@ export default function IntegratedWaveformPlayer({
         await tempAudioContext.resume();
       }
       
-      console.log('Temp AudioContext state:', tempAudioContext.state);
     } catch (contextError) {
       console.error('Failed to create temp AudioContext:', contextError);
       throw new Error('AudioContext creation failed');
@@ -346,17 +333,8 @@ export default function IntegratedWaveformPlayer({
       throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
     }
     
-    const arrayBuffer = await response.arrayBuffer();
-    console.log('Audio file fetched, size:', arrayBuffer.byteLength, 'bytes');
-    
+    const arrayBuffer = await response.arrayBuffer(); 
     const audioBuffer = await tempAudioContext.decodeAudioData(arrayBuffer);
-    
-    console.log('Audio decoded successfully:', {
-      duration: audioBuffer.duration,
-      sampleRate: audioBuffer.sampleRate,
-      channels: audioBuffer.numberOfChannels
-    });
-    
     const actualDuration = audioBuffer.duration;
     setDuration(actualDuration);
     onLoadComplete?.(actualDuration);
@@ -386,8 +364,6 @@ export default function IntegratedWaveformPlayer({
     const normalizedWaveform = max > 0 ? waveform.map(sample => sample / max) : waveform;
     
     setWaveformData(normalizedWaveform);
-    console.log('Waveform generated successfully, samples:', normalizedWaveform.length);
-    
     await tempAudioContext.close();
     
   } catch (error) {
@@ -398,10 +374,7 @@ export default function IntegratedWaveformPlayer({
     const fallbackSamples = Math.floor(fallbackDuration * 50);
     const fallback = Array.from({ length: fallbackSamples }, () => Math.random() * 0.5 + 0.25);
     setWaveformData(fallback);
-    setDuration(fallbackDuration);
-    
-    console.log('Using fallback waveform with', fallback.length, 'samples');
-  }
+    setDuration(fallbackDuration);  }
 };
 
   const setupWebAudio = async () => {
@@ -410,16 +383,13 @@ export default function IntegratedWaveformPlayer({
       try {
         if (!audioContextRef.current) {
           audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-          console.log('AudioContext created, state:', audioContextRef.current.state);
         }
 
         const audioContext = audioContextRef.current;
 
         // Always try to resume the AudioContext after user interaction
-        if (audioContext.state === 'suspended') {
-          console.log('Resuming suspended AudioContext...');
+        if (audioContext.state === 'suspended') {          
           await audioContext.resume();
-          console.log('AudioContext resumed, new state:', audioContext.state);
         }
         
         // Only create the source if it doesn't exist
@@ -431,9 +401,7 @@ export default function IntegratedWaveformPlayer({
           analyserRef.current.smoothingTimeConstant = 0.8;
           
           sourceRef.current.connect(analyserRef.current);
-          analyserRef.current.connect(audioContext.destination);
-          
-          console.log('Web Audio API setup successful, context state:', audioContext.state);
+          analyserRef.current.connect(audioContext.destination);         
         }
       } catch (error) {
         console.error('Web Audio API setup failed:', error);
@@ -443,7 +411,6 @@ export default function IntegratedWaveformPlayer({
     };
   // Initialize audio and generate waveform
   const initializeAudio = async (newAudioUrl: string = audioUrlState) => {
-    console.log('Initializing audio...', { audioUrl: newAudioUrl, userInteracted });
     
     if (!audioRef.current) {
       console.error('Audio ref not available');
@@ -473,21 +440,13 @@ export default function IntegratedWaveformPlayer({
         }, 15000);
   
         const onLoadedMetadata = () => {
-          clearTimeout(timeout);
-          console.log('Audio metadata loaded:', {
-            duration: audio.duration,
-            readyState: audio.readyState,
-            networkState: audio.networkState,
-            src: audio.src
-          });
-          
+          clearTimeout(timeout);      
           setDuration(audio.duration);
           onLoadComplete?.(audio.duration);
           resolve();
         };
         
         const onCanPlayThrough = () => {
-          console.log('Audio can play through');
           setIsAudioReady(true);
         };
         
@@ -532,8 +491,6 @@ export default function IntegratedWaveformPlayer({
         (resolve as any).cleanup = cleanup;
         (reject as any).cleanup = cleanup;
       });
-  
-      console.log('Setting audio source to:', newAudioUrl);
       audio.src = newAudioUrl;
       audio.load();
   
@@ -636,59 +593,13 @@ export default function IntegratedWaveformPlayer({
     return markers;
   }, [duration, zoomLevel, scrollOffset]);
 
-const handleVersionChange = useCallback((newVersion: any) => {
-  console.log('Version changed to:', newVersion);
-  setCurrentVersion(newVersion);
-
-  // Clear annotations immediately
-  setAnnotations([]);
-
-  // Update the audio URL with the new version
-  if (newVersion.file_url) {
-    console.log('Switching to new audio URL:', newVersion.file_url);
-
-    // Update the audio source
-    setAudioUrlState(newVersion.file_url);
-
-    // Reset player state
-    setIsPlaying(false);
-    setCurrentTime(0);
-    setIsLoading(true);
-    setIsGeneratingWaveform(true);
-    setError(null);
-
-    // If audio element exists, update it directly
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current.src = newVersion.file_url;
-      audioRef.current.load();
-    }
-
-    // Regenerate waveform for new audio
-    initializeAudio(newVersion.file_url)
-      .then(() => {
-        setIsGeneratingWaveform(false);
-        setIsAudioReady(true);
-        setIsLoading(false);
-        console.log('✅ Waveform generated for new version');
-      })
-      .catch(error => {
-        console.error('❌ Error generating waveform for new version:', error);
-        setError(`Failed to load version: ${getErrorMessage(error)}`);
-        setIsGeneratingWaveform(false);
-        setIsLoading(false);
-      });
-  }
-}, [generateWaveform, getErrorMessage, initializeAudio]);
-  
 
   const handleVersionError = useCallback((message: string) => {
-  setErrorMessage(message);
-  console.error('Version control error:', message);
-  // Clear error after 5 seconds
-  setTimeout(() => setErrorMessage(null), 5000);
-}, []);
+    setErrorMessage(message);
+    console.error('Version control error:', message);
+    // Clear error after 5 seconds
+    setTimeout(() => setErrorMessage(null), 5000);
+  }, []);
 
 
 
@@ -1239,7 +1150,6 @@ const drawWaveform = useCallback(() => {
 
     // First check if we clicked on an annotation (FIXED)
     if (hoveredAnnotation) {
-      console.log(`🎯 Clicking annotation: seeking to ${hoveredAnnotation.timestamp}s`);
       seekTo(hoveredAnnotation.timestamp);
       return;
     }
@@ -1248,8 +1158,6 @@ const drawWaveform = useCallback(() => {
     const progress = mouseX / rect.width;
     const visibleDuration = duration / zoomLevel;
     const newTime = scrollOffset + (progress * visibleDuration);
-    
-    console.log(`🎯 Seeking to: ${newTime.toFixed(2)}s (progress: ${progress.toFixed(3)}, mouseX: ${mouseX}, rectWidth: ${rect.width})`);
     seekTo(newTime);
   };
 
@@ -1259,9 +1167,7 @@ const drawWaveform = useCallback(() => {
     
     const audio = audioRef.current;
     const clampedTime = Math.max(0, Math.min(time, duration));
-    
-    console.log('🎵 Seeking to:', clampedTime.toFixed(2) + 's');
-    
+        
     // Add visual feedback
     const canvas = canvasRef.current;
     if (canvas) {
@@ -1323,16 +1229,13 @@ const drawWaveform = useCallback(() => {
     try {
       if (audioContextRef.current?.state === 'suspended') {
         await audioContextRef.current.resume();
-        console.log('Audio context resumed for playback');
       }
 
       if (isPlaying) {
         audio.pause();
-        console.log('Audio paused');
       } else {
         if (audio.readyState >= 2) {
           await audio.play();
-          console.log('Audio playing');
         } else {
           console.warn('Audio not ready, loading...');
           audio.load();
@@ -1426,9 +1329,6 @@ const drawWaveform = useCallback(() => {
     setScrollOffset(0);
   };
 
-// frontend/src/components/IntegratedWaveformPlayer.tsx - PART 4
-// Continue from Part 3...
-
   // Set up persistent audio event listeners
   useEffect(() => {
     const audio = audioRef.current;
@@ -1441,23 +1341,19 @@ const drawWaveform = useCallback(() => {
     };
 
     const handleDurationChange = () => {
-      console.log('Duration changed to:', audio.duration);
       setDuration(audio.duration);
     };
 
     const handleEnded = () => {
-      console.log('Audio ended');
       setIsPlaying(false);
       setCurrentTime(0);
     };
 
     const handlePause = () => {
-      console.log('Audio paused');
       setIsPlaying(false);
     };
 
     const handlePlay = () => {
-      console.log('Audio playing');
       setIsPlaying(true);
     };
 

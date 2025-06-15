@@ -3,8 +3,38 @@ import express from 'express';
 import Stripe from 'stripe';
 import { authenticateToken } from '../middleware/auth';
 import { pool } from '../config/database';
+import { User, ApiResponse } from '@/types';
 
 const router = express.Router();
+
+// Define subscription-specific interfaces that extend your base types
+interface SubscriptionInfo {
+  tier: string;
+  status: string;
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd?: boolean;
+  trialEnd?: string | null;
+  paymentMethod?: {
+    type: string;
+    last4: string;
+    expiryMonth: number;
+    expiryYear: number;
+  };
+}
+
+interface AuthenticatedRequest extends express.Request {
+  user: {
+    userId: string;
+    email: string;
+  };
+}
+
+interface ReferralStats {
+  referral_code: string | null;
+  successful_referrals: number;
+  pending_referrals: number;
+  rewards_earned: number;
+}
 
 // Initialize Stripe
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -13,7 +43,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 });
 
 // Create checkout session with trial support
-router.post('/create-checkout-session', authenticateToken, async (req: any, res: any) => {
+router.post('/create-checkout-session', authenticateToken, async (req: AuthenticatedRequest, res: express.Response<ApiResponse<{ url: string }>>) => {
   try {
     const { priceId, referralCode } = req.body;
     const userId = req.user.userId;
@@ -63,7 +93,6 @@ router.post('/create-checkout-session', authenticateToken, async (req: any, res:
     if (referralCode) {
       const isValidReferral = await validateReferralCode(referralCode, userId);
       if (isValidReferral) {
-        // Create or get coupon for referral (1 month free)
         sessionParams.discounts = [{
           coupon: 'first_month_free' // Create this coupon in Stripe dashboard
         }];
@@ -74,7 +103,7 @@ router.post('/create-checkout-session', authenticateToken, async (req: any, res:
 
     res.json({
       success: true,
-      data: { url: session.url }
+      data: { url: session.url! }
     });
 
   } catch (error) {
@@ -87,7 +116,7 @@ router.post('/create-checkout-session', authenticateToken, async (req: any, res:
 });
 
 // Start free trial (no payment required)
-router.post('/start-trial', authenticateToken, async (req: any, res: any) => {
+router.post('/start-trial', authenticateToken, async (req: AuthenticatedRequest, res: express.Response<ApiResponse<{ message: string }>>) => {
   try {
     const userId = req.user.userId;
 
@@ -136,7 +165,7 @@ router.post('/start-trial', authenticateToken, async (req: any, res: any) => {
 });
 
 // Generate referral code
-router.post('/generate-referral-code', authenticateToken, async (req: any, res: any) => {
+router.post('/generate-referral-code', authenticateToken, async (req: AuthenticatedRequest, res: express.Response<ApiResponse<{ referralCode: string }>>) => {
   try {
     const userId = req.user.userId;
     
@@ -162,8 +191,8 @@ router.post('/generate-referral-code', authenticateToken, async (req: any, res: 
   }
 });
 
-// Get referral stats (updated for your table structure)
-router.get('/referral-stats', authenticateToken, async (req: any, res: any) => {
+// Get referral stats
+router.get('/referral-stats', authenticateToken, async (req: AuthenticatedRequest, res: express.Response<ApiResponse<ReferralStats>>) => {
   try {
     const userId = req.user.userId;
 
@@ -201,7 +230,7 @@ router.get('/referral-stats', authenticateToken, async (req: any, res: any) => {
 });
 
 // Get subscription info
-router.get('/subscription-info', authenticateToken, async (req: any, res: any) => {
+router.get('/subscription-info', authenticateToken, async (req: AuthenticatedRequest, res: express.Response<ApiResponse<SubscriptionInfo>>) => {
   try {
     const userId = req.user.userId;
 
@@ -213,7 +242,8 @@ router.get('/subscription-info', authenticateToken, async (req: any, res: any) =
 
     const user = userResult.rows[0];
     
-    let subscriptionInfo = {
+    // Initialize with base subscription info
+    const subscriptionInfo: SubscriptionInfo = {
       tier: user.subscription_tier,
       status: user.subscription_status || 'inactive'
     };
@@ -223,13 +253,11 @@ router.get('/subscription-info', authenticateToken, async (req: any, res: any) =
       try {
         const subscription = await stripe.subscriptions.retrieve(user.stripe_subscription_id);
         
-        subscriptionInfo = {
-          ...subscriptionInfo,
-          status: subscription.status,
-          currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-          trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null
-        };
+        // Update subscription info with Stripe data
+        subscriptionInfo.status = subscription.status;
+        subscriptionInfo.currentPeriodEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        subscriptionInfo.cancelAtPeriodEnd = subscription.cancel_at_period_end;
+        subscriptionInfo.trialEnd = subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null;
 
         // Get payment method if available
         if (subscription.default_payment_method) {
@@ -269,7 +297,7 @@ router.get('/subscription-info', authenticateToken, async (req: any, res: any) =
 });
 
 // Create billing portal session
-router.post('/create-portal-session', authenticateToken, async (req: any, res: any) => {
+router.post('/create-portal-session', authenticateToken, async (req: AuthenticatedRequest, res: express.Response<ApiResponse<{ url: string }>>) => {
   try {
     const userId = req.user.userId;
     
@@ -306,7 +334,7 @@ router.post('/create-portal-session', authenticateToken, async (req: any, res: a
 });
 
 // Validate referral code (public endpoint)
-router.post('/validate-referral', async (req: any, res: any) => {
+router.post('/validate-referral', async (req: express.Request, res: express.Response<ApiResponse<{ valid: boolean; referrerName?: string }>>) => {
   try {
     const { referralCode } = req.body;
 
@@ -347,12 +375,12 @@ router.post('/validate-referral', async (req: any, res: any) => {
 });
 
 // Webhook handler for Stripe events
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req: any, res: any) => {
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = stripe.webhooks.constructEvent(req.body, sig as string, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err: any) {
     console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -417,7 +445,7 @@ async function getOrCreateCustomer(userId: string) {
   return customer;
 }
 
-async function validateReferralCode(referralCode: string, userId: string) {
+async function validateReferralCode(referralCode: string, userId: string): Promise<boolean> {
   const referrer = await pool.query(
     'SELECT id FROM users WHERE referral_code = $1 AND id != $2',
     [referralCode, userId]
@@ -442,7 +470,7 @@ async function validateReferralCode(referralCode: string, userId: string) {
   return true;
 }
 
-async function handleCheckoutCompleted(session: any) {
+async function handleCheckoutCompleted(session: any): Promise<void> {
   const userId = session.metadata.userId;
   const referralCode = session.metadata.referralCode;
 
@@ -475,7 +503,7 @@ async function handleCheckoutCompleted(session: any) {
   );
 }
 
-async function handleSubscriptionCreated(subscription: any) {
+async function handleSubscriptionCreated(subscription: any): Promise<void> {
   const userId = subscription.metadata.userId;
   const priceId = subscription.items.data[0].price.id;
   
@@ -503,7 +531,7 @@ async function handleSubscriptionCreated(subscription: any) {
   );
 }
 
-async function handleSubscriptionUpdated(subscription: any) {
+async function handleSubscriptionUpdated(subscription: any): Promise<void> {
   await pool.query(`
     UPDATE users 
     SET subscription_status = $1
@@ -511,7 +539,7 @@ async function handleSubscriptionUpdated(subscription: any) {
   `, [subscription.status, subscription.id]);
 }
 
-async function handleSubscriptionDeleted(subscription: any) {
+async function handleSubscriptionDeleted(subscription: any): Promise<void> {
   await pool.query(`
     UPDATE users 
     SET subscription_tier = 'free',
@@ -521,7 +549,7 @@ async function handleSubscriptionDeleted(subscription: any) {
   `, [subscription.id]);
 }
 
-async function handlePaymentSucceeded(invoice: any) {
+async function handlePaymentSucceeded(invoice: any): Promise<void> {
   // Log successful payment
   await pool.query(
     'INSERT INTO subscription_analytics (user_id, event_type, amount_cents, stripe_event_id, metadata) VALUES ((SELECT id FROM users WHERE stripe_customer_id = $1), $2, $3, $4, $5)',
@@ -529,7 +557,7 @@ async function handlePaymentSucceeded(invoice: any) {
   );
 }
 
-async function handlePaymentFailed(invoice: any) {
+async function handlePaymentFailed(invoice: any): Promise<void> {
   // Handle failed payment - update user status
   await pool.query(`
     UPDATE users 

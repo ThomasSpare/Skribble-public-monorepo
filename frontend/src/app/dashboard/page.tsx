@@ -830,6 +830,7 @@ export default function DashboardPage() {
           isOpen={showSettings}
           onClose={() => setShowSettings(false)}
           onUserUpdate={setUser}
+          onLogout={handleLogout}
         />
       )}
     </div>

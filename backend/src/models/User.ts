@@ -15,8 +15,6 @@ interface PostgresError extends Error {
   constraint?: string;
 }
 
-
-
 interface CreateUserData {
   email: string;
   username: string;
@@ -82,19 +80,25 @@ export class UserModel {
 
   // Find user by ID
   static async findById(id: string): Promise<User | null> {
-    const query = `
-      SELECT id, email, username, role, subscription_tier, 
-             profile_image, stripe_customer_id, created_at, updated_at
-      FROM users WHERE id = $1
-    `;
-
     try {
-      const result = await pool.query(query, [id]);
-      return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
+      const result = await pool.query(`
+        SELECT id, email, username, role, subscription_tier, subscription_status,
+              profile_image, created_at, updated_at, trial_used, trial_end_date,
+              referral_code, referral_rewards_earned, stripe_customer_id, 
+              stripe_subscription_id, notification_settings, privacy_settings
+        FROM users 
+        WHERE id = $1
+      `, [id]);
+
+      if (result.rows.length === 0) {
+        return null;
+      }
+
+      return this.mapRowToUser(result.rows[0]);
     } catch (error) {
       throw error;
     }
-  }
+}
 
   // Find user by email (for authentication)
   static async findByEmail(email: string): Promise<(User & { password: string }) | null> {
@@ -316,7 +320,15 @@ export class UserModel {
       subscriptionTier: row.subscription_tier,
       profileImage: row.profile_image,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      trial_used: row.trial_used,
+      trial_end_date: row.trial_end_date,
+      referral_code: row.referral_code,
+      referral_rewards_earned: row.referral_rewards_earned,
+      stripe_customer_id: row.stripe_customer_id,
+      stripe_subscription_id: row.stripe_subscription_id,
+      notification_settings: row.notification_settings,
+      privacy_settings: row.privacy_settings
     };
   }
 

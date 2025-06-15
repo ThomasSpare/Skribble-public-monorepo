@@ -4,8 +4,23 @@ import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { UserModel } from '../models/User';
 import { pool } from '../config/database';
+import multer from 'multer';
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
 
 // Get current user profile
 router.get('/profile', authenticateToken, async (req: any, res: any) => {
@@ -36,11 +51,11 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
 // Update user profile
 router.put('/profile', 
   authenticateToken,
+  upload.single('profileImage'), // Add this for image upload
   [
     body('username').optional().isLength({ min: 3, max: 30 }).trim(),
     body('role').optional().isIn(['producer', 'artist', 'both']),
-    // Simplified validation - just check if it's a string
-    body('profileImage').optional().isString()
+    body('email').optional().isEmail().normalizeEmail()
   ],
   async (req: any, res: any) => {
     try {
@@ -56,9 +71,9 @@ router.put('/profile',
       }
 
       const userId = req.user.userId;
-      const { username, role, profileImage } = req.body;
+      const { username, role, email } = req.body;
 
-      // Check if username is available (if changing) - direct query
+      // Check if username is available (if changing)
       if (username) {
         const existingUser = await pool.query(
           'SELECT id FROM users WHERE username = $1 AND id != $2',
@@ -73,76 +88,84 @@ router.put('/profile',
         }
       }
 
+      // Check if email is available (if changing)
+      if (email) {
+        const existingEmail = await pool.query(
+          'SELECT id FROM users WHERE email = $1 AND id != $2',
+          [email, userId]
+        );
+        
+        if (existingEmail.rows.length > 0) {
+          return res.status(400).json({
+            success: false,
+            error: { message: 'Email already taken' }
+          });
+        }
+      }
+
+      let profileImageUrl = null;
+      
+      // Handle profile image upload
+      if (req.file) {
+        // For now, simulate storing the image
+        // In production, you'd upload to S3 or similar
+        profileImageUrl = `/uploads/profiles/${userId}-${Date.now()}.jpg`;
+        
+        // TODO: Implement actual file upload to S3
+        // const uploadResult = await uploadToS3(req.file, profileImageUrl);
+      }
+
       // Build update query dynamically
       const updateFields = [];
       const updateValues = [];
-      let paramCount = 1;
+      let paramIndex = 1;
 
       if (username) {
-        updateFields.push(`username = $${paramCount}`);
+        updateFields.push(`username = $${paramIndex++}`);
         updateValues.push(username);
-        paramCount++;
       }
-
+      if (email) {
+        updateFields.push(`email = $${paramIndex++}`);
+        updateValues.push(email);
+      }
       if (role) {
-        updateFields.push(`role = $${paramCount}`);
+        updateFields.push(`role = $${paramIndex++}`);
         updateValues.push(role);
-        paramCount++;
+      }
+      if (profileImageUrl) {
+        updateFields.push(`profile_image = $${paramIndex++}`);
+        updateValues.push(profileImageUrl);
       }
 
-      if (profileImage !== undefined) {
-        updateFields.push(`profile_image = $${paramCount}`);
-        updateValues.push(profileImage);
-        paramCount++;
-      }
-
-      // Always update the updated_at field
-      updateFields.push(`updated_at = $${paramCount}`);
-      updateValues.push(new Date());
-      paramCount++;
-
-      // Add userId for WHERE clause
-      updateValues.push(userId);
-
-      const updateQuery = `
-        UPDATE users 
-        SET ${updateFields.join(', ')}
-        WHERE id = $${paramCount}
-        RETURNING id, email, username, role, subscription_tier, 
-                  profile_image, created_at, updated_at
-      `;
-
-      const result = await pool.query(updateQuery, updateValues);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
+      if (updateFields.length === 0) {
+        return res.status(400).json({
           success: false,
-          error: { message: 'User not found' }
+          error: { message: 'No fields to update' }
         });
       }
 
-      const updatedUser = {
-        id: result.rows[0].id,
-        email: result.rows[0].email,
-        username: result.rows[0].username,
-        role: result.rows[0].role,
-        subscriptionTier: result.rows[0].subscription_tier,
-        profileImage: result.rows[0].profile_image,
-        createdAt: result.rows[0].created_at,
-        updatedAt: result.rows[0].updated_at
-      };
+      updateFields.push(`updated_at = NOW()`);
+      updateValues.push(userId); // For WHERE clause
 
+      const query = `
+        UPDATE users 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramIndex}
+        RETURNING id, email, username, role, subscription_tier, profile_image, created_at, updated_at
+      `;
+
+      const result = await pool.query(query, updateValues);
+      
       res.json({
         success: true,
-        data: updatedUser,
-        message: 'Profile updated successfully'
+        data: result.rows[0]
       });
 
     } catch (error: any) {
-      console.error('❌ Update profile error:', error);
+      console.error('Update profile error:', error);
       res.status(500).json({
         success: false,
-        error: { message: error.message || 'Failed to update profile' }
+        error: { message: 'Failed to update profile' }
       });
     }
   }
@@ -319,5 +342,167 @@ router.get('/:username', async (req, res) => {
     });
   }
 });
+
+// Add these new routes to your existing users.ts file (before the export default router line)
+
+// Get notification settings
+router.get('/notification-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(`
+      SELECT notification_settings FROM users WHERE id = $1
+    `, [userId]);
+
+    const settings = result.rows[0]?.notification_settings || {
+      collaborations: true,
+      projects: true,
+      weekly: true,
+      marketing: false,
+      email: true,
+      push: true
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Get notification settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch notification settings' }
+    });
+  }
+});
+
+// Update notification settings
+router.put('/notification-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    const settings = req.body;
+
+    await pool.query(`
+      UPDATE users 
+      SET notification_settings = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(settings), userId]);
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update notification settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update notification settings' }
+    });
+  }
+});
+
+// Get privacy settings
+router.get('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(`
+      SELECT privacy_settings FROM users WHERE id = $1
+    `, [userId]);
+
+    const settings = result.rows[0]?.privacy_settings || {
+      profileVisibility: 'public',
+      showEmail: false,
+      allowDirectMessages: true,
+      indexInSearch: true
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Get privacy settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch privacy settings' }
+    });
+  }
+});
+
+// Update privacy settings
+router.put('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    const settings = req.body;
+
+    await pool.query(`
+      UPDATE users 
+      SET privacy_settings = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(settings), userId]);
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update privacy settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update privacy settings' }
+    });
+  }
+});
+
+// Export user data
+router.get('/export-data', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Gather all user data
+    const [userResult, projectsResult, collaborationsResult, annotationsResult] = await Promise.all([
+      pool.query('SELECT * FROM users WHERE id = $1', [userId]),
+      pool.query('SELECT * FROM projects WHERE creator_id = $1', [userId]),
+      pool.query(`
+        SELECT p.*, u.username as creator_name 
+        FROM project_collaborators pc
+        JOIN projects p ON pc.project_id = p.id
+        JOIN users u ON p.creator_id = u.id
+        WHERE pc.user_id = $1
+      `, [userId]),
+      pool.query(`
+        SELECT a.*, p.title as project_title
+        FROM annotations a
+        JOIN projects p ON a.project_id = p.id
+        WHERE a.user_id = $1
+      `, [userId])
+    ]);
+
+    const exportData = {
+      user: userResult.rows[0],
+      projects: projectsResult.rows,
+      collaborations: collaborationsResult.rows,
+      annotations: annotationsResult.rows,
+      exportDate: new Date().toISOString()
+    };
+
+    // Remove sensitive data
+    delete exportData.user.password;
+    delete exportData.user.stripe_customer_id;
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}.json"`);
+    res.json(exportData);
+
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to export data' }
+    });
+  }
+});
+
 
 export default router;

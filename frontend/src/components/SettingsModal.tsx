@@ -2,29 +2,10 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { 
-  X, 
-  User, 
-  Camera, 
-  Save, 
-  Loader2,
-  Users,
-  Gift,
-  Copy,
-  Check,
-  Share2,
-  Crown,
-  CreditCard,
-  Bell,
-  Shield,
-  Mail,
-  AlertCircle,
-  Eye,
-  EyeOff,
-  Trash2,
-  ExternalLink,
-  DollarSign,
-  Calendar,
-  CreditCard as CreditCardIcon
+  X, User, Camera, Save, Loader2, Users, Gift, Copy, Check, Share2,
+  Crown, CreditCard, Bell, Shield, Mail, AlertCircle, Eye, EyeOff,
+  Trash2, ExternalLink, DollarSign, Calendar, CreditCard as CreditCardIcon,
+  Settings, LogOut, Download, Upload
 } from 'lucide-react';
 import Image from 'next/image';
 import ReferralDashboard from './ReferralDashboard';
@@ -35,9 +16,13 @@ interface User {
   username: string;
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: string;
+  subscriptionStatus?: string;
   profileImage?: string;
   createdAt: string;
   updatedAt: string;
+  trial_used?: boolean;
+  trial_end_date?: string;
+  referral_code?: string;
 }
 
 interface SettingsModalProps {
@@ -45,9 +30,10 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onUserUpdate: (updatedUser: User) => void;
+  onLogout: () => void;
 }
 
-type SettingsTab = 'profile' | 'referrals' | 'subscription' | 'notifications' | 'privacy';
+type SettingsTab = 'profile' | 'referrals' | 'subscription' | 'notifications' | 'privacy' | 'data';
 
 interface NotificationSettings {
   collaborations: boolean;
@@ -67,9 +53,10 @@ interface PrivacySettings {
 
 interface SubscriptionInfo {
   tier: string;
-  status: 'active' | 'cancelled' | 'past_due' | 'trialing';
-  currentPeriodEnd: string;
-  cancelAtPeriodEnd: boolean;
+  status: 'active' | 'cancelled' | 'past_due' | 'trialing' | 'inactive';
+  currentPeriodEnd?: string;
+  cancelAtPeriodEnd?: boolean;
+  trialEnd?: string;
   paymentMethod?: {
     type: string;
     last4: string;
@@ -78,7 +65,7 @@ interface SubscriptionInfo {
   };
 }
 
-export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: SettingsModalProps) {
+export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onLogout }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -118,6 +105,15 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
   // Subscription info
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null);
 
+  const tabs = [
+    { id: 'profile' as SettingsTab, label: 'Profile', icon: User },
+    { id: 'referrals' as SettingsTab, label: 'Referrals', icon: Users },
+    { id: 'subscription' as SettingsTab, label: 'Subscription', icon: Crown },
+    { id: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
+    { id: 'privacy' as SettingsTab, label: 'Privacy', icon: Shield },
+    { id: 'data' as SettingsTab, label: 'Data & Security', icon: Settings }
+  ];
+
   // Reset form when user changes
   useEffect(() => {
     setProfileData({
@@ -151,12 +147,21 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
   const loadUserSettings = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = localStorage.getItem('token');
       
-      // Load notification settings
-      const notifResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/notification-settings`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      // Load all settings in parallel
+      const [notifResponse, privacyResponse, subResponse] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/notification-settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/privacy-settings`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/stripe/subscription-info`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+      ]);
+
       if (notifResponse.ok) {
         const notifData = await notifResponse.json();
         if (notifData.success) {
@@ -164,10 +169,6 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
         }
       }
 
-      // Load privacy settings
-      const privacyResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/privacy-settings`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
       if (privacyResponse.ok) {
         const privacyData = await privacyResponse.json();
         if (privacyData.success) {
@@ -175,10 +176,6 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
         }
       }
 
-      // Load subscription info
-      const subResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/subscription`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
       if (subResponse.ok) {
         const subData = await subResponse.json();
         if (subData.success) {
@@ -187,6 +184,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
       }
     } catch (error) {
       console.error('Failed to load user settings:', error);
+      setError('Failed to load settings');
     } finally {
       setIsLoading(false);
     }
@@ -195,6 +193,11 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        setError('Image must be less than 5MB');
+        return;
+      }
+      
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -207,9 +210,9 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
   const handleProfileSave = async () => {
     setIsSaving(true);
     setError(null);
-
+    
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = localStorage.getItem('token');
       const formData = new FormData();
       
       formData.append('username', profileData.username);
@@ -229,16 +232,16 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
       });
 
       const data = await response.json();
+      
       if (data.success) {
         onUserUpdate(data.data);
-        setSuccess('Profile updated successfully!');
+        setSuccess('Profile updated successfully');
         setSelectedFile(null);
         setPreviewImage(null);
       } else {
-        throw new Error(data.error?.message || 'Failed to update profile');
+        throw new Error(data.error.message);
       }
     } catch (error: any) {
-      console.error('Profile update error:', error);
       setError(error.message || 'Failed to update profile');
     } finally {
       setIsSaving(false);
@@ -247,27 +250,25 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
 
   const handleNotificationSave = async () => {
     setIsSaving(true);
-    setError(null);
-
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = localStorage.getItem('token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/notification-settings`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(notificationSettings)
       });
 
       const data = await response.json();
       if (data.success) {
-        setSuccess('Notification settings updated!');
+        setSuccess('Notification settings updated');
       } else {
-        throw new Error(data.error?.message || 'Failed to update settings');
+        throw new Error(data.error.message);
       }
     } catch (error: any) {
-      setError(error.message || 'Failed to update notification settings');
+      setError(error.message || 'Failed to update notifications');
     } finally {
       setIsSaving(false);
     }
@@ -275,24 +276,22 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
 
   const handlePrivacySave = async () => {
     setIsSaving(true);
-    setError(null);
-
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = localStorage.getItem('token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/privacy-settings`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(privacySettings)
       });
 
       const data = await response.json();
       if (data.success) {
-        setSuccess('Privacy settings updated!');
+        setSuccess('Privacy settings updated');
       } else {
-        throw new Error(data.error?.message || 'Failed to update settings');
+        throw new Error(data.error.message);
       }
     } catch (error: any) {
       setError(error.message || 'Failed to update privacy settings');
@@ -301,46 +300,75 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
     }
   };
 
-  const handleCancelSubscription = async () => {
-    if (!confirm('Are you sure you want to cancel your subscription? You will still have access until the end of your current billing period.')) {
+  const handleManageSubscription = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stripe/create-portal-session`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        window.open(data.data.url, '_blank');
+      } else {
+        throw new Error(data.error.message);
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to open billing portal');
+    }
+  };
+
+  const handleDataExport = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/export-data`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `skribble-data-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        setSuccess('Data exported successfully');
+      } else {
+        throw new Error('Failed to export data');
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to export data');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+      return;
+    }
+
+    if (!window.confirm('This will permanently delete all your projects, collaborations, and data. Type DELETE to confirm.')) {
       return;
     }
 
     try {
-      const token = localStorage.getItem('skribble_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/subscription/cancel`, {
-        method: 'POST',
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/delete-account`, {
+        method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
       const data = await response.json();
       if (data.success) {
-        setSuccess('Subscription cancelled successfully');
-        loadUserSettings(); // Reload subscription info
+        alert('Account deleted successfully');
+        onLogout();
       } else {
-        throw new Error(data.error?.message || 'Failed to cancel subscription');
-      }
-    } catch (error: any) {
-      setError(error.message || 'Failed to cancel subscription');
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    const confirmation = prompt('This action cannot be undone. Type "DELETE" to confirm:');
-    if (confirmation !== 'DELETE') return;
-
-    try {
-      const token = localStorage.getItem('skribble_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/account`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        localStorage.clear();
-        window.location.href = '/';
-      } else {
-        throw new Error('Failed to delete account');
+        throw new Error(data.error.message);
       }
     } catch (error: any) {
       setError(error.message || 'Failed to delete account');
@@ -348,32 +376,29 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
   };
 
   const getSubscriptionColor = (tier: string) => {
-    const colors: { [key: string]: string } = {
-      'free': 'text-skribble-azure',
-      'indie': 'text-blue-400',
-      'producer': 'text-purple-400',
-      'studio': 'text-yellow-400'
-    };
-    return colors[tier] || 'text-skribble-azure';
+    switch (tier) {
+      case 'indie':
+      case 'indie_trial':
+        return 'text-blue-400';
+      case 'producer':
+        return 'text-purple-400';
+      case 'studio':
+        return 'text-yellow-400';
+      default:
+        return 'text-gray-400';
+    }
   };
 
   const getSubscriptionFeatures = (tier: string) => {
-    const features: { [key: string]: string[] } = {
+    const features: Record<string, string[]> = {
       'free': ['1 project', '1 collaborator', '25MB files'],
       'indie': ['5 projects', '2 collaborators', '50MB files', 'Basic exports'],
+      'indie_trial': ['5 projects', '2 collaborators', '50MB files', 'Basic exports'],
       'producer': ['25 projects', '10 collaborators', '200MB files', 'All exports', 'Voice notes'],
       'studio': ['Unlimited projects', 'Unlimited collaborators', '1GB files', 'White-label', 'Analytics']
     };
     return features[tier] || features['free'];
   };
-
-  const tabs = [
-    { id: 'profile' as SettingsTab, label: 'Profile', icon: User },
-    { id: 'referrals' as SettingsTab, label: 'Referrals', icon: Users },
-    { id: 'subscription' as SettingsTab, label: 'Subscription', icon: Crown },
-    { id: 'notifications' as SettingsTab, label: 'Notifications', icon: Bell },
-    { id: 'privacy' as SettingsTab, label: 'Privacy', icon: Shield }
-  ];
 
   if (!isOpen) return null;
 
@@ -391,6 +416,18 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
           </button>
         </div>
 
+        {/* Error/Success Messages */}
+        {error && (
+          <div className="mx-6 mt-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mx-6 mt-4 p-3 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-sm">
+            {success}
+          </div>
+        )}
+
         <div className="flex">
           {/* Sidebar */}
           <div className="w-64 p-6 border-r border-skribble-azure/20">
@@ -403,7 +440,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
                       activeTab === tab.id
-                        ? 'bg-skribble-azure text-white'
+                        ? 'bg-skribble-azure/20 text-skribble-sky'
                         : 'text-skribble-azure hover:bg-skribble-plum/30'
                     }`}
                   >
@@ -412,66 +449,49 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
                   </button>
                 );
               })}
+              
+              {/* Logout Button */}
+              <button
+                onClick={onLogout}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors text-red-400 hover:bg-red-500/20 mt-8 border-t border-skribble-azure/20 pt-4"
+              >
+                <LogOut className="w-5 h-5" />
+                Logout
+              </button>
             </nav>
           </div>
 
           {/* Content */}
-          <div className="flex-1 p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-            {/* Messages */}
-            {error && (
-              <div className="mb-6 bg-red-500/20 border border-red-500/30 rounded-lg p-4 flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-red-400" />
-                <p className="text-red-200">{error}</p>
-              </div>
-            )}
-
-            {success && (
-              <div className="mb-6 bg-green-500/20 border border-green-500/30 rounded-lg p-4 flex items-center gap-3">
-                <Check className="w-5 h-5 text-green-400" />
-                <p className="text-green-200">{success}</p>
-              </div>
-            )}
-
+          <div className="flex-1 p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
             {/* Profile Tab */}
             {activeTab === 'profile' && (
               <div className="space-y-6">
-                <div>
-                  <h3 className="font-madimi text-xl text-skribble-sky mb-4">Profile Information</h3>
-                  
-                  {/* Profile Image Upload */}
-                  <div className="mb-6">
-                    <label className="block text-skribble-azure text-sm mb-3">Profile Image</label>
-                    <div className="flex items-center gap-4">
-                      <div className="relative">
-                        <div className="w-20 h-20 rounded-full overflow-hidden bg-skribble-plum/30 border-2 border-skribble-azure/20">
-                          {previewImage || profileData.profileImage ? (
-                            <Image 
-                              src={previewImage || profileData.profileImage} 
-                              alt="Profile" 
-                              width={80} 
-                              height={80}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-skribble-azure to-skribble-purple">
-                              <span className="text-white text-xl font-medium">
-                                {profileData.username.charAt(0).toUpperCase()}
-                              </span>
-                            </div>
-                          )}
+                <h3 className="font-madimi text-xl text-skribble-sky mb-4">Profile Settings</h3>
+                
+                {/* Profile Image */}
+                <div className="flex items-center gap-6">
+                  <div className="relative">
+                    <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden">
+                      {previewImage || profileData.profileImage ? (
+                        <Image
+                          src={previewImage || profileData.profileImage}
+                          alt="Profile"
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-skribble-azure">
+                          <User className="w-8 h-8" />
                         </div>
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          className="absolute -bottom-1 -right-1 bg-skribble-azure rounded-full p-2 shadow-lg hover:bg-skribble-azure/80 transition-colors"
-                        >
-                          <Camera className="w-4 h-4 text-white" />
-                        </button>
-                      </div>
-                      <div>
-                        <p className="text-skribble-sky font-medium">{profileData.username}</p>
-                        <p className="text-skribble-azure text-sm">Click the camera icon to change</p>
-                      </div>
+                      )}
                     </div>
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute bottom-0 right-0 p-2 bg-skribble-azure rounded-full text-white hover:bg-skribble-azure/80 transition-colors"
+                    >
+                      <Camera className="w-4 h-4" />
+                    </button>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -480,56 +500,70 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
                       className="hidden"
                     />
                   </div>
-
-                  {/* Form Fields */}
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-skribble-azure text-sm mb-2">Username</label>
-                      <input
-                        type="text"
-                        value={profileData.username}
-                        onChange={(e) => setProfileData(prev => ({ ...prev, username: e.target.value }))}
-                        className="w-full px-4 py-3 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky placeholder-skribble-azure/50 focus:outline-none focus:border-skribble-azure transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-skribble-azure text-sm mb-2">Email</label>
-                      <input
-                        type="email"
-                        value={profileData.email}
-                        onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
-                        className="w-full px-4 py-3 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky placeholder-skribble-azure/50 focus:outline-none focus:border-skribble-azure transition-colors"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-skribble-azure text-sm mb-2">Role</label>
-                      <select
-                        value={profileData.role}
-                        onChange={(e) => setProfileData(prev => ({ ...prev, role: e.target.value as any }))}
-                        className="w-full px-4 py-3 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky focus:outline-none focus:border-skribble-azure transition-colors"
-                      >
-                        <option value="producer">Producer</option>
-                        <option value="artist">Artist</option>
-                        <option value="both">Both</option>
-                      </select>
-                    </div>
+                  <div>
+                    <h4 className="text-skribble-sky font-medium">Profile Photo</h4>
+                    <p className="text-skribble-azure/70 text-sm">
+                      Upload a photo to personalize your profile
+                    </p>
                   </div>
+                </div>
 
+                {/* Form Fields */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-skribble-azure text-sm font-medium mb-2">
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={profileData.username}
+                      onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                      className="w-full px-3 py-2 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-skribble-azure text-sm font-medium mb-2">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      value={profileData.email}
+                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                      className="w-full px-3 py-2 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-skribble-azure text-sm font-medium mb-2">
+                    Role
+                  </label>
+                  <select
+                    value={profileData.role}
+                    onChange={(e) => setProfileData({ ...profileData, role: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                  >
+                    <option value="producer">Producer</option>
+                    <option value="artist">Artist</option>
+                    <option value="both">Both</option>
+                  </select>
+                </div>
+
+                <div className="flex justify-end">
                   <button
                     onClick={handleProfileSave}
                     disabled={isSaving}
-                    className="flex items-center gap-2 bg-skribble-azure text-white px-6 py-3 rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50"
+                    className="px-6 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50"
                   >
                     {isSaving ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
                         Saving...
                       </>
                     ) : (
                       <>
-                        <Save className="w-4 h-4" />
+                        <Save className="w-4 h-4 inline mr-2" />
                         Save Changes
                       </>
                     )}
@@ -556,7 +590,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
                   <div className="flex items-center gap-3 mb-4">
                     <Crown className={`w-6 h-6 ${getSubscriptionColor(user.subscriptionTier)}`} />
                     <h4 className="font-medium text-skribble-sky">
-                      Current Plan: {user.subscriptionTier.charAt(0).toUpperCase() + user.subscriptionTier.slice(1)}
+                      Current Plan: {user.subscriptionTier.charAt(0).toUpperCase() + user.subscriptionTier.slice(1).replace('_', ' ')}
                     </h4>
                     {subscriptionInfo?.status && (
                       <span className={`px-2 py-1 text-xs rounded-full ${
@@ -585,11 +619,20 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
                       {subscriptionInfo.currentPeriodEnd && (
                         <p className="text-skribble-azure text-sm">
                           <Calendar className="w-4 h-4 inline mr-2" />
-                          {subscriptionInfo.cancelAtPeriodEnd ? 'Expires' : 'Renews'} on{' '}
-                          {new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString()}
+                          {subscriptionInfo.cancelAtPeriodEnd 
+                            ? `Cancels on ${new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString()}`
+                            : `Renews on ${new Date(subscriptionInfo.currentPeriodEnd).toLocaleDateString()}`
+                          }
                         </p>
                       )}
                       
+                      {subscriptionInfo.trialEnd && (
+                        <p className="text-blue-400 text-sm">
+                          <Calendar className="w-4 h-4 inline mr-2" />
+                          Trial ends on {new Date(subscriptionInfo.trialEnd).toLocaleDateString()}
+                        </p>
+                      )}
+
                       {subscriptionInfo.paymentMethod && (
                         <p className="text-skribble-azure text-sm">
                           <CreditCardIcon className="w-4 h-4 inline mr-2" />
@@ -598,60 +641,25 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
                       )}
                     </div>
                   )}
-                  
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 mt-6">
-                    {user.subscriptionTier === 'free' ? (
-                      <button className="flex items-center gap-2 bg-skribble-azure text-white px-4 py-2 rounded-lg hover:bg-skribble-azure/80 transition-colors">
-                        <Crown className="w-4 h-4" />
-                        Upgrade Plan
-                      </button>
-                    ) : (
-                      <>
-                        <button className="flex items-center gap-2 bg-skribble-azure text-white px-4 py-2 rounded-lg hover:bg-skribble-azure/80 transition-colors">
-                          <Crown className="w-4 h-4" />
-                          Change Plan
-                        </button>
-                        <button className="flex items-center gap-2 border border-skribble-azure text-skribble-azure px-4 py-2 rounded-lg hover:bg-skribble-azure hover:text-white transition-colors">
-                          <CreditCard className="w-4 h-4" />
-                          Billing Portal
-                        </button>
-                        {!subscriptionInfo?.cancelAtPeriodEnd && (
-                          <button 
-                            onClick={handleCancelSubscription}
-                            className="flex items-center gap-2 border border-red-400 text-red-400 px-4 py-2 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                            Cancel
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
 
-                {/* Usage Statistics */}
-                <div className="bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg p-6">
-                  <h4 className="font-medium text-skribble-sky mb-4">Current Usage</h4>
-                  <div className="space-y-3">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-skribble-azure">Projects</span>
-                        <span className="text-skribble-sky">5 / 25</span>
-                      </div>
-                      <div className="w-full bg-skribble-dark rounded-full h-2">
-                        <div className="bg-skribble-azure h-2 rounded-full" style={{ width: '20%' }}></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-skribble-azure">Storage</span>
-                        <span className="text-skribble-sky">45MB / 200MB</span>
-                      </div>
-                      <div className="w-full bg-skribble-dark rounded-full h-2">
-                        <div className="bg-skribble-azure h-2 rounded-full" style={{ width: '22.5%' }}></div>
-                      </div>
-                    </div>
+                  {/* Actions */}
+                  <div className="flex gap-3 mt-6">
+                    {user.subscriptionTier !== 'free' && (
+                      <button
+                        onClick={handleManageSubscription}
+                        className="px-4 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors"
+                      >
+                        <CreditCard className="w-4 h-4 inline mr-2" />
+                        Manage Billing
+                      </button>
+                    )}
+                    
+                    <button
+                      onClick={() => window.location.href = '/pricing'}
+                      className="px-4 py-2 border border-skribble-azure text-skribble-azure rounded-lg hover:bg-skribble-azure hover:text-white transition-colors"
+                    >
+                      {user.subscriptionTier === 'free' ? 'Upgrade Plan' : 'Change Plan'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -662,146 +670,276 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate }: S
               <div className="space-y-6">
                 <h3 className="font-madimi text-xl text-skribble-sky mb-4">Notification Preferences</h3>
                 
-                {/* Email Notifications */}
-                <div className="bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg p-6">
-                  <h4 className="font-medium text-skribble-sky mb-4 flex items-center gap-2">
-                    <Mail className="w-5 h-5" />
-                    Email Notifications
-                  </h4>
-                  <div className="space-y-4">
-                    {[
-                      { key: 'collaborations' as keyof NotificationSettings, label: 'New collaboration invites', description: 'When someone invites you to collaborate on a project' },
-                      { key: 'projects' as keyof NotificationSettings, label: 'Project updates and annotations', description: 'Comments, feedback, and project changes' },
-                      { key: 'weekly' as keyof NotificationSettings, label: 'Weekly summary emails', description: 'A digest of your project activity' },
-                      { key: 'marketing' as keyof NotificationSettings, label: 'Marketing emails', description: 'Product updates and promotional content' }
-                    ].map((notif) => (
-                      <div key={notif.key} className="flex items-start justify-between py-3 border-b border-skribble-azure/10 last:border-b-0">
-                        <div className="flex-1">
-                          <span className="text-skribble-sky font-medium">{notif.label}</span>
-                          <p className="text-skribble-azure/70 text-sm mt-1">{notif.description}</p>
+                <div className="space-y-4">
+                  {/* Email Notifications */}
+                  <div className="bg-skribble-plum/20 rounded-lg p-4">
+                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
+                      <Mail className="w-5 h-5" />
+                      Email Notifications
+                    </h4>
+                    <div className="space-y-3">
+                      {[
+                        { key: 'collaborations', label: 'New collaboration invites', desc: 'When someone invites you to collaborate' },
+                        { key: 'projects', label: 'Project updates', desc: 'When there are new comments or changes to your projects' },
+                        { key: 'weekly', label: 'Weekly digest', desc: 'Summary of your activity and pending tasks' },
+                        { key: 'marketing', label: 'Product updates', desc: 'New features and platform announcements' }
+                      ].map(({ key, label, desc }) => (
+                        <div key={key} className="flex items-center justify-between">
+                          <div>
+                            <p className="text-skribble-azure font-medium">{label}</p>
+                            <p className="text-skribble-azure/70 text-sm">{desc}</p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={notificationSettings[key as keyof NotificationSettings]}
+                              onChange={(e) => setNotificationSettings({
+                                ...notificationSettings,
+                                [key]: e.target.checked
+                              })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-skribble-dark peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
+                          </label>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer ml-4">
-                          <input 
-                            type="checkbox" 
-                            checked={notificationSettings[notif.key]}
-                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, [notif.key]: e.target.checked }))}
-                            className="sr-only peer" 
-                          />
-                          <div className="w-11 h-6 bg-skribble-plum peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-skribble-azure/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
-                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Push Notifications */}
+                  <div className="bg-skribble-plum/20 rounded-lg p-4">
+                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
+                      <Bell className="w-5 h-5" />
+                      Browser Notifications
+                    </h4>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-skribble-azure font-medium">Enable push notifications</p>
+                        <p className="text-skribble-azure/70 text-sm">Get instant notifications in your browser</p>
                       </div>
-                    ))}
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={notificationSettings.push}
+                          onChange={(e) => setNotificationSettings({
+                            ...notificationSettings,
+                            push: e.target.checked
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-skribble-dark peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
+                      </label>
+                    </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleNotificationSave}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 bg-skribble-azure text-white px-6 py-3 rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Save Preferences
-                    </>
-                  )}
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleNotificationSave}
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 inline mr-2" />
+                        Save Settings
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             )}
 
             {/* Privacy Tab */}
             {activeTab === 'privacy' && (
               <div className="space-y-6">
-                <h3 className="font-madimi text-xl text-skribble-sky mb-4">Privacy & Security</h3>
+                <h3 className="font-madimi text-xl text-skribble-sky mb-4">Privacy Settings</h3>
                 
-                {/* Account Visibility */}
-                <div className="bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg p-6">
-                  <h4 className="font-medium text-skribble-sky mb-4 flex items-center gap-2">
-                    <Eye className="w-5 h-5" />
-                    Account Visibility
-                  </h4>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-skribble-azure text-sm mb-2">Profile Visibility</label>
-                      <select 
-                        value={privacySettings.profileVisibility}
-                        onChange={(e) => setPrivacySettings(prev => ({ ...prev, profileVisibility: e.target.value as 'public' | 'private' }))}
-                        className="w-full px-3 py-2 bg-skribble-dark border border-skribble-azure/20 rounded text-skribble-sky"
-                      >
-                        <option value="public">Public - Anyone can find me</option>
-                        <option value="private">Private - Only invited collaborators</option>
-                      </select>
-                      <p className="text-skribble-azure/70 text-sm mt-1">
-                        Control who can discover your profile and collaborate with you
-                      </p>
-                    </div>
+                <div className="space-y-4">
+                  {/* Profile Visibility */}
+                  <div className="bg-skribble-plum/20 rounded-lg p-4">
+                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
+                      <Eye className="w-5 h-5" />
+                      Profile Visibility
+                    </h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-skribble-azure text-sm font-medium mb-2">
+                          Who can see your profile?
+                        </label>
+                        <select
+                          value={privacySettings.profileVisibility}
+                          onChange={(e) => setPrivacySettings({
+                            ...privacySettings,
+                            profileVisibility: e.target.value as 'public' | 'private'
+                          })}
+                          className="w-full px-3 py-2 bg-skribble-dark border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                        >
+                          <option value="public">Public - Anyone can see your profile</option>
+                          <option value="private">Private - Only collaborators can see your profile</option>
+                        </select>
+                      </div>
 
-                    {[
-                      { key: 'showEmail' as keyof PrivacySettings, label: 'Show email in profile', description: 'Allow collaborators to see your email address' },
-                      { key: 'allowDirectMessages' as keyof PrivacySettings, label: 'Allow direct messages', description: 'Let other users send you messages' },
-                      { key: 'indexInSearch' as keyof PrivacySettings, label: 'Include in search results', description: 'Allow your profile to appear in search results' }
-                    ].map((setting) => (
-                      <div key={setting.key} className="flex items-start justify-between py-3 border-b border-skribble-azure/10 last:border-b-0">
-                        <div className="flex-1">
-                          <span className="text-skribble-sky font-medium">{setting.label}</span>
-                          <p className="text-skribble-azure/70 text-sm mt-1">{setting.description}</p>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-skribble-azure font-medium">Show email in profile</p>
+                          <p className="text-skribble-azure/70 text-sm">Allow others to see your email address</p>
                         </div>
-                        <label className="relative inline-flex items-center cursor-pointer ml-4">
-                          <input 
-                            type="checkbox" 
-                            checked={typeof privacySettings[setting.key] === 'boolean' ? privacySettings[setting.key] as boolean : false}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPrivacySettings((prev: PrivacySettings) => ({ ...prev, [setting.key]: e.target.checked }))}
-                            className="sr-only peer" 
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={privacySettings.showEmail}
+                            onChange={(e) => setPrivacySettings({
+                              ...privacySettings,
+                              showEmail: e.target.checked
+                            })}
+                            className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-skribble-plum peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-skribble-azure/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
+                          <div className="w-11 h-6 bg-skribble-dark peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
                         </label>
                       </div>
-                    ))}
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-skribble-azure font-medium">Allow direct messages</p>
+                          <p className="text-skribble-azure/70 text-sm">Let other users send you direct messages</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={privacySettings.allowDirectMessages}
+                            onChange={(e) => setPrivacySettings({
+                              ...privacySettings,
+                              allowDirectMessages: e.target.checked
+                            })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-skribble-dark peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-skribble-azure font-medium">Include in search results</p>
+                          <p className="text-skribble-azure/70 text-sm">Allow your profile to appear in search results</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={privacySettings.indexInSearch}
+                            onChange={(e) => setPrivacySettings({
+                              ...privacySettings,
+                              indexInSearch: e.target.checked
+                            })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-skribble-dark peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-skribble-azure"></div>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <button
-                  onClick={handlePrivacySave}
-                  disabled={isSaving}
-                  className="flex items-center gap-2 bg-skribble-azure text-white px-6 py-3 rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      Save Settings
-                    </>
-                  )}
-                </button>
+                <div className="flex justify-end">
+                  <button
+                    onClick={handlePrivacySave}
+                    disabled={isSaving}
+                    className="px-6 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 inline mr-2" />
+                        Save Settings
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Data & Security Tab */}
+            {activeTab === 'data' && (
+              <div className="space-y-6">
+                <h3 className="font-madimi text-xl text-skribble-sky mb-4">Data & Security</h3>
                 
-                {/* Danger Zone */}
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-6">
-                  <h4 className="font-medium text-red-300 mb-4 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5" />
-                    Danger Zone
-                  </h4>
-                  <div className="space-y-4">
-                    <div>
-                      <h5 className="text-red-200 font-medium mb-2">Delete Account</h5>
-                      <p className="text-red-200/70 text-sm mb-4">
-                        Permanently delete your account and all associated data. This action cannot be undone.
-                      </p>
-                      <button 
-                        onClick={handleDeleteAccount}
-                        className="flex items-center gap-2 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                        Delete Account
-                      </button>
+                <div className="space-y-4">
+                  {/* Data Export */}
+                  <div className="bg-skribble-plum/20 rounded-lg p-4">
+                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
+                      <Download className="w-5 h-5" />
+                      Export Your Data
+                    </h4>
+                    <p className="text-skribble-azure/70 text-sm mb-4">
+                      Download a copy of all your data including projects, collaborations, and settings.
+                    </p>
+                    <button
+                      onClick={handleDataExport}
+                      className="px-4 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors"
+                    >
+                      <Download className="w-4 h-4 inline mr-2" />
+                      Export Data
+                    </button>
+                  </div>
+
+                  {/* Account Security */}
+                  <div className="bg-skribble-plum/20 rounded-lg p-4">
+                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
+                      <Shield className="w-5 h-5" />
+                      Account Security
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-skribble-azure font-medium">Two-Factor Authentication</p>
+                          <p className="text-skribble-azure/70 text-sm">Add an extra layer of security to your account</p>
+                        </div>
+                        <button className="px-3 py-1 text-sm border border-skribble-azure text-skribble-azure rounded hover:bg-skribble-azure hover:text-white transition-colors">
+                          Enable
+                        </button>
+                      </div>
+                      
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-skribble-azure font-medium">Change Password</p>
+                          <p className="text-skribble-azure/70 text-sm">Update your account password</p>
+                        </div>
+                        <button className="px-3 py-1 text-sm border border-skribble-azure text-skribble-azure rounded hover:bg-skribble-azure hover:text-white transition-colors">
+                          Change
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+                    <h4 className="text-red-400 font-medium mb-3 flex items-center gap-2">
+                      <AlertCircle className="w-5 h-5" />
+                      Danger Zone
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-red-400 font-medium">Delete Account</p>
+                          <p className="text-red-400/70 text-sm">Permanently delete your account and all data</p>
+                        </div>
+                        <button
+                          onClick={handleDeleteAccount}
+                          className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 inline mr-1" />
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

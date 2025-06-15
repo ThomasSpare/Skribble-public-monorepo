@@ -7,9 +7,18 @@ export interface User {
   username: string;
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: 'free' | 'indie' | 'producer' | 'studio';
+  subscriptionStatus?: string;
   profileImage?: string;
   createdAt: Date;
   updatedAt: Date;
+  trial_used?: boolean;
+  trial_end_date?: Date;
+  referral_code?: string;
+  referral_rewards_earned?: number;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
+  notification_settings?: any;
+  privacy_settings?: any;
 }
 
 export interface Project {

@@ -144,6 +144,7 @@ export default function ProjectPage() {
       setIsLoading(false);
     }
   };
+
   
   const handleVersionChange = (versionData: any) => {
   
@@ -322,7 +323,6 @@ export default function ProjectPage() {
                     console.error('Error generating share link:', error);
                     alert('Failed to generate share link');
                   }
-                  onClose();
                 }}
                 className="w-full flex items-center gap-3 px-3 py-2 text-skribble-sky hover:bg-skribble-azure/20 rounded-lg transition-colors text-sm"
               >

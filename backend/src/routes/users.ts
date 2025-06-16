@@ -4,9 +4,9 @@ import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { UserModel } from '../models/User';
 import { pool } from '../config/database';
-import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
+import multer from 'multer';
 
 const router = express.Router();
 
@@ -50,25 +50,6 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Add these imports at the top of your users.ts file (if not already there)
-import fs from 'fs';
-import path from 'path';
-import multer from 'multer';
-
-// Configure multer (if not already configured)
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed'));
-    }
-  }
-});
 
 // REPLACE your existing PUT /profile route with this updated version:
 router.put('/profile', 

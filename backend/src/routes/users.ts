@@ -5,6 +5,8 @@ import { authenticateToken } from '../middleware/auth';
 import { UserModel } from '../models/User';
 import { pool } from '../config/database';
 import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 
 const router = express.Router();
 
@@ -107,12 +109,24 @@ router.put('/profile',
       
       // Handle profile image upload
       if (req.file) {
-        // For now, simulate storing the image
-        // In production, you'd upload to S3 or similar
-        profileImageUrl = `/uploads/profiles/${userId}-${Date.now()}.jpg`;
+        const uploadDir = process.env.NODE_ENV === 'production' 
+          ? '/app/uploads/images'  // Your production path
+          : './uploads/images';    // Local development
         
-        // TODO: Implement actual file upload to S3
-        // const uploadResult = await uploadToS3(req.file, profileImageUrl);
+        // Create directory if needed
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+
+        const fileExtension = path.extname(req.file.originalname);
+        const filename = `profile-${userId}-${Date.now()}${fileExtension}`;
+        const filepath = path.join(uploadDir, filename);
+        
+        // Save the actual file
+        fs.writeFileSync(filepath, req.file.buffer);
+        
+        // Store the URL path
+        profileImageUrl = `/uploads/images/${filename}`;
       }
 
       // Build update query dynamically
@@ -500,6 +514,116 @@ router.get('/export-data', authenticateToken, async (req: any, res: any) => {
     res.status(500).json({
       success: false,
       error: { message: 'Failed to export data' }
+    });
+  }
+});
+
+// Get notification settings
+router.get('/notification-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT notification_settings FROM users WHERE id = $1',
+      [userId]
+    );
+
+    const settings = result.rows[0]?.notification_settings || {
+      collaborations: true,
+      projects: true,
+      weekly: true,
+      marketing: false,
+      email: true,
+      push: true
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Get notification settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch notification settings' }
+    });
+  }
+});
+
+// Update notification settings
+router.put('/notification-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    const settings = req.body;
+
+    await pool.query(
+      'UPDATE users SET notification_settings = $1, updated_at = NOW() WHERE id = $2',
+      [JSON.stringify(settings), userId]
+    );
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update notification settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update notification settings' }
+    });
+  }
+});
+
+// Get privacy settings
+router.get('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT privacy_settings FROM users WHERE id = $1',
+      [userId]
+    );
+
+    const settings = result.rows[0]?.privacy_settings || {
+      profileVisibility: 'public',
+      showEmail: false,
+      allowDirectMessages: true,
+      indexInSearch: true
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Get privacy settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch privacy settings' }
+    });
+  }
+});
+
+// Update privacy settings
+router.put('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    const settings = req.body;
+
+    await pool.query(
+      'UPDATE users SET privacy_settings = $1, updated_at = NOW() WHERE id = $2',
+      [JSON.stringify(settings), userId]
+    );
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update privacy settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update privacy settings' }
     });
   }
 });

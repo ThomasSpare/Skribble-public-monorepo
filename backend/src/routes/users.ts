@@ -51,7 +51,6 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
 });
 
 
-// REPLACE your existing PUT /profile route with this updated version:
 router.put('/profile', 
   authenticateToken,
   upload.single('profileImage'),
@@ -372,118 +371,6 @@ router.get('/:username', async (req, res) => {
   }
 });
 
-// Add these new routes to your existing users.ts file (before the export default router line)
-
-// Get notification settings
-router.get('/notification-settings', authenticateToken, async (req: any, res: any) => {
-  try {
-    const userId = req.user.userId;
-    
-    const result = await pool.query(`
-      SELECT notification_settings FROM users WHERE id = $1
-    `, [userId]);
-
-    const settings = result.rows[0]?.notification_settings || {
-      collaborations: true,
-      projects: true,
-      weekly: true,
-      marketing: false,
-      email: true,
-      push: true
-    };
-
-    res.json({
-      success: true,
-      data: settings
-    });
-  } catch (error) {
-    console.error('Get notification settings error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to fetch notification settings' }
-    });
-  }
-});
-
-// Update notification settings
-router.put('/notification-settings', authenticateToken, async (req: any, res: any) => {
-  try {
-    const userId = req.user.userId;
-    const settings = req.body;
-
-    await pool.query(`
-      UPDATE users 
-      SET notification_settings = $1, updated_at = NOW()
-      WHERE id = $2
-    `, [JSON.stringify(settings), userId]);
-
-    res.json({
-      success: true,
-      data: settings
-    });
-  } catch (error) {
-    console.error('Update notification settings error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to update notification settings' }
-    });
-  }
-});
-
-// Get privacy settings
-router.get('/privacy-settings', authenticateToken, async (req: any, res: any) => {
-  try {
-    const userId = req.user.userId;
-    
-    const result = await pool.query(`
-      SELECT privacy_settings FROM users WHERE id = $1
-    `, [userId]);
-
-    const settings = result.rows[0]?.privacy_settings || {
-      profileVisibility: 'public',
-      showEmail: false,
-      allowDirectMessages: true,
-      indexInSearch: true
-    };
-
-    res.json({
-      success: true,
-      data: settings
-    });
-  } catch (error) {
-    console.error('Get privacy settings error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to fetch privacy settings' }
-    });
-  }
-});
-
-// Update privacy settings
-router.put('/privacy-settings', authenticateToken, async (req: any, res: any) => {
-  try {
-    const userId = req.user.userId;
-    const settings = req.body;
-
-    await pool.query(`
-      UPDATE users 
-      SET privacy_settings = $1, updated_at = NOW()
-      WHERE id = $2
-    `, [JSON.stringify(settings), userId]);
-
-    res.json({
-      success: true,
-      data: settings
-    });
-  } catch (error) {
-    console.error('Update privacy settings error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to update privacy settings' }
-    });
-  }
-});
-
 // Export user data
 router.get('/export-data', authenticateToken, async (req: any, res: any) => {
   try {
@@ -533,7 +420,6 @@ router.get('/export-data', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Get notification settings
 router.get('/notification-settings', authenticateToken, async (req: any, res: any) => {
   try {
     const userId = req.user.userId;
@@ -642,6 +528,79 @@ router.put('/privacy-settings', authenticateToken, async (req: any, res: any) =>
     });
   }
 });
+
+// Get subscription info
+router.get('/subscription', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(`
+      SELECT subscription_tier, subscription_status, trial_end_date,
+             stripe_customer_id, stripe_subscription_id
+      FROM users WHERE id = $1
+    `, [userId]);
+
+    const user = result.rows[0];
+    const subscriptionInfo = {
+      tier: user.subscription_tier || 'free',
+      status: user.subscription_status || 'inactive',
+      trialEnd: user.trial_end_date,
+      hasStripeSubscription: !!user.stripe_subscription_id
+    };
+
+    res.json({
+      success: true,
+      data: subscriptionInfo
+    });
+  } catch (error) {
+    console.error('Get subscription info error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch subscription info' }
+    });
+  }
+});
+
+// Export user data
+router.get('/export-data', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Gather all user data
+    const [userResult, projectsResult, annotationsResult] = await Promise.all([
+      pool.query('SELECT id, email, username, role, subscription_tier, created_at, updated_at FROM users WHERE id = $1', [userId]),
+      pool.query('SELECT * FROM projects WHERE creator_id = $1', [userId]),
+      pool.query(`
+        SELECT a.*, p.title as project_title
+        FROM annotations a
+        JOIN audio_files af ON a.audio_file_id = af.id
+        JOIN projects p ON af.project_id = p.id
+        WHERE a.user_id = $1
+      `, [userId])
+    ]);
+
+    const exportData = {
+      user: userResult.rows[0],
+      projects: projectsResult.rows,
+      annotations: annotationsResult.rows,
+      exportDate: new Date().toISOString()
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}.json"`);
+    res.json(exportData);
+
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to export data' }
+    });
+  }
+});
+
+
+
 
 
 export default router;

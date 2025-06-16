@@ -50,7 +50,27 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Update user profile
+// Add these imports at the top of your users.ts file (if not already there)
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+
+// Configure multer (if not already configured)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
+
+// REPLACE your existing PUT /profile route with this updated version:
 router.put('/profile', 
   authenticateToken,
   upload.single('profileImage'),
@@ -90,15 +110,29 @@ router.put('/profile',
         }
       }
 
+      // Check if email is available (if changing)
+      if (email) {
+        const existingEmail = await pool.query(
+          'SELECT id FROM users WHERE email = $1 AND id != $2',
+          [email, userId]
+        );
+        
+        if (existingEmail.rows.length > 0) {
+          return res.status(400).json({
+            success: false,
+            error: { message: 'Email already taken' }
+          });
+        }
+      }
+
       let profileImageUrl = null;
-      
-      // Handle profile image upload - FIXED VERSION
+
       if (req.file) {
         try {
-          // Use the actual upload directory from your deployment
+          // Use Railway's file structure - corrected path
           const uploadDir = process.env.NODE_ENV === 'production' 
-            ? '/app/uploads/images'  // Production path
-            : path.join(process.cwd(), 'uploads', 'images'); // Development path
+            ? '/app/uploads/images'  // Railway production path
+            : path.join(process.cwd(), 'uploads', 'images'); // Local development
           
           // Create directory if it doesn't exist
           if (!fs.existsSync(uploadDir)) {
@@ -106,17 +140,18 @@ router.put('/profile',
             console.log('📁 Created upload directory:', uploadDir);
           }
 
-          // Generate unique filename
-          const fileExtension = path.extname(req.file.originalname);
+          // Generate unique filename with proper extension
+          const fileExtension = path.extname(req.file.originalname) || '.jpg';
           const filename = `profile-${userId}-${Date.now()}${fileExtension}`;
           const filepath = path.join(uploadDir, filename);
           
           // Save the file
           fs.writeFileSync(filepath, req.file.buffer);
-          console.log('💾 Image saved to:', filepath);
           
-          // Store the URL path for database (what frontend will request)
+          // Store the URL path (what the browser will request)
           profileImageUrl = `/uploads/images/${filename}`;
+          
+          console.log('📸 Image saved to:', filepath);
           console.log('🔗 Image URL stored:', profileImageUrl);
           
         } catch (uploadError) {

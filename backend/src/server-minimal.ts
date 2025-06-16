@@ -27,11 +27,11 @@ const io = new Server(server, {
 });
 
 const uploadsPath = process.env.NODE_ENV === 'production' 
-  ? '/app/uploads'  // Production
-  : path.join(process.cwd(), 'uploads'); // Development
+  ? '/app/uploads'  // Railway production path
+  : path.join(process.cwd(), 'uploads'); // Local development path
 
 app.use('/uploads', express.static(uploadsPath));
-console.log('📁 Serving uploads from:', uploadsPath);
+console.log('📁 Serving static files from:', uploadsPath);
 
 const PORT = process.env.PORT || 5000;
 
@@ -47,6 +47,22 @@ app.get('/health', (req, res) => {
     service: 'Skribble API',
     version: '1.0.0'
   });
+});
+
+app.get('/debug/uploads', (req, res) => {
+  try {
+    const fs = require('fs');
+    const imagesPath = path.join(uploadsPath, 'images');
+    const files = fs.existsSync(imagesPath) ? fs.readdirSync(imagesPath) : [];
+    res.json({ 
+      uploadsPath, 
+      imagesPath,
+      files,
+      exists: fs.existsSync(imagesPath)
+    });
+  } catch (error: any) {
+    res.json({ error: error.message });
+  }
 });
 
 // API Routes - CORRECT ORDER MATTERS!
@@ -67,6 +83,7 @@ app.use('/api/projects', projectRoutes);
 // Stripe routes
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/stripe', stripeRoutes);
+
 
 
 // Add a simple auth route to test routing

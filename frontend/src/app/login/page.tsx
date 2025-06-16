@@ -2,9 +2,11 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { auth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Mail, Lock, Loader2 } from 'lucide-react';
 import { apiClient, LoginData } from '@/lib/api';
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -24,9 +26,8 @@ export default function LoginPage() {
       const result = await apiClient.login(formData);
       
       if (result.success && result.data) {
-        // Store tokens
-        localStorage.setItem('skribble_token', result.data.token);
-        localStorage.setItem('skribble_refresh_token', result.data.refreshToken);
+        // Use the auth utility to store tokens
+        auth.setTokens(result.data.token, result.data.refreshToken);
         
         // Redirect to dashboard
         router.push('/dashboard');
@@ -34,6 +35,7 @@ export default function LoginPage() {
         setError(result.error?.message || 'Login failed');
       }
     } catch (error) {
+      console.error('Login error:', error);
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);

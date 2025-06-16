@@ -8,6 +8,7 @@ import {
   Settings, LogOut, Download, Upload
 } from 'lucide-react';
 import Image from 'next/image';
+import { auth } from '@/lib/auth';
 import ReferralDashboard from './ReferralDashboard';
 
 interface User {
@@ -212,7 +213,11 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
     setError(null);
     
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = auth.getToken();
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
       const formData = new FormData();
       
       formData.append('username', profileData.username);
@@ -230,6 +235,10 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
         },
         body: formData
       });
+      if (response.status === 401) {
+        auth.clear(); // Clear invalid tokens
+        throw new Error('Authentication expired. Please log in again.');
+      }
 
       const data = await response.json();
       
@@ -242,7 +251,11 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
         throw new Error(data.error.message);
       }
     } catch (error: any) {
+      console.error('Profile update error:', error);
       setError(error.message || 'Failed to update profile');
+      if (error.message.includes('Authentication')) {
+        onLogout(); // This should also call auth.clear()
+      }
     } finally {
       setIsSaving(false);
     }

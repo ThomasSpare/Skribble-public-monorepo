@@ -1,6 +1,7 @@
 // frontend/src/app/dashboard/page.tsx - COMPLETE FIXED VERSION
 'use client';
 import { useState, useEffect } from 'react';
+import { auth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { 
   Plus, 
@@ -498,8 +499,7 @@ export default function DashboardPage() {
 };
 
   const handleLogout = () => {
-    localStorage.removeItem('skribble_token');
-    localStorage.removeItem('skribble_refresh_token');
+    auth.clear();
     router.push('/login');
   };
 

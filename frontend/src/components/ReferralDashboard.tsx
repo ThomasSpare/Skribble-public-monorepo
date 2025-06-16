@@ -21,7 +21,7 @@ export default function ReferralDashboard() {
 
   const fetchReferralStats = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch('/api/stripe/referral-stats', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -42,7 +42,7 @@ export default function ReferralDashboard() {
   const generateReferralCode = async () => {
     setGenerating(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch('/api/stripe/generate-referral-code', {
         method: 'POST',
         headers: {

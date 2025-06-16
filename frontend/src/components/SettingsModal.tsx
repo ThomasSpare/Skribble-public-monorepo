@@ -147,7 +147,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
   const loadUserSettings = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       
       // Load all settings in parallel
       const [notifResponse, privacyResponse, subResponse] = await Promise.all([
@@ -212,7 +212,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
     setError(null);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const formData = new FormData();
       
       formData.append('username', profileData.username);
@@ -251,7 +251,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
   const handleNotificationSave = async () => {
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/notification-settings`, {
         method: 'PUT',
         headers: {
@@ -277,7 +277,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
   const handlePrivacySave = async () => {
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/privacy-settings`, {
         method: 'PUT',
         headers: {
@@ -302,7 +302,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
 
   const handleManageSubscription = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/stripe/create-portal-session`, {
         method: 'POST',
         headers: {
@@ -323,7 +323,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
 
   const handleDataExport = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/export-data`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -357,7 +357,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/delete-account`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }

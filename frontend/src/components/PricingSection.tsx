@@ -63,7 +63,7 @@ export default function PricingSection() {
     }
 
     // Check if user is logged in
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('skribble_token');
     if (token) {
       fetchUserData(token);
     }
@@ -107,7 +107,7 @@ export default function PricingSection() {
     setLoading(plan.tier);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       if (!token) {
         // Store plan selection and redirect to login
         localStorage.setItem('selectedPlan', JSON.stringify(plan));
@@ -148,7 +148,7 @@ export default function PricingSection() {
     setLoading('trial');
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('skribble_token');
       if (!token) {
         localStorage.setItem('pendingAction', 'startTrial');
         window.location.href = '/login?redirect=pricing';

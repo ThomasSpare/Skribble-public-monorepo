@@ -53,7 +53,7 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
 // Update user profile
 router.put('/profile', 
   authenticateToken,
-  upload.single('profileImage'), // Add this for image upload
+  upload.single('profileImage'),
   [
     body('username').optional().isLength({ min: 3, max: 30 }).trim(),
     body('role').optional().isIn(['producer', 'artist', 'both']),
@@ -90,43 +90,42 @@ router.put('/profile',
         }
       }
 
-      // Check if email is available (if changing)
-      if (email) {
-        const existingEmail = await pool.query(
-          'SELECT id FROM users WHERE email = $1 AND id != $2',
-          [email, userId]
-        );
-        
-        if (existingEmail.rows.length > 0) {
-          return res.status(400).json({
-            success: false,
-            error: { message: 'Email already taken' }
-          });
-        }
-      }
-
       let profileImageUrl = null;
       
-      // Handle profile image upload
+      // Handle profile image upload - FIXED VERSION
       if (req.file) {
-        const uploadDir = process.env.NODE_ENV === 'production' 
-          ? '/app/uploads/images'  // Your production path
-          : './uploads/images';    // Local development
-        
-        // Create directory if needed
-        if (!fs.existsSync(uploadDir)) {
-          fs.mkdirSync(uploadDir, { recursive: true });
-        }
+        try {
+          // Use the actual upload directory from your deployment
+          const uploadDir = process.env.NODE_ENV === 'production' 
+            ? '/app/uploads/images'  // Production path
+            : path.join(process.cwd(), 'uploads', 'images'); // Development path
+          
+          // Create directory if it doesn't exist
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+            console.log('📁 Created upload directory:', uploadDir);
+          }
 
-        const fileExtension = path.extname(req.file.originalname);
-        const filename = `profile-${userId}-${Date.now()}${fileExtension}`;
-        const filepath = path.join(uploadDir, filename);
-        
-        // Save the actual file
-        fs.writeFileSync(filepath, req.file.buffer);
-        
-        // Store the URL path
-        profileImageUrl = `/uploads/images/${filename}`;
+          // Generate unique filename
+          const fileExtension = path.extname(req.file.originalname);
+          const filename = `profile-${userId}-${Date.now()}${fileExtension}`;
+          const filepath = path.join(uploadDir, filename);
+          
+          // Save the file
+          fs.writeFileSync(filepath, req.file.buffer);
+          console.log('💾 Image saved to:', filepath);
+          
+          // Store the URL path for database (what frontend will request)
+          profileImageUrl = `/uploads/images/${filename}`;
+          console.log('🔗 Image URL stored:', profileImageUrl);
+          
+        } catch (uploadError) {
+          console.error('❌ Image upload error:', uploadError);
+          return res.status(500).json({
+            success: false,
+            error: { message: 'Failed to upload image' }
+          });
+        }
       }
 
       // Build update query dynamically
@@ -176,7 +175,7 @@ router.put('/profile',
       });
 
     } catch (error: any) {
-      console.error('Update profile error:', error);
+      console.error('❌ Update profile error:', error);
       res.status(500).json({
         success: false,
         error: { message: 'Failed to update profile' }

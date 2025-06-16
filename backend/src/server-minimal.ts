@@ -4,6 +4,7 @@ import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+import path from 'path';
 
 dotenv.config();
 
@@ -14,6 +15,7 @@ import annotationRoutes from './routes/annotations';
 import userRoutes from './routes/users';
 import collaborationRoutes from './routes/collaboration';
 import versionRoutes from './routes/versions';
+import stripeRoutes from './routes/stripe';
 
 const app = express();
 const server = createServer(app);
@@ -23,6 +25,13 @@ const io = new Server(server, {
     methods: ["GET", "POST"]
   }
 });
+
+const uploadsPath = process.env.NODE_ENV === 'production' 
+  ? '/app/uploads'  // Production
+  : path.join(process.cwd(), 'uploads'); // Development
+
+app.use('/uploads', express.static(uploadsPath));
+console.log('📁 Serving uploads from:', uploadsPath);
 
 const PORT = process.env.PORT || 5000;
 
@@ -53,7 +62,12 @@ app.use('/api/projects', versionRoutes);
 app.use('/api/projects', projectRoutes);
 
 // Static file serving for uploads
-app.use('/uploads', express.static('./uploads'));
+// app.use('/uploads', express.static('./uploads'));
+
+// Stripe routes
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/stripe', stripeRoutes);
+
 
 // Add a simple auth route to test routing
 async function setupRoutes() {

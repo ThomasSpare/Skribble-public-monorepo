@@ -123,7 +123,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
       role: user.role,
       profileImage: user.profileImage || ''
     });
-    setPreviewImage(null);
+    setPreviewImage(user.profileImage || null);
     setSelectedFile(null);
   }, [user]);
 

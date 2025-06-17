@@ -28,6 +28,7 @@ export default function LoginPage() {
       if (result.success && result.data) {
         // Use the auth utility to store tokens
         auth.setTokens(result.data.token, result.data.refreshToken);
+        console.log('Login successful:', result.data.token);
         
         // Redirect to dashboard
         router.push('/dashboard');

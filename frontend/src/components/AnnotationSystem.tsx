@@ -712,8 +712,7 @@ export default function AnnotationSystem({
                                   <User className="w-4 h-4 text-skribble-azure" />
                                 </div>
                               )}
-                          </div>
-                          </div>
+                            </div>
                             <span className="font-medium text-skribble-sky">{parent.user.username}</span>
                             <span 
                               className="text-xs text-skribble-azure cursor-pointer hover:text-skribble-sky transition-colors"

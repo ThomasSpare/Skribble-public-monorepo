@@ -488,15 +488,15 @@ export default function DashboardPage() {
     }
   };
 
-  const handleShare = async (project: Project): Promise<void> => {
-  const shareUrl = `${window.location.origin}/share/${project.shareLink || project.id}`;
-  try {
-    await navigator.clipboard.writeText(shareUrl);
-    alert('Share link copied to clipboard!');
-  } catch (error) {
-    prompt('Copy this share link:', shareUrl);
-  }
-};
+  const handleShare = async (project: Project) => {
+    const shareUrl = `${window.location.origin}/share/${project.shareLink || project.id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      alert('Share link copied to clipboard!');
+    } catch (error) {
+      prompt('Copy this share link:', shareUrl);
+    }
+  };
 
   const handleLogout = () => {
     auth.clear();

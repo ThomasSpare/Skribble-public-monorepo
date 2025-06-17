@@ -223,6 +223,7 @@ export default function CollaboratorsMenu({
                 <div key={collaborator.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-skribble-azure/10 transition-colors">
                   {/* Profile Image */}
                   <div className="w-10 h-10 rounded-full overflow-hidden bg-skribble-azure/20 flex-shrink-0">
+                    
                     {collaborator.user.profileImage ? (
                       <Image 
                         src={collaborator.user.profileImage} 

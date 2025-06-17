@@ -385,30 +385,28 @@ router.post('/projects/:projectId/viewer-link', [
   }
 });
 
-// Add this route to fetch project data for viewers
 router.get('/projects/viewer/:token', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
 
     const project = await pool.query(`
       SELECT p.id, p.title, pv.viewer_token, 
-            af.id as file_id, af.filename, af.version, af.file_url, af.duration,
-            array_agg(DISTINCT jsonb_build_object(
-              'id', a.id,
-              'text', a.text,
-              'timestamp', a.timestamp,
-              'annotationType', a.annotation_type,
-              'status', a.status,
-              'createdAt', a.created_at,
-              'priority', a.priority,
-              'parentId', a.parent_id,
-              'voiceNoteUrl', a.voice_note_url,
-              'user', jsonb_build_object(
-                'id', u.id,
-                'username', u.username,
-                'email', u.email
-              )
-            )) FILTER (WHERE a.id IS NOT NULL) as annotations
+             af.id as file_id, af.filename, af.version, af.file_url, af.duration,
+             array_agg(DISTINCT jsonb_build_object(
+               'id', a.id,
+               'text', a.text,
+               'timestamp', a.timestamp,
+               'type', a.annotation_type,
+               'status', a.status,
+               'created_at', a.created_at,
+               'priority', a.priority,
+               'parent_id', a.parent_id,
+               'voice_note_url', a.voice_note_url,
+               'created_by', jsonb_build_object(
+                 'id', u.id,
+                 'username', u.username
+               )
+             )) FILTER (WHERE a.id IS NOT NULL) as annotations
       FROM projects p
       JOIN project_viewer_links pv ON p.id = pv.project_id
       JOIN audio_files af ON p.id = af.project_id AND af.is_active = true
@@ -442,7 +440,7 @@ router.get('/projects/viewer/:token', async (req: Request, res: Response) => {
           id: row.file_id,
           filename: row.filename,
           version: row.version,
-          fileUrl: row.file_url,  // This was missing!
+          fileUrl: row.file_url,
           duration: row.duration
         },
         annotations: row.annotations || []

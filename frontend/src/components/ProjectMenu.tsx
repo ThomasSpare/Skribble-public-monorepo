@@ -63,7 +63,7 @@ export default function ProjectMenu({
           className="w-full px-4 py-2 text-left text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky transition-colors flex items-center gap-2"
         >
           <Users className="w-4 h-4" />
-          Invite Collaborator
+          Create Collaborator link
         </button>
         
         <button
@@ -71,7 +71,7 @@ export default function ProjectMenu({
           className="w-full px-4 py-2 text-left text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky transition-colors flex items-center gap-2"
         >
           <Share className="w-4 h-4" />
-          Share Project
+          Create View-Only link
         </button>
 
         {onSetDeadline && (

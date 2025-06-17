@@ -488,15 +488,38 @@ export default function DashboardPage() {
     }
   };
 
-  const handleShare = async (project: Project) => {
-    const shareUrl = `${window.location.origin}/share/${project.shareLink || project.id}`;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      alert('Share link copied to clipboard!');
-    } catch (error) {
-      prompt('Copy this share link:', shareUrl);
+  const generateViewerLink = async () => {
+  try {
+    const token = localStorage.getItem('skribble_token');
+    if (!token) {
+      throw new Error('No authentication token found');
     }
-  };
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${project.id}/viewer-link`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token.trim()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to generate viewer link');
+    }
+
+    const data = await response.json();
+    if (data.success) {
+      const viewerUrl = `${window.location.origin}/viewer/${data.data.viewerToken}`;
+      await navigator.clipboard.writeText(viewerUrl);
+      alert('View-only link copied to clipboard!');
+      console.log('Generated viewer URL:', viewerUrl); // For debugging
+    }
+  } catch (error) {
+    console.error('Error generating viewer link:', error);
+    alert(`Failed to generate viewer link: ${error.message}`);
+  }
+};
 
   const handleLogout = () => {
     auth.clear();
@@ -733,7 +756,7 @@ export default function DashboardPage() {
                         onClose={() => handleMenuClose(project.id)}
                         onDelete={handleDelete}
                         onInvite={handleInvite}
-                        onShare={handleShare}
+                        onShare={generateViewerLink}
                         onSetDeadline={handleSetDeadline} // ✨ NEW: Pass deadline handler
                       />
                     </div>

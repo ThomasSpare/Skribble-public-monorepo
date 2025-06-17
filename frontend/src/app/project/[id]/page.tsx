@@ -200,6 +200,39 @@ export default function ProjectPage() {
     }
   };
 
+  const generateViewerLink = async () => {
+  try {
+    const token = localStorage.getItem('skribble_token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${project.id}/viewer-link`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token.trim()}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || 'Failed to generate viewer link');
+    }
+
+    const data = await response.json();
+    if (data.success) {
+      const viewerUrl = `${window.location.origin}/viewer/${data.data.viewerToken}`;
+      await navigator.clipboard.writeText(viewerUrl);
+      alert('View-only link copied to clipboard!');
+      console.log('Generated viewer URL:', viewerUrl); // For debugging
+    }
+  } catch (error) {
+    console.error('Error generating viewer link:', error);
+    alert(`Failed to generate viewer link: ${error.message}`);
+  }
+};
+
   useEffect(() => {
   if (project && project.audioFiles && project.audioFiles.length > 0) {
     const currentAudio = project.audioFiles.find(af => af.isActive) || project.audioFiles[0];
@@ -299,35 +332,7 @@ export default function ProjectPage() {
             {/* Actions */}
             <div className="flex items-center gap-2">
               <button
-                onClick={async () => { 
-                  try {
-                    const token = localStorage.getItem('skribble_token');
-                    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/collaboration/${project.id}/share`, {
-                      method: 'POST',
-                      headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                      },
-                      body: JSON.stringify({
-                        type: 'viewer',
-                        expiresIn: 30 // days
-                      })
-                    });
-
-                    if (!response.ok) {
-                      throw new Error('Failed to generate share link');
-                    }
-
-                    const data = await response.json();
-                    if (data.success) {
-                      await navigator.clipboard.writeText(`${window.location.origin}/view/${data.data.shareToken}`);
-                      alert('Viewer link copied to clipboard!');
-                    }
-                  } catch (error) {
-                    console.error('Error generating share link:', error);
-                    alert('Failed to generate share link');
-                  }
-                }}
+                onClick={generateViewerLink}
                 className="w-full flex items-center gap-3 px-3 py-2 text-skribble-sky hover:bg-skribble-azure/20 rounded-lg transition-colors text-sm"
               >
                 <Share2 className="w-4 h-4" />

@@ -561,46 +561,5 @@ router.get('/subscription', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Export user data
-router.get('/export-data', authenticateToken, async (req: any, res: any) => {
-  try {
-    const userId = req.user.userId;
-    
-    // Gather all user data
-    const [userResult, projectsResult, annotationsResult] = await Promise.all([
-      pool.query('SELECT id, email, username, role, subscription_tier, created_at, updated_at FROM users WHERE id = $1', [userId]),
-      pool.query('SELECT * FROM projects WHERE creator_id = $1', [userId]),
-      pool.query(`
-        SELECT a.*, p.title as project_title
-        FROM annotations a
-        JOIN audio_files af ON a.audio_file_id = af.id
-        JOIN projects p ON af.project_id = p.id
-        WHERE a.user_id = $1
-      `, [userId])
-    ]);
-
-    const exportData = {
-      user: userResult.rows[0],
-      projects: projectsResult.rows,
-      annotations: annotationsResult.rows,
-      exportDate: new Date().toISOString()
-    };
-
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}.json"`);
-    res.json(exportData);
-
-  } catch (error) {
-    console.error('Export data error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to export data' }
-    });
-  }
-});
-
-
-
-
 
 export default router;

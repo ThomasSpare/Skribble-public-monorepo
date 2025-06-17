@@ -152,10 +152,10 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
       
       // Load all settings in parallel
       const [notifResponse, privacyResponse, subResponse] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/notification-settings`, {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/notification-settings`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/privacy-settings`, {
+        fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/privacy-settings`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
         fetch(`${process.env.NEXT_PUBLIC_API_URL}/stripe/subscription-info`, {
@@ -228,7 +228,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
         formData.append('profileImage', selectedFile);
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/profile`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -265,7 +265,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
     setIsSaving(true);
     try {
       const token = auth.getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/notification-settings`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/notification-settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -291,7 +291,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
     setIsSaving(true);
     try {
       const token = auth.getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/privacy-settings`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/privacy-settings`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -337,7 +337,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
   const handleDataExport = async () => {
     try {
       const token = auth.getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/export-data`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/export-data`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -371,7 +371,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
 
     try {
       const token = auth.getToken();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/user/delete-account`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/delete-account`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

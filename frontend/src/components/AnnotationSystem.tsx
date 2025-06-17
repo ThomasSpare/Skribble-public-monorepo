@@ -695,7 +695,7 @@ export default function AnnotationSystem({
                             <div className="w-7 h-7 rounded-full overflow-hidden border-2 border-skribble-dark hover:border-skribble-azure transition-colors">
                               {parent.user.profileImage ? (
                                 <Image
-                                  src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/images/${parent.user.profileImage}`}
+                                  src={`${process.env.NEXT_PUBLIC_API_URL}/app/uploads/images/${parent.user.profileImage}`}
                                   alt={parent.user.username}
                                   title={parent.user.username}
                                   width={28}

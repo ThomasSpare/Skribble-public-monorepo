@@ -14,6 +14,8 @@ import {
   Loader2
 } from 'lucide-react';
 import IntegratedWaveformPlayer from '@/components/IntegratedWaveformPlayer';
+import CollaboratorsMenu from '@/components/CollaboratorsMenu';
+import CollaboratorsMenuPortal from '@/components/CollaboratorsMenuPortal';
 import Image from 'next/image';
 
 interface User {
@@ -22,6 +24,7 @@ interface User {
   username: string;
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: string;
+  profileImage?: string | null;
 }
 
 interface ProjectData {
@@ -71,6 +74,7 @@ export default function ProjectPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentAudioFile, setCurrentAudioFile] = useState<any>(null);
+  const [showCollaborators, setShowCollaborators] = useState(false);
   
   useEffect(() => {
     initializePage();
@@ -341,22 +345,50 @@ export default function ProjectPage() {
                   Download
                 </a>
               )}
-              
-              <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
-                <Users className="w-5 h-5" />
-              </button>
-              
-              <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
-                <Settings className="w-5 h-5" />
-              </button>
-              
-              <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
-                <MoreVertical className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+              {/* Collaborators Button */}
+                    <div className="relative">
+                    <button
+                      onClick={() => setShowCollaborators(!showCollaborators)}
+                      className="flex items-center gap-2 left-5 px-3 py-2 bg-skribble-azure/20 hover:bg-skribble-azure/30 text-skribble-azure rounded-lg transition-colors"
+                    >
+                      <Users className="w-5 h-5" />
+                      <span className="text-sm">
+                      {project?.collaborators?.length || 0}
+                      </span>
+                    </button>
+                    
+                    {/* Collaborators Menu */}
+                    {/* Collaborators Menu */}
+                    <CollaboratorsMenuPortal>
+                      <div className="absolute right-4 top-2 mt-2 z-[9999]">
+                        <CollaboratorsMenu
+                          projectId={projectId}
+                          currentUserId={user?.id || ''}
+                          isProjectCreator={project?.creatorId === user?.id}
+                          isOpen={showCollaborators}
+                          onClose={() => setShowCollaborators(false)}
+                          onRemoveCollaborator={(collaboratorId) => {
+                            setProject(prev => prev ? {
+                              ...prev,
+                              collaborators: prev.collaborators.filter(c => c.id !== collaboratorId)
+                            } : null);
+                          }}
+                        />
+                      </div>
+                    </CollaboratorsMenuPortal>
+                    </div>
+                        
+                        <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
+                          <Settings className="w-5 h-5" />
+                        </button>
+                        
+                        <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
+                          <MoreVertical className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </header>
 
       {/* Main Content */}
       <main className="w-full mx-auto px-6 py-8">
@@ -407,7 +439,7 @@ export default function ProjectPage() {
                         <Image
                           key={collaborator.id}
                           className="rounded-full object-cover border-2 border-skribble-dark hover:border-skribble-azure transition-colors"
-                          src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${collaborator.username}`}
+                          src={`/users/${collaborator.id}/profileImage`}
                           alt={collaborator.username}
                           title={collaborator.username}
                           width={28} // Set the width of the image

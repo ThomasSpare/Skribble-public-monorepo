@@ -488,14 +488,14 @@ export default function DashboardPage() {
     }
   };
 
-  const generateViewerLink = async (projectId: string) => {
+  const generateViewerLink = async (project: Project) => {
   try {
     const token = localStorage.getItem('skribble_token');
     if (!token) {
       throw new Error('No authentication token found');
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${projectId}/viewer-link`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${project.id}/viewer-link`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token.trim()}`,

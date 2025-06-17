@@ -64,6 +64,25 @@ interface ProjectData {
   updatedAt: string;
 }
 
+interface Project {
+  id: string;
+  title: string;
+  creatorId?: string;
+  creator?: {
+    username: string;
+  };
+  status: 'active' | 'completed' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  shareLink?: string;
+  deadline?: string; // ✨ NEW: Deadline field
+  // Legacy fields for backward compatibility
+  annotations?: number;
+  lastUpdated?: string;
+  duration?: string;
+  showMenu?: boolean;
+}
+
 export default function ProjectPage() {
   const router = useRouter();
   const params = useParams();
@@ -202,6 +221,7 @@ export default function ProjectPage() {
 
   const generateViewerLink = async () => {
   try {
+    if (!project) return;
     const token = localStorage.getItem('skribble_token');
     if (!token) {
       throw new Error('No authentication token found');
@@ -229,7 +249,7 @@ export default function ProjectPage() {
     }
   } catch (error) {
     console.error('Error generating viewer link:', error);
-    alert(`Failed to generate viewer link: ${error.message}`);
+    alert(`Failed to generate viewer link: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 

@@ -246,7 +246,7 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
         onUserUpdate(data.data);
         setSuccess('Profile updated successfully');
         setSelectedFile(null);
-        setPreviewImage(null);
+        setPreviewImage(user.profileImage || null);
       } else {
         throw new Error(data.error.message);
       }

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import SoundMonitor from './SoundMonitor';
+import { getImageUrl } from '@/utils/images';
 
 // Types (keeping your existing types)
 interface AnnotationType {
@@ -693,29 +694,26 @@ export default function AnnotationSystem({
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full overflow-hidden border-2 border-skribble-dark hover:border-skribble-azure transition-colors">
-                                {parent.user.profileImage ? (
-                                  <Image
-                                    src={`${process.env.NEXT_PUBLIC_API_URL}${parent.user.profileImage}`}
-                                    alt={parent.user.username}
-                                    title={parent.user.username}
-                                    width={28}
-                                    height={28}
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                      // Hide image and show fallback if it fails to load
-                                      e.currentTarget.style.display = 'none';
-                                      const fallback = e.currentTarget.nextElementSibling;
-                                      if (fallback && fallback instanceof HTMLElement) fallback.style.display = 'flex';
-                                    }}
-                                  />
-                                ) : null}
-                                <div 
-                                  className="w-full h-full bg-skribble-plum/30 flex items-center justify-center"
-                                  style={{ display: parent.user.profileImage ? 'none' : 'flex' }}
-                                >
+                              {parent.user.profileImage ? (
+                                <Image
+                                  src={getImageUrl(parent.user.profileImage)}
+                                  alt={parent.user.username}
+                                  title={parent.user.username}
+                                  width={28}
+                                  height={28}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    console.error('Failed to load user image:', getImageUrl(parent.user.profileImage));
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full bg-skribble-plum/30 flex items-center justify-center">
                                   <User className="w-4 h-4 text-skribble-azure" />
                                 </div>
-                              </div>
+                              )}
+                          </div>
+                          </div>
                             <span className="font-medium text-skribble-sky">{parent.user.username}</span>
                             <span 
                               className="text-xs text-skribble-azure cursor-pointer hover:text-skribble-sky transition-colors"

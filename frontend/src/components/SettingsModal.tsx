@@ -10,6 +10,7 @@ import {
 import Image from 'next/image';
 import { auth } from '@/lib/auth';
 import ReferralDashboard from './ReferralDashboard';
+import { getImageUrl } from '@/utils/images';
 
 interface User {
   id: string;
@@ -486,7 +487,6 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
                   <div className="relative">
                     <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden">
                       {previewImage ? (
-                        // Show preview when uploading new image
                         <Image
                           src={previewImage}
                           alt="Profile Preview"
@@ -495,23 +495,22 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
                           className="w-full h-full object-cover"
                         />
                       ) : profileData.profileImage ? (
-                        // Show existing profile image - FIXED URL
                         <Image
-                          src={`${process.env.NEXT_PUBLIC_API_URL}${profileData.profileImage}`}
+                          src={getImageUrl(profileData.profileImage)}
                           alt="Profile"
                           width={80}
                           height={80}
                           className="w-full h-full object-cover"
                           onError={(e) => {
-                            // Fallback if image fails to load
+                            console.error('Failed to load profile image:', getImageUrl(profileData.profileImage));
                             e.currentTarget.style.display = 'none';
                           }}
                         />
                       ) : (
-                        // Show default avatar
                         <div className="w-full h-full flex items-center justify-center text-skribble-azure">
                           <User className="w-8 h-8" />
                         </div>
+                      )}
                       )}
                     </div>
                     <button

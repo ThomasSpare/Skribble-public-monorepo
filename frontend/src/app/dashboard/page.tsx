@@ -517,7 +517,7 @@ export default function DashboardPage() {
     }
   } catch (error) {
     console.error('Error generating viewer link:', error);
-    alert(`Failed to generate viewer link: ${error.message}`);
+    alert(`Failed to generate viewer link: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 

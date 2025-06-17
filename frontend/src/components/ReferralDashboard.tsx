@@ -1,6 +1,7 @@
 // frontend/src/components/ReferralDashboard.tsx
 import { useState, useEffect } from 'react';
 import { Copy, Users, Gift, Share2, Check } from 'lucide-react';
+import { auth } from '@/lib/auth';
 
 interface ReferralStats {
   referral_code: string | null;
@@ -21,7 +22,7 @@ export default function ReferralDashboard() {
 
   const fetchReferralStats = async () => {
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = auth.getToken();
       const response = await fetch('/api/stripe/referral-stats', {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -42,7 +43,7 @@ export default function ReferralDashboard() {
   const generateReferralCode = async () => {
     setGenerating(true);
     try {
-      const token = localStorage.getItem('skribble_token');
+      const token = auth.getToken();
       const response = await fetch('/api/stripe/generate-referral-code', {
         method: 'POST',
         headers: {

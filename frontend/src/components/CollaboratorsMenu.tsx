@@ -1,6 +1,7 @@
 // frontend/src/components/CollaboratorsMenu.tsx
 'use client';
 import React, { useRef, useEffect, useState } from 'react';
+import { getImageUrl } from '@/utils/images';
 import { 
   X, 
   Users, 
@@ -198,11 +199,15 @@ const fetchCollaborators = async () => {
         <div className="w-10 h-10 rounded-full overflow-hidden bg-skribble-azure/20 flex-shrink-0">
           {creator.profileImage ? (
             <Image
-              src={creator.profileImage}
+              src={getImageUrl(creator.profileImage)}
               alt={creator.username}
               width={40}
               height={40}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                console.error('Failed to load creator image:', getImageUrl(creator.profileImage));
+                e.currentTarget.style.display = 'none';
+              }}
             />
           ) : (
             <div className="w-full h-full bg-skribble-azure/20 flex items-center justify-center">

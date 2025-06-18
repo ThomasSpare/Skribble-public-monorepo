@@ -103,19 +103,23 @@ export default function ViewerPage() {
                 <p className="text-sm text-skribble-azure/70">View-only access</p>
               </div>
             </div>
-            <div className="relative inline-block mb-8">
-            <h1 className="font-madimi text-7xl md:text-8xl bg-gradient-to-r from-skribble-sky via-skribble-azure to-skribble-purple bg-clip-text text-transparent">
+            <div 
+              onClick={() => window.open('https://skribble.website', '_blank')}
+              className="relative top-6 inline-block mb-8 cursor-pointer hover:opacity-90 transition-opacity"
+            >
+              <h1 className="font-madimi text-7xl md:text-8xl bg-gradient-to-r from-skribble-sky via-skribble-azure to-skribble-purple bg-clip-text text-transparent">
               Skribble
-            </h1>
-            <div className="absolute -top-8 -right-12 bg-skribble-azure rounded-2xl rounded-bl-md px-4 py-2 shadow-xl animate-float">
+              </h1>
+              <div className="absolute -top-3 -right-12 bg-skribble-azure rounded-2xl rounded-bl-md px-4 py-2 shadow-xl animate-float">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
               </div>
+              </div>
+              <h1 className='flex items-center justify-between'>Where Music Meets Collaboration</h1>
             </div>
-          </div>
-            <div className="text-sm text-skribble-azure/70">
+            <div className="text-sm text-skribble-azure/70 italic">
               Shared via Skribble
             </div>
           </div>

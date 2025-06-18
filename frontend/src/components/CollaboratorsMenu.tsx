@@ -26,6 +26,7 @@ interface Collaborator {
   projectId: string;
   userId: string;
   user: User;
+  ProfileImage?: string;
   role: 'producer' | 'artist' | 'viewer' | 'admin';
   permissions: {
     canEdit: boolean;
@@ -52,7 +53,7 @@ interface CollaboratorsMenuProps {
 
 export default function CollaboratorsMenu({ 
   projectId, 
-  currentUserId, 
+  currentUserId,
   isProjectCreator, 
   isOpen, 
   onClose,
@@ -63,6 +64,7 @@ export default function CollaboratorsMenu({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+  const [projectCreator, setProjectCreator] = useState<User | null>(null);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -82,31 +84,57 @@ export default function CollaboratorsMenu({
     }
   }, [isOpen, projectId]);
 
-  const fetchCollaborators = async () => {
-    setIsLoading(true);
-    setError(null);
+  
+ // Modified fetchCollaborators function to also fetch project creator
+const fetchCollaborators = async () => {
+  setIsLoading(true);
+  setError(null);
 
-    try {
-      const token = localStorage.getItem('skribble_token');
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${projectId}/collaborators`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setCollaborators(data.data || []);
-      } else {
-        throw new Error(data.error?.message || 'Failed to fetch collaborators');
-      }
-    } catch (error: any) {
-      console.error('Error fetching collaborators:', error);
-      setError(error.message || 'Failed to load collaborators');
-    } finally {
-      setIsLoading(false);
+  try {
+    const token = localStorage.getItem('skribble_token');
+    if (!token) {
+      throw new Error('No authentication token found');
     }
-  };
+
+    // Fetch both project details (for creator) and collaborators
+    const [projectResponse, collaboratorsResponse] = await Promise.all([
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${projectId}/collaborators`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+    ]);
+
+    if (!projectResponse.ok || !collaboratorsResponse.ok) {
+      const projectError = !projectResponse.ok ? await projectResponse.text() : '';
+      const collabError = !collaboratorsResponse.ok ? await collaboratorsResponse.text() : '';
+      console.error('API Responses:', { projectError, collabError });
+      throw new Error(`Failed to fetch project data. Project: ${projectResponse.status}, Collaborators: ${collaboratorsResponse.status}`);
+    }
+
+    const projectData = await projectResponse.json();
+    const collaboratorsData = await collaboratorsResponse.json();
+
+    console.log('API Data:', { projectData, collaboratorsData }); // Debug log
+
+    if (projectData.success && collaboratorsData.success) {
+      setProjectCreator(projectData.data.creator);
+      // Filter out creator from collaborators list if they appear there
+      const filteredCollaborators = collaboratorsData.data.filter(
+        (collab: Collaborator) => collab.userId !== projectData.data.creatorId
+      );
+      setCollaborators(filteredCollaborators);
+    } else {
+      throw new Error(`API Error - Project: ${projectData.error?.message}, Collaborators: ${collaboratorsData.error?.message}`);
+    }
+  } catch (error) {
+    console.error('Error fetching project data:', error);
+    setError(error instanceof Error ? error.message : 'Failed to load collaborators');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleRemoveCollaborator = async (collaborator: Collaborator) => {
     if (!isProjectCreator) return;
@@ -163,6 +191,45 @@ export default function CollaboratorsMenu({
     return statusMap[status] || { label: status, color: 'text-skribble-azure' };
   };
 
+  const CreatorDisplay = ({ creator }: { creator: User }) => (
+    <div className="p-3 bg-skribble-azure/5 border-b border-skribble-azure/20">
+      <div className="flex items-center gap-3">
+        {/* Profile Image */}
+        <div className="w-10 h-10 rounded-full overflow-hidden bg-skribble-azure/20 flex-shrink-0">
+          {creator.profileImage ? (
+            <Image
+              src={creator.profileImage}
+              alt={creator.username}
+              width={40}
+              height={40}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-skribble-azure/20 flex items-center justify-center">
+              <span className="text-skribble-azure font-medium text-sm">
+                {creator.username.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Creator Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-skribble-azure truncate">
+              {creator.username}
+            </p>
+            <Crown className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+          </div>
+          <p className="text-xs text-skribble-azure/70">Project Creator</p>
+          <p className="text-xs text-skribble-azure/60 truncate mt-1">
+            {creator.email}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -202,28 +269,38 @@ export default function CollaboratorsMenu({
               Try again
             </button>
           </div>
-        ) : collaborators.length === 0 ? (
-          <div className="p-8 text-center">
-            <Users className="w-12 h-12 text-skribble-azure/40 mx-auto mb-3" />
-            <p className="text-skribble-azure/70">No collaborators yet</p>
-            <p className="text-skribble-azure/50 text-sm mt-1">
-              Share your project to start collaborating
-            </p>
-          </div>
         ) : (
-          <div className="p-2 space-y-1">
-            {collaborators.map((collaborator) => {
+          <div>
+            {/* Project Creator Section */}
+            {projectCreator && <CreatorDisplay creator={projectCreator} />}
+            
+            {/* Collaborators Section */}
+            {collaborators.length === 0 ? (
+              <div className="p-8 text-center">
+                <Users className="w-12 h-12 text-skribble-azure/40 mx-auto mb-3" />
+                <p className="text-skribble-azure/70">No collaborators yet</p>
+                <p className="text-skribble-azure/50 text-sm mt-1">
+                  Share your project to start collaborating
+                </p>
+              </div>
+            ) : (
+              <div className="p-2 space-y-1">
+                {/* Optional section header for collaborators */}
+                <div className="px-3 py-2 text-xs font-medium text-skribble-azure/60 uppercase tracking-wider">
+                  Collaborators ({collaborators.length})
+                </div>
+                
+                {collaborators.map((collaborator) => {
               const role = getRoleDisplay(collaborator.role);
               const status = getStatusDisplay(collaborator.status);
               const isCurrentUser = collaborator.userId === currentUserId;
               const isRemoving = removingIds.has(collaborator.id);
               const canRemove = isProjectCreator && !isCurrentUser;
 
-              return (
+              return ( 
                 <div key={collaborator.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-skribble-azure/10 transition-colors">
                   {/* Profile Image */}
                   <div className="w-10 h-10 rounded-full overflow-hidden bg-skribble-azure/20 flex-shrink-0">
-                    
                     {collaborator.user.profileImage ? (
                       <Image 
                         src={collaborator.user.profileImage} 
@@ -293,8 +370,9 @@ export default function CollaboratorsMenu({
             })}
           </div>
         )}
+          </div>
+        )}
       </div>
-
       {/* Footer */}
       {!isLoading && !error && (
         <div className="p-3 border-t border-skribble-azure/20 text-center">

@@ -17,6 +17,9 @@ import IntegratedWaveformPlayer from '@/components/IntegratedWaveformPlayer';
 import CollaboratorsMenu from '@/components/CollaboratorsMenu';
 import CollaboratorsMenuPortal from '@/components/CollaboratorsMenuPortal';
 import Image from 'next/image';
+import ProjectMenu from '@/components/ProjectMenu';
+import ProjectMenuPortal from '@/components/ProjectMenuPortal';
+
 
 interface User {
   id: string;
@@ -31,6 +34,7 @@ interface ProjectData {
   id: string;
   title: string;
   creatorId: string;
+  showMenu?: boolean;
   creator: {
     username: string;
     email: string;
@@ -94,7 +98,11 @@ export default function ProjectPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentAudioFile, setCurrentAudioFile] = useState<any>(null);
   const [showCollaborators, setShowCollaborators] = useState(false);
-  
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+
+
   useEffect(() => {
     initializePage();
   }, [projectId]);
@@ -168,8 +176,65 @@ export default function ProjectPage() {
     }
   };
 
+  const handleSetDeadline = async (project: Project): Promise<void> => {
+  const deadlineInput = prompt(
+    'Set project deadline (YYYY-MM-DD HH:MM or YYYY-MM-DD):',
+    project.deadline ? new Date(project.deadline).toISOString().slice(0, 16) : ''
+  );
   
-  const handleVersionChange = (versionData: any) => {
+  if (!deadlineInput) return;
+  
+  try {
+    const deadline = new Date(deadlineInput);
+    if (isNaN(deadline.getTime())) {
+      alert('Invalid date format. Please use YYYY-MM-DD HH:MM or YYYY-MM-DD');
+      return;
+    }
+    
+    if (deadline <= new Date()) {
+      alert('Deadline must be in the future');
+      return;
+    }
+    
+    const token = localStorage.getItem('skribble_token');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${project.id}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        deadline: deadline.toISOString()
+      })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        // Update project in state
+        setProjects(prev => 
+          prev.map(p => 
+            p.id === project.id 
+              ? { ...p, deadline: deadline.toISOString() }
+              : p
+          )
+        );
+        alert('Deadline set successfully!');
+      } else {
+        alert('Failed to set deadline');
+      }
+    } else {
+      alert('Failed to set deadline');
+    }
+  } catch (error) {
+    console.error('Error setting deadline:', error);
+    alert('Failed to set deadline');
+  }
+};
+
+
+
+const handleVersionChange = (versionData: any) => {
   
   // Convert the version data structure to match your audioFile structure
   const audioFile = {
@@ -203,7 +268,7 @@ export default function ProjectPage() {
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
-
+  
   const copyShareLink = async () => {
     if (project) {
       const shareUrl = `${window.location.origin}/share/${project.shareLink}`;
@@ -218,12 +283,12 @@ export default function ProjectPage() {
       }
     }
   };
-
+  
   const generateViewerLink = async () => {
-  try {
-    if (!project) return;
-    const token = localStorage.getItem('skribble_token');
-    if (!token) {
+    try {
+      if (!project) return;
+      const token = localStorage.getItem('skribble_token');
+      if (!token) {
       throw new Error('No authentication token found');
     }
 
@@ -253,7 +318,7 @@ export default function ProjectPage() {
   }
 };
 
-  useEffect(() => {
+useEffect(() => {
   if (project && project.audioFiles && project.audioFiles.length > 0) {
     const currentAudio = project.audioFiles.find(af => af.isActive) || project.audioFiles[0];
     
@@ -264,15 +329,15 @@ export default function ProjectPage() {
       
       
       fetch(testUrl1, { method: 'HEAD' })
-        .then(response => {
-          console.log('URL 1 response:', response.status, response.statusText);
-        })
-        .catch(error => {
+      .then(response => {
+        console.log('URL 1 response:', response.status, response.statusText);
+      })
+      .catch(error => {
           console.error('URL 1 failed:', error);
         });
         
       fetch(testUrl2, { method: 'HEAD' })
-        .then(response => {
+      .then(response => {
           console.log('URL 2 response:', response.status, response.statusText);
         })
         .catch(error => {
@@ -281,6 +346,94 @@ export default function ProjectPage() {
     }
   }
 }, [project]);
+
+const handleDelete = async (project: Project): Promise<void> => {
+    if (!confirm(`Are you sure you want to delete "${project.title}"? This action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('skribble_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${project.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        setProjects(prev => prev.filter(p => p.id !== project.id));
+      } else {
+        alert('Failed to delete project');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert('Failed to delete project');
+    }
+  };
+  
+  const handleMenuToggle = (projectId: string) => {
+   setProjects(prev => 
+     prev.map(p => ({
+       ...p,
+       showMenu: p.id === projectId ? !p.showMenu : false
+     }))
+   );
+  };
+  const handleMenuClose = (projectId: string) => {
+    setProjects(prev => 
+      prev.map(p => 
+        p.id === projectId ? { ...p, showMenu: false } : p
+      )
+    );
+  };
+
+
+
+  const handleInvite = async (project: Project): Promise<void> => {
+    const token = localStorage.getItem('skribble_token');
+    
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/${project.id}/invite-link`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          role: 'viewer',
+          permissions: {
+            canEdit: false,
+            canComment: true,
+            canExport: false,
+            canInvite: false,
+            canManageProject: false
+          },
+          expiresIn: 7 // days
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error?.message || 'Failed to generate invite link');
+      }
+
+      if (data.success && data.data.inviteLink) {
+        // Copy link to clipboard
+        await navigator.clipboard.writeText(data.data.inviteLink);
+        alert('Invite link copied to clipboard! Send this link to the person you want to invite.');
+      } else {
+        throw new Error('Invalid response data');
+      }
+    } catch (error) {
+      console.error('Failed to generate invite link:', error);
+      if (error instanceof Error) {
+        alert(error.message);
+      } else {
+        alert('Failed to generate invite link. Please try again.');
+      }
+    }
+  };
 
   if (isLoading) {
     return (
@@ -381,8 +534,6 @@ export default function ProjectPage() {
                       {project?.collaborators?.length || 0}
                       </span>
                     </button>
-                    
-                    {/* Collaborators Menu */}
                     {/* Collaborators Menu */}
                     <CollaboratorsMenuPortal>
                       <div className="absolute right-4 top-2 mt-2 z-[9999]">
@@ -402,14 +553,50 @@ export default function ProjectPage() {
                       </div>
                     </CollaboratorsMenuPortal>
                     </div>
-                        
-                        <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
-                          <Settings className="w-5 h-5" />
-                        </button>
-                        
-                        <button className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors">
+                        <div className="relative">
+                          <button
+                          className="p-1 text-skribble-purple hover:text-skribble-azure transition-colors"
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProjectMenuOpen(true);
+                            setSelectedProject(project.id);
+                          }}
+                          >
                           <MoreVertical className="w-5 h-5" />
-                        </button>
+                          </button>
+                          
+                          {/* Project Menu with Portal */}
+                          <ProjectMenuPortal isOpen={projectMenuOpen}>
+                          {projectMenuOpen && selectedProject === project.id && (
+                            <div 
+                            className="fixed inset-0 z-99"
+                            onClick={() => {
+                              setProjectMenuOpen(false);
+                              setSelectedProject(null);
+                            }}
+                            >
+                            <div 
+                              onClick={e => e.stopPropagation()} 
+                              className="absolute right-12 mt-2 z-[99999]"
+                            >
+                              <ProjectMenu
+                              project={project}
+                              isOpen={true}
+                              onClose={() => {
+                                setProjectMenuOpen(false);
+                                setSelectedProject(null);
+                              }}
+                              onDelete={handleDelete}
+                              onInvite={handleInvite}
+                              onShare={generateViewerLink}
+                              onSetDeadline={handleSetDeadline}
+                              />
+                            </div>
+                            </div>
+                          )}
+                          </ProjectMenuPortal>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -441,7 +628,8 @@ export default function ProjectPage() {
               )}
           </div>
           {/* Sidebar */}
-          <div className="flex flex-col gap-8 w-full lg:w-96">
+            <div className="flex flex-col gap-8 w-full lg:w-96 z-[1]">
+
             {/* Project Info */}
             <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 flex flex-col items-center">
               <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 w-full">

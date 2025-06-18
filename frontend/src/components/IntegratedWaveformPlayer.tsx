@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, ChevronUp } from 'lucide-react';
+import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, ChevronUp, User } from 'lucide-react';
+import Image from 'next/image';
 import AnnotationSystem from './AnnotationSystem';
 import { exportForDAW, DAWExportFormat } from '@/lib/audioUtils';
 import { Music2, ChevronDown } from 'lucide-react';
 import VersionControl from './VersionControl';
+import { getImageUrl } from '@/utils/images';
 import { version } from 'os';
 
 
@@ -1560,77 +1562,102 @@ const drawWaveform = useCallback(() => {
           />
           
           {/* Enhanced Annotation Tooltip with Better Positioning */}
-          {hoveredAnnotation && (
-                <div
-                  className="absolute z-50 bg-skribble-dark/95 backdrop-blur-sm text-skribble-sky text-xs p-4 rounded-lg border border-skribble-azure/30 shadow-lg pointer-events-none max-w-sm"
-                  style={{
-                    ...getTooltipPosition(hoveredAnnotation),
-                    animation: 'fadeIn 0.2s ease-out'
-                  }}
-                >
-                  {/* Tooltip Arrow */}
-                  <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-skribble-dark/95"></div>
-                  
-                  {/* Header with user and timestamp */}
-                  <div className="font-medium text-skribble-azure mb-2 flex items-center gap-2">
-                    <span className="flex-shrink-0">{hoveredAnnotation.user}</span>
-                    <span className="text-skribble-purple">•</span>
-                    <span className="font-mono text-xs">{formatRulerTime(hoveredAnnotation.timestamp)}</span>
-                    <span 
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: getAnnotationColor(annotations.find(a => a.id === hoveredAnnotation.id)!) }}
-                    ></span>
+          {/* Enhanced Annotation Tooltip with Better Positioning */}
+            {hoveredAnnotation && (
+              <div
+                className="absolute z-50 bg-skribble-dark/95 backdrop-blur-sm text-skribble-sky text-xs p-4 rounded-lg border border-skribble-azure/30 shadow-lg pointer-events-none max-w-sm"
+                style={{
+                  ...getTooltipPosition(hoveredAnnotation),
+                  animation: 'fadeIn 0.2s ease-out'
+                }}
+              >
+                {/* Tooltip Arrow */}
+                <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-skribble-dark/95"></div>
+                
+                {/* Header with user and timestamp */}
+                <div className="flex items-center gap-2 mb-2">
+                  {/* Profile Image */}
+                  <div className="w-4 h-4 rounded-full overflow-hidden bg-skribble-azure/20 flex-shrink-0">
+                    {(() => {
+                      const annotation = annotations.find(a => a.id === hoveredAnnotation.id);
+                      return annotation?.user?.profileImage ? (
+                        <Image 
+                          src={getImageUrl(annotation.user.profileImage)} 
+                          alt={hoveredAnnotation.user}
+                          width={16}
+                          height={16}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            console.error('Failed to load user image:', getImageUrl(annotation.user.profileImage));
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-skribble-azure/20 flex items-center justify-center">
+                          <User className="w-2 h-2 text-skribble-azure" />
+                        </div>
+                      );
+                    })()}
                   </div>
                   
-                  {/* Main comment text */}
-                  <div className="text-skribble-sky leading-relaxed mb-3">
-                    {hoveredAnnotation.text}
-                  </div>
-                  
-                  {/* Metadata row */}
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="capitalize text-skribble-purple">{hoveredAnnotation.type}</span>
-                      {annotations.find(a => a.id === hoveredAnnotation.id)?.priority && (
-                        <>
-                          <span className="text-skribble-azure">•</span>
-                          <span className={`capitalize ${
-                            annotations.find(a => a.id === hoveredAnnotation.id)?.priority === 'critical' ? 'text-red-400' :
-                            annotations.find(a => a.id === hoveredAnnotation.id)?.priority === 'high' ? 'text-orange-400' :
-                            annotations.find(a => a.id === hoveredAnnotation.id)?.priority === 'medium' ? 'text-yellow-400' :
-                            'text-green-400'
-                          }`}>
-                            {annotations.find(a => a.id === hoveredAnnotation.id)?.priority}
-                          </span>
-                        </>
-                      )}
-                      {annotations.find(a => a.id === hoveredAnnotation.id)?.status && (
-                        <>
-                          <span className="text-skribble-azure">•</span>
-                          <span className={`capitalize ${
-                            annotations.find(a => a.id === hoveredAnnotation.id)?.status === 'pending' ? 'text-yellow-400' :
-                            annotations.find(a => a.id === hoveredAnnotation.id)?.status === 'resolved' ? 'text-green-400' :
-                            annotations.find(a => a.id === hoveredAnnotation.id)?.status === 'approved' ? 'text-blue-400' :
-                            'text-skribble-azure'
-                          }`}>
-                            {annotations.find(a => a.id === hoveredAnnotation.id)?.status}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    
-                    {/* Click instruction */}
-                    <span className="text-skribble-azure ml-2">Click to jump</span>
-                  </div>
-                  
-                  {/* Creation date */}
-                  {annotations.find(a => a.id === hoveredAnnotation.id)?.createdAt && (
-                    <div className="text-xs text-skribble-purple/70 mt-2">
-                      {new Date(annotations.find(a => a.id === hoveredAnnotation.id)!.createdAt).toLocaleDateString()} at {new Date(annotations.find(a => a.id === hoveredAnnotation.id)!.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  )}
+                  <span className="flex-shrink-0 font-medium">{hoveredAnnotation.user}</span>
+                  <span className="text-skribble-purple">•</span>
+                  <span className="font-mono text-xs">{formatRulerTime(hoveredAnnotation.timestamp)}</span>
+                  <span 
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: getAnnotationColor(annotations.find(a => a.id === hoveredAnnotation.id)!) }}
+                  ></span>
                 </div>
-              )}
+                
+                {/* Main comment text */}
+                <div className="text-skribble-sky leading-relaxed mb-3">
+                  {hoveredAnnotation.text}
+                </div>
+                
+                {/* Metadata row */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="capitalize text-skribble-purple">{hoveredAnnotation.type}</span>
+                    {annotations.find(a => a.id === hoveredAnnotation.id)?.priority && (
+                      <>
+                        <span className="text-skribble-azure">•</span>
+                        <span className={`capitalize ${
+                          annotations.find(a => a.id === hoveredAnnotation.id)?.priority === 'critical' ? 'text-red-400' :
+                          annotations.find(a => a.id === hoveredAnnotation.id)?.priority === 'high' ? 'text-orange-400' :
+                          annotations.find(a => a.id === hoveredAnnotation.id)?.priority === 'medium' ? 'text-yellow-400' :
+                          'text-green-400'
+                        }`}>
+                          {annotations.find(a => a.id === hoveredAnnotation.id)?.priority}
+                        </span>
+                      </>
+                    )}
+                    {annotations.find(a => a.id === hoveredAnnotation.id)?.status && (
+                      <>
+                        <span className="text-skribble-azure">•</span>
+                        <span className={`capitalize ${
+                          annotations.find(a => a.id === hoveredAnnotation.id)?.status === 'pending' ? 'text-yellow-400' :
+                          annotations.find(a => a.id === hoveredAnnotation.id)?.status === 'resolved' ? 'text-green-400' :
+                          annotations.find(a => a.id === hoveredAnnotation.id)?.status === 'approved' ? 'text-blue-400' :
+                          'text-skribble-azure'
+                        }`}>
+                          {annotations.find(a => a.id === hoveredAnnotation.id)?.status}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* Click instruction */}
+                  <span className="text-skribble-azure ml-2">Click to jump</span>
+                </div>
+                
+                {/* Creation date */}
+                {annotations.find(a => a.id === hoveredAnnotation.id)?.createdAt && (
+                  <div className="text-xs text-skribble-purple/70 mt-2">
+                    {new Date(annotations.find(a => a.id === hoveredAnnotation.id)!.createdAt).toLocaleDateString()} at {new Date(annotations.find(a => a.id === hoveredAnnotation.id)!.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+              </div>
+            )}
 
           
           {/* Click Feedback Indicator */}

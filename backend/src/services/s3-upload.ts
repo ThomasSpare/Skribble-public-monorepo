@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
-interface UploadResult {
+export interface UploadResult {
   key: string;
   location: string;
   bucket: string;
@@ -87,32 +87,35 @@ class S3UploadService {
       throw new Error('Either projectId (for audio) or userId (for images) must be provided');
     }
   }
+
+  /**
+   * Upload file buffer to S3 - simplified for your specific use cases
+   */
   async uploadBuffer(
     buffer: Buffer, 
     originalName: string, 
     mimeType: string,
-    options?: {
-      projectId?: string;
-      userId?: string;
-      fileType?: 'audio' | 'image';
-      folder?: string;
+    options: {
+      projectId?: string;      // For audio files (required for audio)
+      userId?: string;         // For profile images (required for images)
+      includeOriginalName?: boolean;
     }
   ): Promise<UploadResult> {
-    const ext = path.extname(originalName);
-    const folder = options?.folder || this.getS3Folder(mimeType, options?.fileType);
     
-    let key: string;
+    // Validate that we have the right parameters for the use case
+    const isAudio = mimeType.startsWith('audio/');
+    const isImage = mimeType.startsWith('image/');
     
-    if (options?.projectId) {
-      // Project-specific files (audio files in projects)
-      key = `projects/${options.projectId}/${folder}/${uuidv4()}${ext}`;
-    } else if (options?.userId) {
-      // User-specific files (profile images)
-      key = `users/${options.userId}/${folder}/${uuidv4()}${ext}`;
-    } else {
-      // General uploads
-      key = `${folder}/${uuidv4()}${ext}`;
+    if (isAudio && !options.projectId) {
+      throw new Error('projectId is required for audio uploads');
     }
+    
+    if (isImage && !options.userId) {
+      throw new Error('userId is required for image uploads');
+    }
+    
+    // Generate S3 key for your specific structure
+    const key = this.generateS3Key(originalName, options);
 
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
@@ -122,9 +125,9 @@ class S3UploadService {
       Metadata: {
         originalName: originalName,
         uploadedAt: new Date().toISOString(),
-        projectId: options?.projectId || 'none',
-        userId: options?.userId || 'none',
-        fileType: options?.fileType || this.getS3Folder(mimeType)
+        projectId: options.projectId || 'none',
+        userId: options.userId || 'none',
+        fileType: isAudio ? 'audio' : isImage ? 'image' : 'unknown'
       }
     });
 
@@ -187,7 +190,9 @@ class S3UploadService {
       const testKey = `test/${uuidv4()}.txt`;
       const testBuffer = Buffer.from('connection test');
       
-      await this.uploadBuffer(testBuffer, 'test.txt', 'text/plain');
+      await this.uploadBuffer(testBuffer, 'test.txt', 'text/plain', {
+        projectId: 'test-project'
+      });
       await this.deleteFile(testKey);
       
       return true;

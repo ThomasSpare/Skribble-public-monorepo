@@ -27,7 +27,7 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
     }
 
     // If user has S3 profile image, generate signed URL for security
-    if (user.profileImage && user.profileImage.includes('s3')) {     // I changed this 
+    if (user.profileImage && user.profileImage.includes('s3')) {
       try {
         // Extract S3 key from URL
         const url = new URL(user.profileImage);
@@ -125,13 +125,13 @@ router.put('/profile',
 
           // Get user's current profile image to delete later
           const currentUser = await pool.query(
-            'SELECT profile_image_url FROM users WHERE id = $1',
+            'SELECT profile_image FROM users WHERE id = $1',
             [userId]
           );
 
-          if (currentUser.rows[0]?.profile_image_url?.includes('s3')) {
+          if (currentUser.rows[0]?.profile_image?.includes('s3')) {
             try {
-              const oldUrl = new URL(currentUser.rows[0].profile_image_url);
+              const oldUrl = new URL(currentUser.rows[0].profile_image);
               oldProfileImageKey = oldUrl.pathname.substring(1);
             } catch (error) {
               logWithTimestamp('⚠️ Failed to parse old profile image URL:', error);
@@ -174,7 +174,7 @@ router.put('/profile',
         updateValues.push(role);
       }
       if (profileImageUrl) {
-        updateFields.push(`profile_image_url = $${paramIndex++}`);
+        updateFields.push(`profile_image = ${paramIndex++}`);
         updateValues.push(profileImageUrl);
       }
 
@@ -192,8 +192,8 @@ router.put('/profile',
       const query = `
         UPDATE users 
         SET ${updateFields.join(', ')}
-        WHERE id = $${paramIndex}
-        RETURNING id, username, email, role, profile_image_url, created_at, updated_at
+        WHERE id = ${paramIndex}
+        RETURNING id, username, email, role, profile_image, created_at, updated_at
       `;
 
       const result = await pool.query(query, updateValues);
@@ -211,12 +211,12 @@ router.put('/profile',
       }
 
       // Generate signed URL for the response if we have an S3 image
-      if (updatedUser.profile_image_url && updatedUser.profile_image_url.includes('s3')) {
+      if (updatedUser.profile_image && updatedUser.profile_image.includes('s3')) {
         try {
-          const url = new URL(updatedUser.profile_image_url);
+          const url = new URL(updatedUser.profile_image);
           const s3Key = url.pathname.substring(1);
           const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
-          updatedUser.profile_image_url = signedUrl;
+          updatedUser.profile_image = signedUrl;
         } catch (error) {
           logWithTimestamp('⚠️ Failed to generate signed URL:', error);
         }
@@ -245,18 +245,18 @@ router.delete('/profile/image', authenticateToken, async (req: any, res: any) =>
 
     // Get current profile image
     const user = await pool.query(
-      'SELECT profile_image_url FROM users WHERE id = $1',
+      'SELECT profile_image FROM users WHERE id = $1',
       [userId]
     );
 
-    if (!user.rows[0]?.profile_image_url) {
+    if (!user.rows[0]?.profile_image) {
       return res.status(404).json({
         success: false,
         error: { message: 'No profile image to delete' }
       });
     }
 
-    const profileImageUrl = user.rows[0].profile_image_url;
+    const profileImageUrl = user.rows[0].profile_image;
 
     // Delete from S3 if it's an S3 URL
     if (profileImageUrl.includes('s3')) {
@@ -273,7 +273,7 @@ router.delete('/profile/image', authenticateToken, async (req: any, res: any) =>
 
     // Remove from database
     await pool.query(
-      'UPDATE users SET profile_image_url = NULL, updated_at = NOW() WHERE id = $1',
+      'UPDATE users SET profile_image = NULL, updated_at = NOW() WHERE id = $1',
       [userId]
     );
 
@@ -305,18 +305,18 @@ router.get('/profile/image-url/:userId', authenticateToken, async (req: any, res
     }
 
     const user = await pool.query(
-      'SELECT profile_image_url FROM users WHERE id = $1',
+      'SELECT profile_image FROM users WHERE id = $1',
       [userId]
     );
 
-    if (!user.rows[0]?.profile_image_url) {
+    if (!user.rows[0]?.profile_image) {
       return res.status(404).json({
         success: false,
         error: { message: 'No profile image found' }
       });
     }
 
-    const profileImageUrl = user.rows[0].profile_image_url;
+    const profileImageUrl = user.rows[0].profile_image;
 
     // Generate signed URL if it's an S3 image
     if (profileImageUrl.includes('s3')) {

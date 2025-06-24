@@ -9,12 +9,12 @@ dotenv.config();
 
 // Import routes
 import authRoutes from './routes/auth-simple';
-import uploadRoutes from './routes/upload';
+import uploadRoutes from './routes/upload-s3';
 import projectRoutes from './routes/projects';
 import annotationRoutes from './routes/annotations';
-import userRoutes from './routes/users';
+import userRoutes from './routes/users-s3';
 import collaborationRoutes from './routes/collaboration';
-import stripeRoutes from './routes/stripe'; // New stripe routes
+import stripeRoutes from './routes/stripe';
 import versionRoutes from './routes/versions';
 
 const app = express();

@@ -2,8 +2,8 @@
 // Script to migrate existing local files to S3
 import fs from 'fs';
 import path from 'path';
-import { pool } from '../src/config/database';
-import { s3UploadService } from '../src/services/s3-upload';
+import { pool } from '../config/database';
+import { s3UploadService } from '../services/s3-upload';
 
 interface AudioFile {
   id: string;
@@ -19,7 +19,7 @@ interface AudioFile {
 interface UserProfile {
   id: string;
   username: string;
-  profileImageUrl: string;
+  profileImage: string;  // Fixed: column is 'profile_image' not 'profile_image_url'
   storage_type: string;
 }
 
@@ -100,25 +100,27 @@ class LocalToS3Migration {
   }
 
   private async getLocalAudioFiles(): Promise<AudioFile[]> {
+    // Use uploaded_at (which exists) instead of created_at (which doesn't exist)
     const result = await pool.query(`
       SELECT id, filename, original_filename, file_url, project_id, 
              mime_type, file_size, storage_type
       FROM audio_files 
       WHERE storage_type = 'local' OR storage_type IS NULL
-      ORDER BY created_at ASC
+      ORDER BY uploaded_at ASC
     `);
 
     return result.rows;
   }
 
   private async getLocalImageFiles(): Promise<UserProfile[]> {
-    // Get users with local profile images
+    // Get users with local profile images (column is 'profile_image' not 'profile_image_url')
+    // Use created_at (which exists in users table)
     const result = await pool.query(`
-      SELECT id, username, profile_image_url as "profileImageUrl",
-             CASE WHEN profile_image_url LIKE '/uploads/images/%' THEN 'local' ELSE 'unknown' END as storage_type
+      SELECT id, username, profile_image as "profileImage",
+             CASE WHEN profile_image LIKE '/uploads/images/%' THEN 'local' ELSE 'unknown' END as storage_type
       FROM users 
-      WHERE profile_image_url IS NOT NULL 
-        AND profile_image_url LIKE '/uploads/images/%'
+      WHERE profile_image IS NOT NULL 
+        AND profile_image LIKE '/uploads/images/%'
       ORDER BY created_at ASC
     `);
 
@@ -201,7 +203,7 @@ class LocalToS3Migration {
 
     try {
       // Extract filename from URL path (e.g., /uploads/images/profile-123.jpg -> profile-123.jpg)
-      const urlPath = user.profileImageUrl;
+      const urlPath = user.profileImage;  // Fixed: use correct property name
       const filename = path.basename(urlPath);
       const localPath = path.join(this.uploadDirImages, filename);
       
@@ -245,10 +247,10 @@ class LocalToS3Migration {
         }
       );
 
-      // Update user profile with new S3 URL
+      // Update user profile with new S3 URL (use correct column name: profile_image)
       await pool.query(`
         UPDATE users 
-        SET profile_image_url = $1
+        SET profile_image = $1
         WHERE id = $2
       `, [s3Result.location, user.id]);
 
@@ -313,12 +315,12 @@ class LocalToS3Migration {
   private async cleanupImageFiles() {
     logWithTimestamp('🖼️ Cleaning up image files...');
     
-    // Get all users with S3 profile images
+    // Get all users with S3 profile images (use correct column name: profile_image)
     const s3ImageUsers = await pool.query(`
-      SELECT username, profile_image_url
+      SELECT username, profile_image
       FROM users 
-      WHERE profile_image_url IS NOT NULL 
-        AND profile_image_url LIKE 'https://%s3%'
+      WHERE profile_image IS NOT NULL 
+        AND profile_image LIKE 'https://%s3%'
     `);
 
     logWithTimestamp(`📊 Found ${s3ImageUsers.rows.length} users with S3 images`);

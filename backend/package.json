@@ -23,9 +23,14 @@
     "clean": "if exist dist rmdir /s /q dist && if exist uploads\\audio rmdir /s /q uploads\\audio",
     "setup:dirs": "if not exist uploads mkdir uploads && if not exist uploads\\audio mkdir uploads\\audio",
     "setup": "npm run setup:dirs && npm run migrate:up",
-    "setup:linux": "mkdir -p uploads/audio && npm run migrate:up"
+    "setup:linux": "mkdir -p uploads/audio && npm run migrate:up",
+    "migrate:s3": "ts-node src/scripts/migrate-local-to-s3.ts",
+    "migrate:s3:execute": "ts-node src/scripts/migrate-local-to-s3.ts --execute",
+    "migrate:s3:cleanup": "ts-node src/scripts/migrate-local-to-s3.ts --cleanup"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.835.0",
+    "@aws-sdk/s3-request-presigner": "^3.835.0",
     "bcrypt": "^5.1.0",
     "compression": "^1.8.0",
     "cors": "^2.8.5",

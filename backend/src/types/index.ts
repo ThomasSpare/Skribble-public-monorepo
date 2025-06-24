@@ -11,6 +11,10 @@ export interface User {
   profileImage?: string;
   createdAt: Date;
   updatedAt: Date;
+  referralCode?: string;
+  referredBy?: string;
+  referralCount?: number;
+  referralRewards?: number;
   trial_used?: boolean;
   trial_end_date?: Date;
   referral_code?: string;

@@ -3,6 +3,7 @@ import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, L
 import Image from 'next/image';
 import AnnotationSystem from './AnnotationSystem';
 import { exportForDAW, DAWExportFormat } from '@/lib/audioUtils';
+import TempoGridControls from './TempoGridControls';
 import { Music2, ChevronDown } from 'lucide-react';
 import VersionControl from './VersionControl';
 import { getImageUrl } from '@/utils/images';
@@ -132,6 +133,10 @@ export default function IntegratedWaveformPlayer({
   const [isTapTempoMode, setIsTapTempoMode] = useState(false);
   const [tapTimes, setTapTimes] = useState<number[]>([]);
   const [gridOffset, setGridOffset] = useState(0);
+
+  // Tempo grid and beat detection state
+  const [gridOffsetMs, setGridOffsetMs] = useState(0);
+  const [detectedBeats, setDetectedBeats] = useState<number[]>([]);
 
 // DAW export options
   const DAW_EXPORT_OPTIONS = [
@@ -685,65 +690,85 @@ const getTimeAtBeat = (beat: number) => {
 };
 
   // Draw grid lines
-  const drawGrid = (ctx: CanvasRenderingContext2D, width: number, height: number, visibleDuration: number) => {
-  if (gridMode === 'none') return;
-  
-  const gridSpacing = calculateGridSpacing(ctx, width, visibleDuration);
-  const visibleStartBeat = getBeatAtTime(scrollOffset) - (gridOffset / gridSpacing.beat);
-  
-  ctx.save();
-  
-  // Draw sub-beats if zoomed in enough
-  if (gridSpacing.beat > 40 && gridMode === 'beats') {
-    ctx.strokeStyle = GRID_COLORS.subbeat;
-    ctx.lineWidth = 1;
+  const drawGridEnhanced = (ctx: CanvasRenderingContext2D, width: number, height: number, visibleDuration: number) => {
+    if (gridMode === 'none') return;
     
-    for (let i = Math.floor(visibleStartBeat * 4); i < Math.ceil((visibleStartBeat + visibleDuration) * 4); i++) {
-      const x = (getTimeAtBeat(i / 4) - scrollOffset) * (width / visibleDuration);
-      if (x >= 0 && x <= width) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
+    const gridSpacing = calculateGridSpacing(ctx, width, visibleDuration);
+    const offsetSeconds = gridOffsetMs / 1000;
+    const visibleStartBeat = getBeatAtTime(scrollOffset - offsetSeconds);
+    
+    ctx.save();
+    
+    // Draw sub-beats if zoomed in enough
+    if (gridSpacing.beat > 40 && gridMode === 'beats') {
+      ctx.strokeStyle = GRID_COLORS.subbeat;
+      ctx.lineWidth = 1;
+      
+      for (let i = Math.floor(visibleStartBeat * 4); i < Math.ceil((visibleStartBeat + visibleDuration) * 4); i++) {
+        const beatTime = getTimeAtBeat(i / 4) + offsetSeconds;
+        const x = (beatTime - scrollOffset) * (width / visibleDuration);
+        if (x >= 0 && x <= width) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
       }
     }
-  }
-  
-  // Draw beat lines
-  if (gridMode === 'beats' || gridMode === 'bars') {
-    ctx.strokeStyle = GRID_COLORS.beat;
-    ctx.lineWidth = 1;
     
-    for (let i = Math.floor(visibleStartBeat); i < Math.ceil(visibleStartBeat + visibleDuration * (bpm / 60)); i++) {
-      const x = (getTimeAtBeat(i) - scrollOffset) * (width / visibleDuration);
-      if (x >= 0 && x <= width) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
+    // Draw beat lines
+    if (gridMode === 'beats' || gridMode === 'bars') {
+      ctx.strokeStyle = GRID_COLORS.beat;
+      ctx.lineWidth = 1;
+      
+      for (let i = Math.floor(visibleStartBeat); i < Math.ceil(visibleStartBeat + visibleDuration * (bpm / 60)); i++) {
+        const beatTime = getTimeAtBeat(i) + offsetSeconds;
+        const x = (beatTime - scrollOffset) * (width / visibleDuration);
+        if (x >= 0 && x <= width) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
       }
     }
-  }
-  
-  // Draw bar lines
-  if (gridMode === 'bars') {
-    ctx.strokeStyle = GRID_COLORS.bar;
-    ctx.lineWidth = 2;
     
-    const beatsPerBar = 4; // Assuming 4/4 time signature
-    for (let i = Math.floor(visibleStartBeat / beatsPerBar); i < Math.ceil((visibleStartBeat + visibleDuration * (bpm / 60)) / beatsPerBar); i++) {
-      const x = (getTimeAtBeat(i * beatsPerBar) - scrollOffset) * (width / visibleDuration);
-      if (x >= 0 && x <= width) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
+    // Draw bar lines
+    if (gridMode === 'bars') {
+      ctx.strokeStyle = GRID_COLORS.bar;
+      ctx.lineWidth = 2;
+      
+      const beatsPerBar = 4;
+      for (let i = Math.floor(visibleStartBeat / beatsPerBar); i < Math.ceil((visibleStartBeat + visibleDuration * (bpm / 60)) / beatsPerBar); i++) {
+        const beatTime = getTimeAtBeat(i * beatsPerBar) + offsetSeconds;
+        const x = (beatTime - scrollOffset) * (width / visibleDuration);
+        if (x >= 0 && x <= width) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
       }
     }
-  }
-  
-  ctx.restore();
-};
+    
+    // Draw detected beats as faint markers
+    if (detectedBeats.length > 0) {
+      ctx.strokeStyle = 'rgba(34, 197, 94, 0.3)'; // green for detected beats
+      ctx.lineWidth = 1;
+      
+      detectedBeats.forEach(beatTime => {
+        const x = (beatTime - scrollOffset) * (width / visibleDuration);
+        if (x >= 0 && x <= width) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+      });
+    }
+    
+    ctx.restore();
+  };
 
 const handleTapTempo = () => {
   const now = Date.now();
@@ -1029,8 +1054,8 @@ const drawWaveform = useCallback(() => {
   
   // Draw grid first (if enabled)
   if (gridMode !== 'none') {
-    drawGrid(ctx, width, height, visibleDuration);
-  }
+  drawGridEnhanced(ctx, width, height, visibleDuration);
+}
   
   // Draw waveform with performance optimization
   if (visibleWaveform.length > 0) {
@@ -1818,48 +1843,20 @@ const drawWaveform = useCallback(() => {
             />
           </div>
           {controlsSection}
-          <div className="flex items-center gap-2">
-              <a href={audioUrl} download={`${title}.wav`} 
-                className="flex items-center gap-2 px-3 py-2 text-skribble-azure hover:text-skribble-sky transition-colors border border-skribble-azure/30 hover:border-skribble-azure/60 rounded-lg">
-                <Download className="w-4 h-4" />
-                Download
-              </a>
-              
-              <div className="relative" ref={dawExportMenuRef}>
-                <button onClick={() => setShowDAWExportMenu(!showDAWExportMenu)}
-                        disabled={isExporting || annotations.length === 0}
-                        className={`flex items-center gap-2 px-3 py-2 transition-colors rounded-lg border ${
-                          annotations.length === 0 ? 'border-skribble-purple/30 text-skribble-purple/50 cursor-not-allowed'
-                            : 'border-skribble-azure/30 hover:border-skribble-azure/60 text-skribble-azure hover:text-skribble-sky'
-                        }`}>
-                  {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Music2 className="w-4 h-4" />}
-                  Download for DAW
-                  <ChevronUp className="w-3 h-3" />
-                </button>
-
-                {showDAWExportMenu && (
-                  <div className="absolute right-0 bottom-7 mr-2 mt-2 w-64 bg-skribble-plum/90 backdrop-blur-md rounded-xl border border-skribble-azure/20 shadow-lg z-50">
-                    <div className="p-3">
-                      <h4 className="text-sm font-medium text-skribble-sky mb-3">Export {annotations.length} annotations:</h4>
-                      <div className="space-y-1">
-                        {DAW_EXPORT_OPTIONS.map((option) => (
-                          <button key={option.value} onClick={() => handleDAWExport(option.value)}
-                                  className="w-full flex items-center gap-3 px-3 py-2 hover:bg-skribble-azure/20 rounded-lg transition-colors text-sm">
-                            <span>{option.icon}</span>
-                            <div className="text-left">
-                              <div className="text-skribble-sky font-medium">{option.label}</div>
-                              <div className="text-skribble-azure text-xs">{option.description}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-        </div>
-
+          <TempoGridControls
+              bpm={bpm}
+              gridMode={gridMode}
+              gridOffset={gridOffset}
+              currentTime={currentTime}
+              audioUrl={audioUrl}
+              userInteracted={userInteracted}
+              onBpmChange={setBpm}
+              onGridModeChange={setGridMode}
+              onGridOffsetChange={setGridOffset}
+              onGridOffsetMsChange={setGridOffsetMs}
+              onDetectedBeatsChange={setDetectedBeats}
+              className="ml-4 border-l border-skribble-azure/20 pl-4"
+            />
         <audio
           ref={audioRef}
           preload="metadata"
@@ -1913,6 +1910,9 @@ const drawWaveform = useCallback(() => {
           }
         `}</style>
       </div>
+      </div>
+
+      {/* DAW Export Menu */}
 
       {/* Annotation System */}
       {showAnnotations && !isViewOnly && currentUser && (
@@ -1928,7 +1928,8 @@ const drawWaveform = useCallback(() => {
           isPlaying={isPlaying}
           audioBuffer={null}
         />
-      )}
+      )} 
+      {/* Version Control */}
         {showVersionControl && (
           <div className="mt-6">
             <VersionControl

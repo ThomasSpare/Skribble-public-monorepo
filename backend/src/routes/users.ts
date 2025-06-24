@@ -420,14 +420,13 @@ router.get('/export-data', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-router.get('/notification-settings', authenticateToken, async (req: any, res: any) => {
+router.get('/notification-settings', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
-    const result = await pool.query(
-      'SELECT notification_settings FROM users WHERE id = $1',
-      [userId]
-    );
+    const result = await pool.query(`
+      SELECT notification_settings FROM users WHERE id = $1
+    `, [userId]);
 
     const settings = result.rows[0]?.notification_settings || {
       collaborations: true,
@@ -452,15 +451,16 @@ router.get('/notification-settings', authenticateToken, async (req: any, res: an
 });
 
 // Update notification settings
-router.put('/notification-settings', authenticateToken, async (req: any, res: any) => {
+router.put('/notification-settings', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const settings = req.body;
 
-    await pool.query(
-      'UPDATE users SET notification_settings = $1, updated_at = NOW() WHERE id = $2',
-      [JSON.stringify(settings), userId]
-    );
+    await pool.query(`
+      UPDATE users 
+      SET notification_settings = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(settings), userId]);
 
     res.json({
       success: true,
@@ -475,15 +475,15 @@ router.put('/notification-settings', authenticateToken, async (req: any, res: an
   }
 });
 
+
 // Get privacy settings
-router.get('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+router.get('/privacy-settings', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     
-    const result = await pool.query(
-      'SELECT privacy_settings FROM users WHERE id = $1',
-      [userId]
-    );
+    const result = await pool.query(`
+      SELECT privacy_settings FROM users WHERE id = $1
+    `, [userId]);
 
     const settings = result.rows[0]?.privacy_settings || {
       profileVisibility: 'public',
@@ -506,15 +506,16 @@ router.get('/privacy-settings', authenticateToken, async (req: any, res: any) =>
 });
 
 // Update privacy settings
-router.put('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+router.put('/privacy-settings', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const settings = req.body;
 
-    await pool.query(
-      'UPDATE users SET privacy_settings = $1, updated_at = NOW() WHERE id = $2',
-      [JSON.stringify(settings), userId]
-    );
+    await pool.query(`
+      UPDATE users 
+      SET privacy_settings = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(settings), userId]);
 
     res.json({
       success: true,
@@ -525,6 +526,208 @@ router.put('/privacy-settings', authenticateToken, async (req: any, res: any) =>
     res.status(500).json({
       success: false,
       error: { message: 'Failed to update privacy settings' }
+    });
+  }
+});
+
+router.post('/generate-referral-code', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+
+    // Check if user already has a referral code
+    const user = await pool.query(
+      'SELECT referral_code FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (user.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    let referralCode = user.rows[0].referral_code;
+    
+    // Generate new referral code if user doesn't have one
+    if (!referralCode) {
+      referralCode = `REF_${userId.slice(0, 8)}_${Date.now().toString(36).toUpperCase()}`;
+      
+      await pool.query(
+        'UPDATE users SET referral_code = $1, updated_at = NOW() WHERE id = $2',
+        [referralCode, userId]
+      );
+    }
+
+    res.json({
+      success: true,
+      data: { referralCode }
+    });
+
+  } catch (error) {
+    console.error('Generate referral code error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to generate referral code' }
+    });
+  }
+});
+
+// Get referral stats
+router.get('/referral-stats', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const query = `
+      SELECT 
+        u.referral_code,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' AND ref.subscription_status = 'active' THEN 1 END) as successful_referrals,
+        COUNT(CASE WHEN ref.subscription_tier = 'free' OR ref.subscription_status != 'active' THEN 1 END) as pending_referrals,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' AND ref.subscription_status = 'active' THEN 1 END) as rewards_earned
+      FROM users u
+      LEFT JOIN users ref ON ref.referred_by = u.referral_code
+      WHERE u.id = $1
+      GROUP BY u.referral_code
+    `;
+
+    const result = await pool.query(query, [userId]);
+    
+    const stats = result.rows[0] || {
+      referral_code: null,
+      successful_referrals: 0,
+      pending_referrals: 0,
+      rewards_earned: 0
+    };
+
+    // Convert string numbers to integers
+    stats.successful_referrals = parseInt(stats.successful_referrals) || 0;
+    stats.pending_referrals = parseInt(stats.pending_referrals) || 0;
+    stats.rewards_earned = parseInt(stats.rewards_earned) || 0;
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Get referral stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch referral stats' }
+    });
+  }
+});
+
+// Get referral history (bonus endpoint)
+router.get('/referral-history', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get user's referral code first
+    const userResult = await pool.query(
+      'SELECT referral_code FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    const referralCode = userResult.rows[0].referral_code;
+
+    if (!referralCode) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Get referred users
+    const referralsResult = await pool.query(`
+      SELECT 
+        id,
+        username,
+        email,
+        subscription_tier,
+        subscription_status,
+        created_at
+      FROM users 
+      WHERE referred_by = $1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [referralCode]);
+
+    const referrals = referralsResult.rows.map(row => ({
+      id: row.id,
+      username: row.username,
+      email: row.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Partially hide email for privacy
+      subscriptionTier: row.subscription_tier,
+      subscriptionStatus: row.subscription_status,
+      createdAt: row.created_at,
+      rewardEarned: row.subscription_tier !== 'free' && row.subscription_status === 'active'
+    }));
+
+    res.json({
+      success: true,
+      data: referrals
+    });
+
+  } catch (error) {
+    console.error('Get referral history error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch referral history' }
+    });
+  }
+});
+
+router.get('/export-data', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Gather all user data
+    const [userResult, projectsResult, collaborationsResult, annotationsResult] = await Promise.all([
+      pool.query('SELECT * FROM users WHERE id = $1', [userId]),
+      pool.query('SELECT * FROM projects WHERE creator_id = $1', [userId]),
+      pool.query(`
+        SELECT p.*, u.username as creator_name 
+        FROM project_collaborators pc
+        JOIN projects p ON pc.project_id = p.id
+        JOIN users u ON p.creator_id = u.id
+        WHERE pc.user_id = $1
+      `, [userId]),
+      pool.query(`
+        SELECT a.*, p.title as project_title
+        FROM annotations a
+        JOIN projects p ON a.project_id = p.id
+        WHERE a.user_id = $1
+      `, [userId])
+    ]);
+
+    const exportData = {
+      user: userResult.rows[0],
+      projects: projectsResult.rows,
+      collaborations: collaborationsResult.rows,
+      annotations: annotationsResult.rows,
+      exportDate: new Date().toISOString()
+    };
+
+    // Remove sensitive data
+    delete exportData.user.password;
+    delete exportData.user.stripe_customer_id;
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}.json"`);
+    res.json(exportData);
+
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to export data' }
     });
   }
 });

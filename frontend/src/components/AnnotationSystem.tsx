@@ -175,12 +175,8 @@ export default function AnnotationSystem({
     }
   };
 
-  // New callback handlers for SoundMonitor
-  const handleTempoDetected = (bpm: number) => {
-    setDetectedTempo(bpm);
-  };
 
-  const handleKeyDetected = (key: string, confidence: number) => {
+  const handleKeyDetected = (key: string) => {
     setDetectedKey(key);
   };
 
@@ -385,13 +381,11 @@ export default function AnnotationSystem({
             </div>
             
             <SoundMonitor
-              analyser={analyser ?? null}
+              analyser={analyser}
               isPlaying={isPlaying}
-              currentTime={currentTime}
-              audioBuffer={audioBuffer}
-              onTempoDetected={handleTempoDetected}
               onKeyDetected={handleKeyDetected}
               onVolumeWarning={handleVolumeWarning}
+              currentTime={currentTime}
             />
             
             {/* Quick Audio Stats */}

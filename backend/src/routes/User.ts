@@ -15,6 +15,7 @@ interface CreateUserData {
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: 'free' | 'indie' | 'producer' | 'studio';
   profileImage?: string;
+  stripeCustomerId?: string;
 }
 
 interface UpdateUserData {
@@ -26,18 +27,22 @@ interface UpdateUserData {
 }
 
 export class UserModel {
-  // Create a new user
+  // Create a new user (with mandatory subscription for non-free tiers)
   static async create(userData: CreateUserData): Promise<User> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     const id = uuidv4();
     const now = new Date();
 
     const query = `
       INSERT INTO users (
         id, email, username, password, role, subscription_tier, 
-        profile_image, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        profile_image, stripe_customer_id, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, email, username, role, subscription_tier, 
-                profile_image, created_at, updated_at
+                profile_image, stripe_customer_id, created_at, updated_at
     `;
 
     const values = [
@@ -48,6 +53,7 @@ export class UserModel {
       userData.role,
       userData.subscriptionTier,
       userData.profileImage || null,
+      userData.stripeCustomerId || null,
       now,
       now
     ];
@@ -74,8 +80,9 @@ export class UserModel {
   // Find user by ID
   static async findById(id: string): Promise<User | null> {
     const query = `
-      SELECT id, email, username, role, subscription_tier, 
-             profile_image, stripe_customer_id, created_at, updated_at
+      SELECT id, email, username, role, subscription_tier, subscription_status,
+            profile_image, stripe_customer_id, referral_code, referred_by, 
+            created_at, updated_at
       FROM users WHERE id = $1
     `;
 
@@ -90,8 +97,9 @@ export class UserModel {
   // Find user by email (for authentication)
   static async findByEmail(email: string): Promise<(User & { password: string }) | null> {
     const query = `
-      SELECT id, email, username, password, role, subscription_tier, 
-             profile_image, stripe_customer_id, created_at, updated_at
+      SELECT id, email, username, password, role, subscription_tier, subscription_status,
+            profile_image, stripe_customer_id, referral_code, referred_by,
+            created_at, updated_at
       FROM users WHERE email = $1
     `;
 
@@ -112,8 +120,9 @@ export class UserModel {
   // Find user by username
   static async findByUsername(username: string): Promise<User | null> {
     const query = `
-      SELECT id, email, username, role, subscription_tier, 
-             profile_image, stripe_customer_id, created_at, updated_at
+      SELECT id, email, username, role, subscription_tier, subscription_status,
+            profile_image, stripe_customer_id, referral_code, referred_by,
+            created_at, updated_at
       FROM users WHERE username = $1
     `;
 
@@ -127,6 +136,10 @@ export class UserModel {
 
   // Update user
   static async update(id: string, updateData: UpdateUserData): Promise<User | null> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     const fields = [];
     const values = [];
     let paramCount = 1;
@@ -164,30 +177,26 @@ export class UserModel {
     try {
       const result = await pool.query(query, values);
       return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        const pgError = error as PostgresError;
-        if (pgError.code === '23505') { // Unique violation
-          if (pgError.constraint === 'users_username_key') {
-            throw new Error('Username already taken');
-          }
-        }
-      }
+    } catch (error) {
       throw error;
     }
   }
 
-  // Delete user (soft delete by updating status)
+  // Delete user (soft delete)
   static async delete(id: string): Promise<boolean> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     const query = `
       UPDATE users 
-      SET updated_at = $1, email = email || '_deleted_' || $2
-      WHERE id = $3
+      SET email = email || '_deleted_' || $2, updated_at = $3
+      WHERE id = $1
     `;
 
     try {
-      const result = await pool.query(query, [new Date(), Date.now(), id]);
-      return result.rowCount ? result.rowCount > 0 : false;
+      const result = await pool.query(query, [id, Date.now(), new Date()]);
+      return result.rowCount > 0;
     } catch (error) {
       throw error;
     }
@@ -195,6 +204,10 @@ export class UserModel {
 
   // Get user statistics
   static async getStats(id: string) {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     const query = `
       SELECT 
         (SELECT COUNT(*) FROM projects WHERE creator_id = $1) as total_projects,
@@ -213,6 +226,10 @@ export class UserModel {
 
   // Search users (for collaboration invites)
   static async search(searchTerm: string, limit: number = 10): Promise<Partial<User>[]> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     const query = `
       SELECT id, username, email, role, profile_image
       FROM users 
@@ -242,6 +259,10 @@ export class UserModel {
     subscriptionTier: User['subscriptionTier'], 
     stripeCustomerId?: string
   ): Promise<User | null> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     const query = `
       UPDATE users 
       SET subscription_tier = $1, stripe_customer_id = $2, updated_at = $3
@@ -258,8 +279,67 @@ export class UserModel {
     }
   }
 
+  // Generate referral code
+  static async generateReferralCode(userId: string): Promise<string> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
+    // Generate a unique referral code
+    const referralCode = `REF_${userId.slice(0, 8)}_${Date.now().toString(36).toUpperCase()}`;
+
+    const query = `
+      UPDATE users 
+      SET referral_code = $1, updated_at = $2
+      WHERE id = $3
+      RETURNING referral_code
+    `;
+
+    try {
+      const result = await pool.query(query, [referralCode, new Date(), userId]);
+      return result.rows[0].referral_code;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get referral stats
+  static async getReferralStats(userId: string) {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
+    const query = `
+      SELECT 
+        u.referral_code,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' THEN 1 END) as successful_referrals,
+        COUNT(CASE WHEN ref.subscription_tier = 'free' THEN 1 END) as pending_referrals,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' THEN 1 END) as rewards_earned
+      FROM users u
+      LEFT JOIN users ref ON ref.referred_by = u.referral_code
+      WHERE u.id = $1
+      GROUP BY u.referral_code
+    `;
+
+    try {
+      const result = await pool.query(query, [userId]);
+      return result.rows[0] || {
+        referral_code: null,
+        successful_referrals: 0,
+        pending_referrals: 0,
+        rewards_earned: 0
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
   // Check if username is available
   static async isUsernameAvailable(username: string, excludeUserId?: string): Promise<boolean> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     let query = 'SELECT id FROM users WHERE username = $1';
     const values = [username];
 
@@ -278,6 +358,10 @@ export class UserModel {
 
   // Check if email is available
   static async isEmailAvailable(email: string, excludeUserId?: string): Promise<boolean> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
     let query = 'SELECT id FROM users WHERE email = $1';
     const values = [email];
 
@@ -303,6 +387,9 @@ export class UserModel {
       role: row.role,
       subscriptionTier: row.subscription_tier,
       profileImage: row.profile_image,
+      stripe_customer_id: row.stripe_customer_id,
+      referralCode: row.referral_code,
+      referredBy: row.referred_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
@@ -320,3 +407,9 @@ export const findUserById = (id: string) => UserModel.findById(id);
 export const findUserByEmail = (email: string) => UserModel.findByEmail(email);
 export const findUserByUsername = (username: string) => UserModel.findByUsername(username);
 export const updateUser = (id: string, updateData: UpdateUserData) => UserModel.update(id, updateData);
+export const deleteUser = (id: string) => UserModel.delete(id);
+export const getUserStats = (id: string) => UserModel.getStats(id);
+export const searchUsers = (searchTerm: string, limit: number = 10) => UserModel.search(searchTerm, limit);
+export const updateUserSubscription = (id: string, subscriptionTier: User['subscriptionTier'], stripeCustomerId?: string) =>
+  UserModel.updateSubscription(id, subscriptionTier, stripeCustomerId);
+export const generateReferralCode = (userId: string) => UserModel.generateReferralCode(userId);

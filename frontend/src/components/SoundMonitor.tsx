@@ -1,28 +1,15 @@
-// Enhanced SoundMonitor.tsx with better gain control
+// SoundMonitor.tsx - Improved version with better key detection and no tempo detection
+'use client';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Volume2, VolumeX, AlertTriangle, Activity, Music, Settings, Plus, Minus } from 'lucide-react';
+import { Volume2, VolumeX, Activity, Music, Eye, EyeOff } from 'lucide-react';
 
 interface SoundMonitorProps {
-  analyser: AnalyserNode | null;
-  isPlaying: boolean;
-  currentTime: number;
-  audioBuffer?: AudioBuffer | null;
-  onTempoDetected?: (bpm: number) => void;
+  analyser?: AnalyserNode | null;
+  isPlaying?: boolean;
   onKeyDetected?: (key: string, confidence: number) => void;
   onVolumeWarning?: (channel: 'L' | 'R', level: number) => void;
-}
-
-interface VolumeLevel {
-  L: number;
-  R: number;
-  peak: number;
-  rms: number;
-}
-
-interface TempoAnalysis {
-  bpm: number;
-  confidence: number;
-  lastUpdate: number;
+  audioBuffer?: AudioBuffer | null;
+  currentTime?: number;
 }
 
 interface KeyAnalysis {
@@ -31,541 +18,559 @@ interface KeyAnalysis {
   lastUpdate: number;
 }
 
-const VOLUME_WARNING_THRESHOLD = 0.95; // 95% of max volume
-const TEMPO_UPDATE_INTERVAL = 2000; // Update tempo every 2 seconds
-const KEY_UPDATE_INTERVAL = 5000; // Update key every 5 seconds
+interface StereoLevels {
+  L: { rms: number; peak: number };
+  R: { rms: number; peak: number };
+}
+
+// Enhanced note frequencies covering more octaves for better detection
+const noteFrequencies: { [key: string]: number } = {
+  'C': 261.63,
+  'C#': 277.18,
+  'D': 293.66,
+  'D#': 311.13,
+  'E': 329.63,
+  'F': 349.23,
+  'F#': 369.99,
+  'G': 392.00,
+  'G#': 415.30,
+  'A': 440.00,
+  'A#': 466.16,
+  'B': 493.88
+};
+
+// Add multiple octaves for better detection
+const extendedNoteFrequencies: { [key: string]: number[] } = {};
+Object.entries(noteFrequencies).forEach(([note, baseFreq]) => {
+  extendedNoteFrequencies[note] = [
+    baseFreq / 4,    // Two octaves down
+    baseFreq / 2,    // One octave down  
+    baseFreq,        // Base frequency
+    baseFreq * 2,    // One octave up
+    baseFreq * 4     // Two octaves up
+  ];
+});
 
 export default function SoundMonitor({
   analyser,
   isPlaying,
-  currentTime,
-  audioBuffer,
-  onTempoDetected,
   onKeyDetected,
-  onVolumeWarning
+  onVolumeWarning,
+  currentTime = 0
 }: SoundMonitorProps) {
-  const [volumeLevels, setVolumeLevels] = useState<VolumeLevel>({ L: 0, R: 0, peak: 0, rms: 0 });
-  const [tempo, setTempo] = useState<TempoAnalysis>({ bpm: 0, confidence: 0, lastUpdate: 0 });
-  const [detectedKey, setDetectedKey] = useState<KeyAnalysis>({ key: '', confidence: 0, lastUpdate: 0 });
-  const [volumeWarnings, setVolumeWarnings] = useState<{ L: boolean; R: boolean }>({ L: false, R: false });
-  
-  // New gain control states
-  const [meterGain, setMeterGain] = useState(1.0); // Default 3x gain
-  const [meterMode, setMeterMode] = useState<'rms' | 'peak' | 'both'>('both');
-  const [showSettings, setShowSettings] = useState(false);
+  // State
+  const [isVisible, setIsVisible] = useState(true); 
+  const [meterGain, setMeterGain] = useState(1);
+  const [meterMode, setMeterMode] = useState<'peak' | 'rms' | 'both'>('both');
   const [holdPeaks, setHoldPeaks] = useState(true);
-  
+  const [volumeWarnings, setVolumeWarnings] = useState({ L: false, R: false });
+  const [detectedKey, setDetectedKey] = useState<KeyAnalysis>({ key: '', confidence: 0, lastUpdate: 0 });
+  const [currentLevels, setCurrentLevels] = useState<StereoLevels>({ 
+    L: { rms: 0, peak: 0 }, 
+    R: { rms: 0, peak: 0 } 
+  });
+  const [peakHolds, setPeakHolds] = useState({ L: 0, R: 0 });
+
+  // Refs for analysis
   const animationFrameRef = useRef<number | null>(null);
-  const peakHistoryRef = useRef<number[]>([]);
-  const frequencyHistoryRef = useRef<number[][]>([]);
-  const lastTempoUpdateRef = useRef(0);
-  const lastKeyUpdateRef = useRef(0);
-  const peakHoldRef = useRef<{ L: number; R: number; decay: number }>({ L: 0, R: 0, decay: 0 });
+  const frequencyHistoryRef = useRef<Uint8Array[]>([]);
+  const keyHistoryRef = useRef<{ key: string; confidence: number; timestamp: number }[]>([]);
+  const lastKeyUpdateRef = useRef<number>(0);
+  const peakHoldTimeoutRef = useRef<{ L?: NodeJS.Timeout; R?: NodeJS.Timeout }>({});
 
-  // Note frequencies for key detection (equal temperament, A4 = 440Hz)
-  const noteFrequencies = {
-    'C': 261.63, 'C#': 277.18, 'D': 293.66, 'D#': 311.13,
-    'E': 329.63, 'F': 349.23, 'F#': 369.99, 'G': 392.00,
-    'G#': 415.30, 'A': 440.00, 'A#': 466.16, 'B': 493.88
-  };
+  // Constants
+  const KEY_UPDATE_INTERVAL = 250; // Update every 250ms (more frequent)
+  const VOLUME_WARNING_THRESHOLD = 0.95;
 
-  // Enhanced RMS calculation with gain
-  const calculateRMS = (data: Uint8Array): number => {
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      const normalized = (data[i] - 128) / 128;
-      sum += normalized * normalized;
+  // Start/stop analysis based on playback state
+  useEffect(() => {
+    if (isPlaying && analyser) {
+      startAnalysis();
+    } else {
+      stopAnalysis();
     }
-    return Math.sqrt(sum / data.length);
-  };
 
-  // Enhanced peak calculation
-  const calculatePeak = (data: Uint8Array): number => {
-    let peak = 0;
-    for (let i = 0; i < data.length; i++) {
-      const normalized = Math.abs((data[i] - 128) / 128);
-      peak = Math.max(peak, normalized);
-    }
-    return peak;
-  };
-
-  // Calculate both frequency-based L/R and time-domain L/R
-  const calculateStereoLevels = (timeData: Uint8Array, frequencyData: Uint8Array) => {
-    const halfLength = Math.floor(timeData.length / 2);
-    
-    // Method 1: Split time domain data (simulated stereo)
-    const leftTime = timeData.slice(0, halfLength);
-    const rightTime = timeData.slice(halfLength);
-    
-    // Method 2: Split frequency domain (low freq = left, high freq = right)
-    const leftFreq = frequencyData.slice(0, halfLength);
-    const rightFreq = frequencyData.slice(halfLength);
-    
-    // Calculate levels for both methods and average them
-    const leftRMS = (calculateRMS(leftTime) + calculateRMS(leftFreq)) / 2;
-    const rightRMS = (calculateRMS(rightTime) + calculateRMS(rightFreq)) / 2;
-    
-    const leftPeak = (calculatePeak(leftTime) + calculatePeak(leftFreq)) / 2;
-    const rightPeak = (calculatePeak(rightTime) + calculatePeak(rightFreq)) / 2;
-    
-    return {
-      L: { rms: leftRMS, peak: leftPeak },
-      R: { rms: rightRMS, peak: rightPeak }
+    return () => {
+      stopAnalysis();
+      // Cleanup peak hold timeouts
+      Object.values(peakHoldTimeoutRef.current).forEach(timeout => {
+        if (timeout) clearTimeout(timeout);
+      });
     };
-  };
+  }, [isPlaying, analyser]);
 
-  // Analyze real-time audio data with enhanced gain control
-  const analyzeAudio = useCallback(() => {
-    if (!analyser || !isPlaying) return;
+  // Component to render segmented meter like a mixing board
+  const SegmentedMeter = ({ level, peakHold, isWarning, channel }: { 
+  level: { rms: number; peak: number }, 
+  peakHold: number, 
+  isWarning: boolean,
+  channel: 'L' | 'R' 
+}) => {
+  const segments = 20;
+  const segmentHeight = 3;
+  const segmentGap = 1;
+  
+  // Calculate active segments based on meter mode
+  let activeLevel = 0;
+  switch (meterMode) {
+    case 'rms':
+      activeLevel = level.rms * meterGain;
+      break;
+    case 'peak':
+      activeLevel = level.peak * meterGain;
+      break;
+    case 'both':
+    default:
+      activeLevel = Math.max(level.rms, level.peak) * meterGain;
+      break;
+  }
+  
+  const activeSegments = Math.floor(Math.min(activeLevel * segments, segments));
+  const peakSegment = Math.floor(Math.min(peakHold * segments, segments));
 
-    const bufferLength = analyser.frequencyBinCount;
-    const frequencyData = new Uint8Array(bufferLength);
-    const timeData = new Uint8Array(bufferLength);
-    
-    analyser.getByteFrequencyData(frequencyData);
-    analyser.getByteTimeDomainData(timeData);
+  return (
+    <div className="flex flex-col-reverse space-y-reverse space-y-1 h-20">
+      {Array.from({ length: segments }, (_, i) => {
+        const isActive = i < activeSegments;
+        const isPeakHold = holdPeaks && i === peakSegment - 1 && peakSegment > activeSegments;
+        const isRedZone = i >= segments * 0.8;
+        const isYellowZone = i >= segments * 0.6;
+        
+        let colorClass = 'bg-gray-700'; // Default inactive
+        
+        if (isActive || isPeakHold) {
+          if (isRedZone) {
+            colorClass = isWarning ? 'bg-red-500 animate-pulse' : 'bg-red-400';
+          } else if (isYellowZone) {
+            colorClass = 'bg-yellow-400';
+          } else {
+            colorClass = 'bg-green-400';
+          }
+        }
 
-    // Calculate enhanced stereo levels
-    const stereoLevels = calculateStereoLevels(timeData, frequencyData);
-    
-    // Apply gain and calculate final levels based on mode
-    let leftLevel, rightLevel;
-    
-    switch (meterMode) {
-      case 'rms':
-        leftLevel = Math.min(stereoLevels.L.rms * meterGain, 1.0);
-        rightLevel = Math.min(stereoLevels.R.rms * meterGain, 1.0);
-        break;
-      case 'peak':
-        leftLevel = Math.min(stereoLevels.L.peak * meterGain, 1.0);
-        rightLevel = Math.min(stereoLevels.R.peak * meterGain, 1.0);
-        break;
-      case 'both':
-      default:
-        // Combine RMS and peak (weighted average)
-        leftLevel = Math.min(((stereoLevels.L.rms * 0.7) + (stereoLevels.L.peak * 0.3)) * meterGain, 1.0);
-        rightLevel = Math.min(((stereoLevels.R.rms * 0.7) + (stereoLevels.R.peak * 0.3)) * meterGain, 1.0);
-        break;
-    }
+        // Peak hold gets special styling
+        if (isPeakHold && !isActive) {
+          colorClass += ' opacity-80';
+        }
 
-    // Peak hold logic
-    if (holdPeaks) {
-      if (leftLevel > peakHoldRef.current.L) {
-        peakHoldRef.current.L = leftLevel;
-        peakHoldRef.current.decay = 0;
-      } else {
-        peakHoldRef.current.decay += 0.01;
-        peakHoldRef.current.L = Math.max(0, peakHoldRef.current.L - peakHoldRef.current.decay);
+        return (
+          <div
+            key={i}
+            className={`w-6 h-1 ${colorClass} transition-all duration-100 ${
+              isActive || isPeakHold ? 'opacity-100' : 'opacity-20'
+            } ${isPeakHold ? 'shadow-sm' : ''}`}
+            style={{ 
+              height: `${segmentHeight}px`,
+              marginBottom: `${segmentGap}px`
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
+  const startAnalysis = useCallback(() => {
+    if (animationFrameRef.current) return; // Already running
+
+    const analyzeAudio = () => {
+      if (!analyser) return;
+
+      // Make meters more responsive
+      analyser.smoothingTimeConstant = 0.2; // More responsive than default 0.8
+
+      // Get frequency and time domain data
+      const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+      const timeData = new Uint8Array(analyser.fftSize);
+      
+      analyser.getByteFrequencyData(frequencyData);
+      analyser.getByteTimeDomainData(timeData);
+
+      // Calculate volume levels (now showing identical L/R for accurate representation)
+      const stereoLevels = calculateStereoLevels(timeData);
+      setCurrentLevels(stereoLevels);
+      
+      // Update peak holds
+      if (holdPeaks) {
+        setPeakHolds(prev => {
+          const newHolds = { ...prev };
+          
+          if (stereoLevels.L.peak > prev.L) {
+            newHolds.L = stereoLevels.L.peak;
+            if (peakHoldTimeoutRef.current.L) clearTimeout(peakHoldTimeoutRef.current.L);
+            peakHoldTimeoutRef.current.L = setTimeout(() => {
+              setPeakHolds(p => ({ ...p, L: 0 }));
+            }, 1500);
+          }
+          
+          if (stereoLevels.R.peak > prev.R) {
+            newHolds.R = stereoLevels.R.peak;
+            if (peakHoldTimeoutRef.current.R) clearTimeout(peakHoldTimeoutRef.current.R);
+            peakHoldTimeoutRef.current.R = setTimeout(() => {
+              setPeakHolds(p => ({ ...p, R: 0 }));
+            }, 1500);
+          }
+          
+          return newHolds;
+        });
+      }
+      
+      // Check for volume warnings
+      const newWarnings = {
+        L: stereoLevels.L.peak > VOLUME_WARNING_THRESHOLD,
+        R: stereoLevels.R.peak > VOLUME_WARNING_THRESHOLD
+      };
+
+      if (newWarnings.L && !volumeWarnings.L) {
+        onVolumeWarning?.('L', stereoLevels.L.peak);
+      }
+      if (newWarnings.R && !volumeWarnings.R) {
+        onVolumeWarning?.('R', stereoLevels.R.peak);
       }
 
-      if (rightLevel > peakHoldRef.current.R) {
-        peakHoldRef.current.R = rightLevel;
-      } else {
-        peakHoldRef.current.R = Math.max(0, peakHoldRef.current.R - peakHoldRef.current.decay);
+      setVolumeWarnings(newWarnings);
+
+      // Store frequency history for key analysis
+      frequencyHistoryRef.current.push(Array.from(frequencyData));
+
+      // Keep only recent data (last 5 seconds worth for more responsive detection)
+      const maxHistoryLength = 60 * 5; // assuming 60fps
+      if (frequencyHistoryRef.current.length > maxHistoryLength) {
+        frequencyHistoryRef.current = frequencyHistoryRef.current.slice(-maxHistoryLength);
       }
-    }
 
-    // Calculate overall peak and RMS
-    const overallPeak = Math.max(stereoLevels.L.peak, stereoLevels.R.peak);
-    const overallRMS = (stereoLevels.L.rms + stereoLevels.R.rms) / 2;
+      // Analyze key more frequently
+      const now = Date.now();
+      if (now - lastKeyUpdateRef.current > KEY_UPDATE_INTERVAL) {
+        analyzeKeyImproved(frequencyData);
+        lastKeyUpdateRef.current = now;
+      }
 
-    const newVolumeLevels: VolumeLevel = {
-      L: leftLevel,
-      R: rightLevel,
-      peak: overallPeak * meterGain,
-      rms: overallRMS * meterGain
+      // Continue animation loop
+      animationFrameRef.current = requestAnimationFrame(analyzeAudio);
     };
 
-    setVolumeLevels(newVolumeLevels);
-
-    // Check for volume warnings (use original levels without gain for warnings)
-    const newWarnings = {
-      L: stereoLevels.L.peak > VOLUME_WARNING_THRESHOLD,
-      R: stereoLevels.R.peak > VOLUME_WARNING_THRESHOLD
-    };
-
-    if (newWarnings.L && !volumeWarnings.L) {
-      onVolumeWarning?.('L', stereoLevels.L.peak);
-    }
-    if (newWarnings.R && !volumeWarnings.R) {
-      onVolumeWarning?.('R', stereoLevels.R.peak);
-    }
-
-    setVolumeWarnings(newWarnings);
-
-    // Store history for tempo and key analysis (rest of the analysis remains the same)
-    peakHistoryRef.current.push(overallPeak);
-    frequencyHistoryRef.current.push(Array.from(frequencyData));
-
-    // Keep only recent data (last 10 seconds worth)
-    const maxHistoryLength = 60 * 10; // assuming 60fps
-    if (peakHistoryRef.current.length > maxHistoryLength) {
-      peakHistoryRef.current = peakHistoryRef.current.slice(-maxHistoryLength);
-    }
-    if (frequencyHistoryRef.current.length > maxHistoryLength) {
-      frequencyHistoryRef.current = frequencyHistoryRef.current.slice(-maxHistoryLength);
-    }
-
-    // Analyze tempo periodically
-    const now = Date.now();
-    if (now - lastTempoUpdateRef.current > TEMPO_UPDATE_INTERVAL) {
-      analyzeTempo();
-      lastTempoUpdateRef.current = now;
-    }
-
-    // Analyze key periodically
-    if (now - lastKeyUpdateRef.current > KEY_UPDATE_INTERVAL) {
-      analyzeKey(frequencyData);
-      lastKeyUpdateRef.current = now;
-    }
-
-    // Continue animation loop
-    animationFrameRef.current = requestAnimationFrame(analyzeAudio);
+    analyzeAudio();
   }, [analyser, isPlaying, meterGain, meterMode, holdPeaks, volumeWarnings, onVolumeWarning]);
 
-  // Enhanced tempo detection focusing on kick frequencies (below 100Hz)
-  const analyzeTempo = () => {
-    if (frequencyHistoryRef.current.length < 120) return; // Need at least 2 seconds of data
+  const stopAnalysis = useCallback(() => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  }, []);
 
-    // Extract kick drum frequencies (20Hz - 100Hz) from frequency data
-    const kickFrequencies: number[] = [];
+  const calculateStereoLevels = (timeData: Uint8Array): StereoLevels => {
+    // Simplified approach: For most music, both channels have similar content
+    // We'll use the main analyser data and apply slight variations for visual distinction
+    // This is more accurate than arbitrarily splitting the buffer
     
-    if (analyser) {
-      const sampleRate = analyser.context.sampleRate;
-      const nyquist = sampleRate / 2;
-      const binSize = nyquist / analyser.frequencyBinCount;
-      
-      const kickStartBin = Math.round(20 / binSize); // 20Hz
-      const kickEndBin = Math.round(100 / binSize); // 100Hz
-      
-      // Analyze kick frequencies from recent history
-      frequencyHistoryRef.current.slice(-120).forEach(frequencyData => {
-        let kickEnergy = 0;
-        for (let i = kickStartBin; i < kickEndBin && i < frequencyData.length; i++) {
-          kickEnergy += frequencyData[i];
-        }
-        kickFrequencies.push(kickEnergy / (kickEndBin - kickStartBin)); // Average kick energy
-      });
-    } else {
-      // Fallback to peak detection if no analyser
-      kickFrequencies.push(...peakHistoryRef.current.slice(-120));
+    let sum = 0, peak = 0;
+    const length = timeData.length;
+
+    // Calculate overall levels from the time domain data
+    for (let i = 0; i < length; i++) {
+      const sample = (timeData[i] - 128) / 128;
+      const abs = Math.abs(sample);
+      sum += abs * abs;
+      peak = Math.max(peak, abs);
     }
 
-    if (kickFrequencies.length < 60) return;
+    const rms = Math.sqrt(sum / length) * meterGain;
+    const peakLevel = peak * meterGain;
 
-    // Find kick hits (peaks in kick frequency range)
-    const threshold = Math.max(...kickFrequencies) * 0.7; // Higher threshold for kick detection
-    const kickHits: number[] = [];
-    
-    // Enhanced peak detection with minimum spacing
-    const minSpacing = 15; // Minimum frames between kicks (prevents double detection)
-    let lastPeakIndex = -minSpacing;
-    
-    for (let i = 2; i < kickFrequencies.length - 2; i++) {
-      const current = kickFrequencies[i];
-      const prev1 = kickFrequencies[i - 1];
-      const prev2 = kickFrequencies[i - 2];
-      const next1 = kickFrequencies[i + 1];
-      const next2 = kickFrequencies[i + 2];
-      
-      // More sophisticated peak detection
-      if (current > threshold && 
-          current > prev1 && current > prev2 &&
-          current > next1 && current > next2 &&
-          i - lastPeakIndex >= minSpacing) {
-        kickHits.push(i);
-        lastPeakIndex = i;
-      }
-    }
-
-    if (kickHits.length < 3) return; // Need at least 3 kicks to establish tempo
-
-    // Calculate intervals between kick hits
-    const intervals: number[] = [];
-    for (let i = 1; i < kickHits.length; i++) {
-      const interval = (kickHits[i] - kickHits[i - 1]) / 60; // Convert to seconds (assuming 60fps)
-      if (interval > 0.25 && interval < 3.0) { // Reasonable tempo range (20-240 BPM)
-        intervals.push(60 / interval); // Convert to BPM
-      }
-    }
-
-    if (intervals.length > 0) {
-      // Advanced tempo clustering
-      const bpm = findMostCommonTempo(intervals);
-      const confidence = calculateTempoConfidence(intervals, bpm);
-      
-      // Only update if confidence is reasonable
-      if (confidence > 0.3) {
-        const newTempo: TempoAnalysis = {
-          bpm: Math.round(bpm),
-          confidence,
-          lastUpdate: Date.now()
-        };
-
-        setTempo(newTempo);
-        onTempoDetected?.(newTempo.bpm);
-      }
-    }
+    // For stereo display, we'll show the same levels for both channels
+    // since we can't properly separate them without access to the audio source
+    // This is more accurate than showing fake differences
+    return {
+      L: { rms, peak: peakLevel },
+      R: { rms, peak: peakLevel }
+    };
   };
 
-  const findMostCommonTempo = (intervals: number[]): number => {
-    // Improved tempo clustering with tighter grouping
-    const histogram: { [key: number]: number } = {};
-    
-    intervals.forEach(bpm => {
-      // Group by 2 BPM instead of 5 for more precision
-      const rounded = Math.round(bpm / 2) * 2;
-      histogram[rounded] = (histogram[rounded] || 0) + 1;
-    });
-
-    let maxCount = 0;
-    let mostCommon = 120;
-
-    Object.entries(histogram).forEach(([bpm, count]) => {
-      if (count > maxCount) {
-        maxCount = count;
-        mostCommon = parseInt(bpm);
-      }
-    });
-
-    return mostCommon;
-  };
-
-  const calculateTempoConfidence = (intervals: number[], targetBpm: number): number => {
-    if (intervals.length === 0) return 0;
-    
-    // Tighter tolerance for kick-based detection
-    const tolerance = 6; // ±6 BPM tolerance
-    const matchingIntervals = intervals.filter(bpm => 
-      Math.abs(bpm - targetBpm) <= tolerance
-    );
-
-    const confidence = matchingIntervals.length / intervals.length;
-    
-    // Bonus confidence for common musical tempos
-    const musicalTempos = [60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180];
-    const isMusicalTempo = musicalTempos.some(tempo => Math.abs(targetBpm - tempo) <= 5);
-    
-    return isMusicalTempo ? Math.min(confidence * 1.2, 1.0) : confidence;
-  };
-
-  const analyzeKey = (frequencyData: Uint8Array) => {
+  // Improved key detection with multiple techniques
+  const analyzeKeyImproved = (frequencyData: Uint8Array) => {
     if (!analyser) return;
 
     const sampleRate = analyser.context.sampleRate;
     const nyquist = sampleRate / 2;
     const binSize = nyquist / frequencyData.length;
     
+    // Method 1: Enhanced harmonic analysis with multiple octaves
     const noteEnergies: { [key: string]: number } = {};
     
-    Object.entries(noteFrequencies).forEach(([note, freq]) => {
-      const binIndex = Math.round(freq / binSize);
-      if (binIndex < frequencyData.length) {
-        let energy = 0;
-        const harmonics = [1, 2, 3, 4];
-        
-        harmonics.forEach(harmonic => {
-          const harmonicIndex = Math.round((freq * harmonic) / binSize);
-          if (harmonicIndex < frequencyData.length) {
-            energy += frequencyData[harmonicIndex] / (harmonic * harmonic);
+    Object.entries(extendedNoteFrequencies).forEach(([note, frequencies]) => {
+      let totalEnergy = 0;
+      let harmonicCount = 0;
+      
+      frequencies.forEach(freq => {
+        if (freq < nyquist) {
+          const binIndex = Math.round(freq / binSize);
+          if (binIndex < frequencyData.length) {
+            // Include fundamental + harmonics with decreasing weight
+            const harmonics = [1, 2, 3, 4, 5, 6]; // More harmonics
+            
+            harmonics.forEach((harmonic, idx) => {
+              const harmonicIndex = Math.round((freq * harmonic) / binSize);
+              if (harmonicIndex < frequencyData.length) {
+                const weight = 1 / (harmonic * 0.5); // Less aggressive decay
+                totalEnergy += (frequencyData[harmonicIndex] * weight);
+                harmonicCount++;
+              }
+            });
           }
-        });
-        
-        noteEnergies[note] = energy;
-      }
+        }
+      });
+      
+      noteEnergies[note] = harmonicCount > 0 ? totalEnergy / harmonicCount : 0;
     });
 
+    // Method 2: Chord detection - look for common chord patterns
+    const chordBonus: { [key: string]: number } = {};
+    
+    // Major and minor triads
+    const chordPatterns = {
+      'C': ['C', 'E', 'G'],    // C major
+      'C#': ['C#', 'F', 'G#'],  // C# major
+      'D': ['D', 'F#', 'A'],    // D major
+      'D#': ['D#', 'G', 'A#'],  // D# major
+      'E': ['E', 'G#', 'B'],    // E major
+      'F': ['F', 'A', 'C'],     // F major
+      'F#': ['F#', 'A#', 'C#'], // F# major
+      'G': ['G', 'B', 'D'],     // G major
+      'G#': ['G#', 'C', 'D#'],  // G# major
+      'A': ['A', 'C#', 'E'],    // A major
+      'A#': ['A#', 'D', 'F'],   // A# major
+      'B': ['B', 'D#', 'F#']    // B major
+    };
+
+    Object.entries(chordPatterns).forEach(([root, chordNotes]) => {
+      let chordStrength = 0;
+      chordNotes.forEach(note => {
+        chordStrength += noteEnergies[note] || 0;
+      });
+      chordBonus[root] = chordStrength / chordNotes.length;
+    });
+
+    // Combine individual note detection with chord detection
+    const combinedScores: { [key: string]: number } = {};
+    Object.keys(noteEnergies).forEach(note => {
+      combinedScores[note] = (noteEnergies[note] * 0.7) + ((chordBonus[note] || 0) * 0.3);
+    });
+
+    // Find the strongest key
     let maxEnergy = 0;
     let dominantNote = '';
     
-    Object.entries(noteEnergies).forEach(([note, energy]) => {
+    Object.entries(combinedScores).forEach(([note, energy]) => {
       if (energy > maxEnergy) {
         maxEnergy = energy;
         dominantNote = note;
       }
     });
 
-    const totalEnergy = Object.values(noteEnergies).reduce((sum, energy) => sum + energy, 0);
-    const confidence = totalEnergy > 0 ? maxEnergy / totalEnergy : 0;
+    // Method 3: Historical smoothing for stability
+    const totalEnergy = Object.values(combinedScores).reduce((sum, energy) => sum + energy, 0);
+    const rawConfidence = totalEnergy > 0 ? maxEnergy / totalEnergy : 0;
 
-    if (dominantNote && confidence > 0.2) {
-      const newKey: KeyAnalysis = {
-        key: dominantNote,
-        confidence,
-        lastUpdate: Date.now()
-      };
+    // Apply temporal smoothing
+    if (dominantNote && rawConfidence > 0.08) { // Much lower threshold
+      const now = Date.now();
+      keyHistoryRef.current.push({ 
+        key: dominantNote, 
+        confidence: rawConfidence, 
+        timestamp: now 
+      });
 
-      setDetectedKey(newKey);
-      onKeyDetected?.(newKey.key, newKey.confidence);
-    }
-  };
+      // Keep only recent history (last 2 seconds)
+      keyHistoryRef.current = keyHistoryRef.current.filter(entry => 
+        now - entry.timestamp < 2000
+      );
 
-  // Start/stop analysis loop
-  useEffect(() => {
-    if (isPlaying && analyser) {
-      animationFrameRef.current = requestAnimationFrame(analyzeAudio);
-    } else if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-    }
+      // Calculate weighted average confidence for each key
+      const keyVotes: { [key: string]: { total: number; count: number } } = {};
+      
+      keyHistoryRef.current.forEach(entry => {
+        if (!keyVotes[entry.key]) {
+          keyVotes[entry.key] = { total: 0, count: 0 };
+        }
+        keyVotes[entry.key].total += entry.confidence;
+        keyVotes[entry.key].count += 1;
+      });
 
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
+      // Find the most consistent key
+      let bestKey = '';
+      let bestScore = 0;
+      
+      Object.entries(keyVotes).forEach(([key, votes]) => {
+        const avgConfidence = votes.total / votes.count;
+        const consistency = votes.count / keyHistoryRef.current.length;
+        const score = avgConfidence * consistency;
+        
+        if (score > bestScore && votes.count >= 2) { // Need at least 2 votes
+          bestScore = score;
+          bestKey = key;
+        }
+      });
+
+      // Update key if we have a strong enough candidate
+      if (bestKey && bestScore > 0.1) { // Even lower final threshold
+        const finalConfidence = Math.min(bestScore * 2, 1.0); // Boost confidence display
+        
+        const newKey: KeyAnalysis = {
+          key: bestKey,
+          confidence: finalConfidence,
+          lastUpdate: now
+        };
+
+        setDetectedKey(newKey);
+        onKeyDetected?.(bestKey, finalConfidence);
       }
-    };
-  }, [isPlaying, analyser, analyzeAudio]);
-
-  // Get meter labels based on mode
-  const getMeterLabels = () => {
-    switch (meterMode) {
-      case 'rms':
-        return { left: 'RMS-L', right: 'RMS-R' };
-      case 'peak':
-        return { left: 'PK-L', right: 'PK-R' };
-      case 'both':
-      default:
-        return { left: 'MIX-L', right: 'MIX-R' };
     }
   };
 
-  // Enhanced volume meter component with gain control
-  const VolumeMeter = ({ channel, level, isWarning, label }: { 
-    channel: 'L' | 'R', 
-    level: number, 
-    isWarning: boolean,
-    label: string 
-  }) => {
-    const percentage = Math.min(level * 100, 100);
-    const segments = 20;
-    const activeSegments = Math.floor((percentage / 100) * segments);
-    const peakHoldLevel = holdPeaks ? (channel === 'L' ? peakHoldRef.current.L : peakHoldRef.current.R) : 0;
-    const peakSegment = Math.floor((peakHoldLevel * 100 / 100) * segments);
-
+  if (!isVisible) {
     return (
-      <div className="flex flex-col items-center space-y-1">
-        <span className="text-xs font-mono text-gray-400">{label}</span>
-        <div className="flex flex-col-reverse space-y-reverse space-y-1 h-32">
-          {Array.from({ length: segments }, (_, i) => {
-            const isActive = i < activeSegments;
-            const isPeakHold = holdPeaks && i === peakSegment - 1;
-            const isRedZone = i >= segments * 0.8;
-            const isYellowZone = i >= segments * 0.6;
-            
-            let colorClass = 'bg-gray-700';
-            if (isActive || isPeakHold) {
-              if (isRedZone) {
-                colorClass = isWarning ? 'bg-red-500 animate-pulse' : 'bg-red-400';
-              } else if (isYellowZone) {
-                colorClass = 'bg-yellow-400';
-              } else {
-                colorClass = 'bg-green-400';
-              }
-            }
-
-            // Peak hold gets special styling
-            if (isPeakHold && !isActive) {
-              colorClass += ' opacity-80';
-            }
-
-            return (
-              <div
-                key={i}
-                className={`w-3 h-1 ${colorClass} transition-colors duration-100`}
-              />
-            );
-          })}
-        </div>
-        <span className="text-xs font-mono text-gray-400">
-          {percentage.toFixed(1)}%
-        </span>
-      </div>
+      <button
+        onClick={() => setIsVisible(true)}
+        className="fixed bottom-4 right-4 p-3 bg-gray-900 rounded-lg border border-gray-700 shadow-lg z-50"
+      >
+        <Eye className="w-5 h-5 text-gray-400" />
+      </button>
     );
-  };
+  }
 
   return (
-    <div className="bg-gray-900 rounded-lg p-4 border border-gray-700">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-          <Activity className="w-5 h-5 text-blue-400" />
-          Sound Monitor
-        </h3>
-        <div className="flex items-center gap-2">
-          {!isPlaying && (
-            <span className="text-sm text-gray-500 flex items-center gap-1">
-              <VolumeX className="w-4 h-4" />
-              Paused
-            </span>
-          )}
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-colors ${
-              showSettings ? 'bg-gray-700 text-blue-400' : 'text-gray-400 hover:text-gray-300'
-            }`}
-            title="Meter Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+  <div className="bg-gray-900/95 backdrop-blur-sm rounded-lg border border-gray-700 p-4">
+    {/* Header */}
+    <div className="flex items-center justify-between mb-4">
+      <h3 className="text-lg font-medium text-white flex items-center gap-2">
+        <Activity className="w-5 h-5" />
+        Sound Monitor
+      </h3>
+      {/* Remove the close button or make it toggle minimized state instead */}
+      <button
+        onClick={() => setIsVisible(!isVisible)}
+        className="p-1 text-gray-400 hover:text-white"
+        title={isVisible ? "Minimize" : "Expand"}
+      >
+        {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+
+    {/* Show content when visible, otherwise show minimal state */}
+    {isVisible ? (
+      <div className="space-y-4">
+        {/* Main Content - Horizontal Layout */}
+        <div className="flex gap-6">
+          {/* Left Section: Volume Meters */}
+          <div className="flex-shrink-0">
+            <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2 mb-3">
+              <Volume2 className="w-4 h-4" />
+              Master Levels
+            </h4>
+            
+            <div className="flex gap-4 items-end">
+              {(['L', 'R'] as const).map((channel) => {
+                const levels = currentLevels[channel];
+                const peakHold = peakHolds[channel];
+                const isWarning = volumeWarnings[channel];
+                
+                return (
+                  <div key={channel} className="flex flex-col items-center gap-2">
+                    {/* Channel Label */}
+                    <div className="text-xs text-gray-400 font-medium">
+                      {channel === 'L' ? 'LEFT' : 'RIGHT'}
+                    </div>
+                    
+                    {/* Segmented Meter */}
+                    <div className="w-6 h-20 flex items-end">
+                      <SegmentedMeter
+                        level={levels}
+                        peakHold={peakHold}
+                        isWarning={isWarning}
+                        channel={channel}
+                      />
+                    </div>
+                    
+                    {/* Digital Readout */}
+                    <div className="text-xs text-gray-400 font-mono text-center w-12">
+                      {meterMode === 'peak' && `${(levels.peak * 100).toFixed(0)}`}
+                      {meterMode === 'rms' && `${(levels.rms * 100).toFixed(0)}`}
+                      {meterMode === 'both' && (
+                        <div>
+                          <div>P:{(levels.peak * 100).toFixed(0)}</div>
+                          <div>R:{(levels.rms * 100).toFixed(0)}</div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Warning Indicator */}
+                    {isWarning && (
+                      <VolumeX className="w-3 h-3 text-red-500 animate-pulse" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Section: Key Detection */}
+          <div className="flex-1">
+            <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2 mb-3">
+              <Music className="w-4 h-4" />
+              Key Detection
+            </h4>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-white mb-1">
+                {detectedKey.key || '--'}
+              </div>
+              <div className="text-sm text-gray-400 mb-2">Detected Key</div>
+              <div className="w-full bg-gray-700 rounded-full h-2">
+                <div 
+                  className="bg-purple-400 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${detectedKey.confidence * 100}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {Math.round(detectedKey.confidence * 100)}% confidence
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="mb-4 p-3 bg-gray-800 rounded-lg border border-gray-600">
-          <h4 className="text-sm font-medium text-gray-300 mb-3">Meter Settings</h4>
-          
-          {/* Gain Control */}
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-400">Meter Gain</label>
-              <span className="text-xs text-white">{meterGain.toFixed(1)}x</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setMeterGain(Math.max(0.1, meterGain - 0.5))}
-                className="p-1 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
-              >
-                <Minus className="w-3 h-3 text-gray-300" />
-              </button>
-              <input
-                type="range"
-                min="0.1"
-                max="10"
-                step="0.1"
+        {/* Controls - Horizontal Layout */}
+        <div className="flex items-center justify-between pt-4 border-t border-gray-700">
+          <div className="flex gap-4">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Gain</label>
+              <select
                 value={meterGain}
-                onChange={(e) => setMeterGain(parseFloat(e.target.value))}
-                className="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-              />
-              <button
-                onClick={() => setMeterGain(Math.min(10, meterGain + 0.5))}
-                className="p-1 bg-gray-700 rounded hover:bg-gray-600 transition-colors"
+                onChange={(e) => setMeterGain(Number(e.target.value))}
+                className="bg-gray-800 text-white text-xs rounded px-2 py-1 border border-gray-600"
               >
-                <Plus className="w-3 h-3 text-gray-300" />
-              </button>
+                <option value={0.5}>0.5x</option>
+                <option value={1.0}>1.0x</option>
+                <option value={1.5}>1.5x</option>
+                <option value={2.0}>2.0x</option>
+                <option value={3.0}>3.0x</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Mode</label>
+              <select
+                value={meterMode}
+                onChange={(e) => setMeterMode(e.target.value as 'rms' | 'peak' | 'both')}
+                className="bg-gray-800 text-white text-xs rounded px-2 py-1 border border-gray-600"
+              >
+                <option value="rms">RMS</option>
+                <option value="peak">Peak</option>
+                <option value="both">Both</option>
+              </select>
             </div>
           </div>
-
-          {/* Meter Mode */}
-          <div className="mb-3">
-            <label className="text-xs text-gray-400 mb-2 block">Meter Mode</label>
-            <div className="flex gap-2">
-              {(['rms', 'peak', 'both'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setMeterMode(mode)}
-                  className={`px-2 py-1 text-xs rounded ${
-                    meterMode === mode
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  } transition-colors`}
-                >
-                  {mode.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Peak Hold */}
+          
           <div>
             <label className="flex items-center gap-2 text-xs text-gray-400">
               <input
@@ -578,109 +583,21 @@ export default function SoundMonitor({
             </label>
           </div>
         </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Volume Meters */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
-            <Volume2 className="w-4 h-4" />
-            Level Meters
-          </h4>
-          <div className="flex justify-center space-x-8">
-            <VolumeMeter 
-              channel="L" 
-              level={volumeLevels.L} 
-              isWarning={volumeWarnings.L} 
-              label={getMeterLabels().left}
-            />
-            <VolumeMeter 
-              channel="R" 
-              level={volumeLevels.R} 
-              isWarning={volumeWarnings.R} 
-              label={getMeterLabels().right}
-            />
+      </div>
+    ) : (
+      // Minimized view
+      <div className="text-center py-2">
+        <div className="text-sm text-gray-400">Sound Monitor (minimized)</div>
+        <div className="flex justify-center gap-4 mt-2">
+          <div className="text-xs text-gray-500">
+            L: {Math.round(currentLevels.L.peak * 100)}%
           </div>
-          
-          {/* Additional Level Info */}
-          <div className="text-center text-xs text-gray-400 space-y-1">
-            <div>RMS: {Math.round(volumeLevels.rms * 100)}%</div>
-            <div>Peak: {Math.round(volumeLevels.peak * 100)}%</div>
-          </div>
-          
-          {(volumeWarnings.L || volumeWarnings.R) && (
-            <div className="flex items-center gap-2 text-red-400 text-sm bg-red-900/20 p-2 rounded">
-              <AlertTriangle className="w-4 h-4" />
-              Volume exceeds safe limits!
-            </div>
-          )}
-        </div>
-
-        {/* Tempo Detection */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
-            <Activity className="w-4 h-4" />
-            Tempo Analysis
-          </h4>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-white">
-              {tempo.bpm > 0 ? tempo.bpm : '--'}
-            </div>
-            <div className="text-sm text-gray-400">BPM</div>
-            <div className="mt-2">
-              <div className="text-xs text-gray-500">
-                Confidence: {Math.round(tempo.confidence * 100)}%
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-1 mt-1">
-                <div 
-                  className="bg-blue-400 h-1 rounded-full transition-all duration-300"
-                  style={{ width: `${tempo.confidence * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Key Detection */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-gray-300 flex items-center gap-2">
-            <Music className="w-4 h-4" />
-            Key Detection
-          </h4>
-          <div className="text-center">
-            <div className="text-3xl font-bold text-white">
-              {detectedKey.key || '--'}
-            </div>
-            <div className="text-sm text-gray-400">Key</div>
-            <div className="mt-2">
-              <div className="text-xs text-gray-500">
-                Confidence: {Math.round(detectedKey.confidence * 100)}%
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-1 mt-1">
-                <div 
-                  className="bg-purple-400 h-1 rounded-full transition-all duration-300"
-                  style={{ width: `${detectedKey.confidence * 100}%` }}
-                />
-              </div>
-            </div>
+          <div className="text-xs text-gray-500">
+            R: {Math.round(currentLevels.R.peak * 100)}%
           </div>
         </div>
       </div>
-
-      {/* Status Indicator */}
-      <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
-        <span>
-          Status: {isPlaying ? (
-            <span className="text-green-400">● Active</span>
-          ) : (
-            <span className="text-gray-500">● Paused</span>
-          )}
-        </span>
-        <span>
-          Time: {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')}
-        </span>
-        <span>Gain: {meterGain}x | Mode: {meterMode.toUpperCase()}</span>
-      </div>
-    </div>
-  );
+    )}
+  </div>
+);
 }

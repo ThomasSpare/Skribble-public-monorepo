@@ -1,6 +1,6 @@
 // frontend/src/components/VersionControl.tsx
 import React, { useState, useEffect } from 'react';
-import { Upload, History, FileText, Users, Clock, Download, Music, MessageCircle, Plus, X, ChevronDown, ChevronRight } from 'lucide-react';
+import { Upload, History, FileText, Users, Clock, Download, Music, MessageCircle, Plus, X } from 'lucide-react';
 
 interface Version {
   id: string;
@@ -25,7 +25,6 @@ interface VersionControlProps {
 
 export default function VersionControl({ 
   projectId, 
-  currentUser, 
   onVersionChange, 
   onError 
 }: VersionControlProps) {
@@ -322,7 +321,7 @@ export default function VersionControl({
             <div>
               <p className="text-sm font-medium text-skribble-sky mb-1">Version Management</p>
               <p className="text-sm text-skribble-azure leading-relaxed">
-                Use the <span className="font-medium text-skribble-purple">"All Versions"</span> section in the sidebar to switch between audio versions. 
+                Use the <span className="font-medium text-skribble-purple">All Versions</span> section in the sidebar to switch between audio versions. 
                 Download any version using the buttons below.
               </p>
             </div>
@@ -412,7 +411,7 @@ export default function VersionControl({
                 {version.version_notes && (
                   <div className="bg-skribble-dark/30 border-l-4 border-skribble-purple rounded-r-lg p-3 mt-3">
                     <p className="text-sm text-skribble-sky italic">
-                      "{version.version_notes}"
+                      {version.version_notes}
                     </p>
                   </div>
                 )}

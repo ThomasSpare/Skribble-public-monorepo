@@ -1,7 +1,6 @@
-// frontend/src/components/ReferralDashboard.tsx
+// frontend/src/components/ReferralDashboard.tsx - FIXED VERSION
 import { useState, useEffect } from 'react';
-import { Copy, Users, Gift, Share2, Check } from 'lucide-react';
-import { auth } from '@/lib/auth';
+import { Copy, Users, Gift, Share2, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 interface ReferralStats {
   referral_code: string | null;
@@ -15,6 +14,7 @@ export default function ReferralDashboard() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReferralStats();
@@ -22,19 +22,32 @@ export default function ReferralDashboard() {
 
   const fetchReferralStats = async () => {
     try {
-      const token = auth.getToken();
-      const response = await fetch('/api/stripe/referral-stats', {
+      const token = localStorage.getItem('skribble_token') || localStorage.getItem('token');
+      
+      if (!token) {
+        setError('No authentication token found');
+        setLoading(false);
+        return;
+      }
+
+      // Use users endpoint directly since it's confirmed to work
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/users/referral-stats`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       
       const data = await response.json();
       if (data.success) {
         setStats(data.data);
+        setError(null);
+      } else {
+        setError(data.error?.message || 'Failed to fetch referral stats');
       }
     } catch (error) {
       console.error('Error fetching referral stats:', error);
+      setError('Failed to fetch referral stats');
     } finally {
       setLoading(false);
     }
@@ -42,21 +55,36 @@ export default function ReferralDashboard() {
 
   const generateReferralCode = async () => {
     setGenerating(true);
+    setError(null);
+    
     try {
-      const token = auth.getToken();
-      const response = await fetch('/api/stripe/generate-referral-code', {
+      const token = localStorage.getItem('skribble_token') || localStorage.getItem('token');
+      
+      if (!token) {
+        setError('No authentication token found');
+        setGenerating(false);
+        return;
+      }
+
+      // Use users endpoint directly since it's confirmed to work
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/users/generate-referral-code`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       
       const data = await response.json();
       if (data.success) {
         await fetchReferralStats(); // Refresh stats
+        setError(null);
+      } else {
+        setError(data.error?.message || 'Failed to generate referral code');
       }
     } catch (error) {
       console.error('Error generating referral code:', error);
+      setError('Failed to generate referral code');
     } finally {
       setGenerating(false);
     }
@@ -65,7 +93,7 @@ export default function ReferralDashboard() {
   const copyReferralLink = () => {
     if (!stats?.referral_code) return;
     
-    const referralUrl = `${window.location.origin}/pricing?ref=${stats.referral_code}`;
+    const referralUrl = `${window.location.origin}/register?ref=${stats.referral_code}`;
     navigator.clipboard.writeText(referralUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -74,8 +102,8 @@ export default function ReferralDashboard() {
   const shareReferralLink = () => {
     if (!stats?.referral_code) return;
     
-    const referralUrl = `${window.location.origin}/pricing?ref=${stats.referral_code}`;
-    const text = `Check out Skribble - the best music collaboration platform! Get 1 month free with my referral link: ${referralUrl}`;
+    const referralUrl = `${window.location.origin}/register?ref=${stats.referral_code}`;
+    const text = `Join me on Skribble - the best music collaboration platform! Use my referral link and we both get 1 month free: ${referralUrl}`;
     
     if (navigator.share) {
       navigator.share({
@@ -94,9 +122,33 @@ export default function ReferralDashboard() {
   if (loading) {
     return (
       <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl p-6 animate-pulse">
-        <div className="h-6 bg-skribble-azure/20 rounded mb-4"></div>
-        <div className="h-4 bg-skribble-azure/20 rounded mb-2"></div>
-        <div className="h-4 bg-skribble-azure/20 rounded w-3/4"></div>
+        <div className="flex items-center gap-3 mb-6">
+          <Loader2 className="w-6 h-6 text-skribble-azure animate-spin" />
+          <h3 className="font-madimi text-xl text-skribble-sky">Loading Referral Data...</h3>
+        </div>
+        <div className="space-y-3">
+          <div className="h-4 bg-skribble-azure/20 rounded"></div>
+          <div className="h-4 bg-skribble-azure/20 rounded w-3/4"></div>
+          <div className="h-4 bg-skribble-azure/20 rounded w-1/2"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl p-6 border border-red-500/20">
+        <div className="flex items-center gap-3 mb-4">
+          <AlertCircle className="w-6 h-6 text-red-400" />
+          <h3 className="font-madimi text-xl text-skribble-sky">Error</h3>
+        </div>
+        <p className="text-red-400 mb-4">{error}</p>
+        <button
+          onClick={fetchReferralStats}
+          className="bg-skribble-azure text-white px-4 py-2 rounded-lg hover:bg-skribble-azure/80 transition-colors"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -120,9 +172,19 @@ export default function ReferralDashboard() {
           <button
             onClick={generateReferralCode}
             disabled={generating}
-            className="bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-6 py-2 rounded-full font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50"
+            className="bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-6 py-2 rounded-full font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
           >
-            {generating ? 'Generating...' : 'Generate Referral Code'}
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Gift className="w-4 h-4" />
+                Generate Referral Code
+              </>
+            )}
           </button>
         </div>
       ) : (
@@ -135,9 +197,9 @@ export default function ReferralDashboard() {
             <div className="flex gap-2">
               <input
                 type="text"
-                value={`${window.location.origin}/pricing?ref=${stats.referral_code}`}
+                value={`${window.location.origin}/register?ref=${stats.referral_code}`}
                 readOnly
-                className="flex-1 px-4 py-2 rounded-lg bg-skribble-dark border border-skribble-azure/20 text-skribble-sky text-sm"
+                className="flex-1 px-4 py-2 rounded-lg bg-skribble-dark border border-skribble-azure/20 text-skribble-sky text-sm font-mono"
               />
               <button
                 onClick={copyReferralLink}
@@ -199,15 +261,15 @@ export default function ReferralDashboard() {
             <h4 className="font-medium text-skribble-sky mb-3">How it works:</h4>
             <ul className="space-y-2 text-skribble-azure text-sm">
               <li className="flex items-start gap-2">
-                <span className="text-skribble-azure">1.</span>
+                <span className="text-skribble-azure font-bold">1.</span>
                 Share your referral link with friends
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-skribble-azure">2.</span>
-                They sign up and become paying customers
+                <span className="text-skribble-azure font-bold">2.</span>
+                They sign up and subscribe to any paid plan
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-skribble-azure">3.</span>
+                <span className="text-skribble-azure font-bold">3.</span>
                 You both get 1 month free automatically applied
               </li>
             </ul>

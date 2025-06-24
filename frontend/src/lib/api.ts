@@ -1,16 +1,29 @@
-// frontend/src/lib/api.ts
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+// frontend/src/lib/api.ts - UPDATED WITH REFERRAL SUPPORT
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+// Types
 export interface RegisterData {
   email: string;
   username: string;
   password: string;
   role: 'producer' | 'artist' | 'both';
+  tier?: string;
+  referralCode?: string;
 }
 
 export interface LoginData {
   email: string;
   password: string;
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: {
+    message: string;
+    code?: string;
+    details?: any;
+  };
 }
 
 export interface User {
@@ -19,119 +32,196 @@ export interface User {
   username: string;
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: string;
+  subscriptionStatus?: string;
+  profileImage?: string;
+  referralCode?: string;
+  referredBy?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface AuthResponse {
-  success: boolean;
-  data?: {
-    user: User;
-    token: string;
-    refreshToken: string;
-  };
-  error?: {
-    message: string;
-    code?: string;
-    details?: any;
-  };
+  user: User;
+  token: string;
+  refreshToken: string;
+  requiresPayment?: boolean;
+  message?: string;
 }
 
-class APIClient {
-  private getHeaders(includeAuth = false): HeadersInit {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('skribble_token') || localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { 'Authorization': `Bearer ${token}` })
+  };
+};
+
+// Helper function to handle API responses
+const handleResponse = async <T = any>(response: Response): Promise<ApiResponse<T>> => {
+  try {
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return {
+        success: false,
+        error: {
+          message: data.error?.message || 'An error occurred',
+          code: data.error?.code,
+          details: data.error?.details
+        }
+      };
+    }
+    
+    return {
+      success: true,
+      data: data.data || data
     };
-
-    if (includeAuth) {
-      const token = localStorage.getItem('skribble_token');
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
+  } catch (error) {
+    return {
+      success: false,
+      error: {
+        message: 'Failed to parse response',
+        code: 'PARSE_ERROR'
       }
-    }
-
-    return headers;
+    };
   }
+};
 
-  async register(userData: RegisterData): Promise<AuthResponse> {
-    try {
-      const response = await fetch(`${API_BASE}/auth/register`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(userData),
-      });
+export const apiClient = {
+  // Authentication
+  async register(data: RegisterData): Promise<ApiResponse<AuthResponse>> {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    
+    return handleResponse<AuthResponse>(response);
+  },
 
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          message: 'Network error occurred',
-          code: 'NETWORK_ERROR'
-        }
-      };
-    }
+  async login(data: LoginData): Promise<ApiResponse<AuthResponse>> {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    
+    return handleResponse<AuthResponse>(response);
+  },
+
+  async getCurrentUser(): Promise<ApiResponse<User>> {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse<User>(response);
+  },
+
+  async refreshToken(refreshToken: string): Promise<ApiResponse<{ token: string; user: User }>> {
+    const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    
+    return handleResponse(response);
+  },
+
+  // Referral System
+  async generateReferralCode(): Promise<ApiResponse<{ referralCode: string }>> {
+    const response = await fetch(`${API_BASE_URL}/users/generate-referral-code`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
+  },
+
+  async getReferralStats(): Promise<ApiResponse<{
+    referral_code: string | null;
+    successful_referrals: number;
+    pending_referrals: number;
+    rewards_earned: number;
+  }>> {
+    const response = await fetch(`${API_BASE_URL}/users/referral-stats`, {
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
+  },
+
+  async getReferralHistory(): Promise<ApiResponse<Array<{
+    id: string;
+    username: string;
+    email: string;
+    subscriptionTier: string;
+    subscriptionStatus: string;
+    createdAt: string;
+    rewardEarned: boolean;
+  }>>> {
+    const response = await fetch(`${API_BASE_URL}/users/referral-history`, {
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
+  },
+
+  // User Management
+  async updateProfile(data: Partial<User>): Promise<ApiResponse<User>> {
+    const response = await fetch(`${API_BASE_URL}/users/profile`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    
+    return handleResponse<User>(response);
+  },
+
+  // Subscription Management
+  async getSubscriptionInfo(): Promise<ApiResponse<{
+    tier: string;
+    status: string;
+    trialEnd?: string;
+    hasStripeSubscription: boolean;
+  }>> {
+    const response = await fetch(`${API_BASE_URL}/users/subscription`, {
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
+  },
+
+  // Projects (basic endpoints)
+  async getProjects(): Promise<ApiResponse<any[]>> {
+    const response = await fetch(`${API_BASE_URL}/projects`, {
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
+  },
+
+  async getProject(id: string): Promise<ApiResponse<any>> {
+    const response = await fetch(`${API_BASE_URL}/projects/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    
+    return handleResponse(response);
   }
+};
 
-  async login(credentials: LoginData): Promise<AuthResponse> {
-    try {
-      const response = await fetch(`${API_BASE}/auth/login`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify(credentials),
-      });
+// Utility functions
+export const isLoggedIn = (): boolean => {
+  return !!(localStorage.getItem('skribble_token') || localStorage.getItem('token'));
+};
 
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          message: 'Network error occurred',
-          code: 'NETWORK_ERROR'
-        }
-      };
-    }
-  }
+export const logout = (): void => {
+  localStorage.removeItem('skribble_token');
+  localStorage.removeItem('skribble_refresh_token');
+  localStorage.removeItem('token');
+  localStorage.removeItem('refreshToken');
+};
 
-  async refreshToken(): Promise<AuthResponse> {
-    try {
-      const refreshToken = localStorage.getItem('skribble_refresh_token');
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-
-      const response = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ refreshToken }),
-      });
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      return {
-        success: false,
-        error: {
-          message: 'Failed to refresh token',
-          code: 'REFRESH_ERROR'
-        }
-      };
-    }
-  }
-
-
-
-  // Health check
-  async healthCheck() {
-    try {
-      const response = await fetch(`${API_BASE.replace('/api', '')}/health`);
-      return await response.json();
-    } catch (error) {
-      return { status: 'Error', message: 'Cannot connect to server' };
-    }
-  }
-}
-
-export const apiClient = new APIClient();
+export const getStoredToken = (): string | null => {
+  return localStorage.getItem('skribble_token') || localStorage.getItem('token');
+};

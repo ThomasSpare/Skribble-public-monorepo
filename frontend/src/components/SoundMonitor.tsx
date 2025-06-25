@@ -231,7 +231,7 @@ export default function SoundMonitor({
       setVolumeWarnings(newWarnings);
 
       // Store frequency history for key analysis
-      frequencyHistoryRef.current.push(Array.from(frequencyData));
+      frequencyHistoryRef.current.push(Uint8Array.from(frequencyData));
 
       // Keep only recent data (last 5 seconds worth for more responsive detection)
       const maxHistoryLength = 60 * 5; // assuming 60fps

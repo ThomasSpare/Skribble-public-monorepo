@@ -1,6 +1,6 @@
 // backend/src/middleware/upload-s3.ts
 import multer from 'multer';
-import { s3UploadService } from '../services/s3-upload';
+import { s3UploadService, UploadResult } from '../services/s3-upload';
 
 const logWithTimestamp = (message: string, data?: any) => {
   console.log(`[${new Date().toISOString()}] ${message}`, data || '');
@@ -34,7 +34,7 @@ const audioFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFil
     cb(null, true);
   } else {
     logWithTimestamp('❌ Audio file type rejected:', file.mimetype);
-    cb(new Error(`Invalid audio file type: ${file.mimetype}. Allowed: ${allowedExts.join(', ')}`), false);
+    cb(new Error(`Invalid audio file type: ${file.mimetype}. Allowed: ${allowedExts.join(', ')}`));
   }
 };
 
@@ -61,7 +61,7 @@ const imageFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFil
     cb(null, true);
   } else {
     logWithTimestamp('❌ Image file type rejected:', file.mimetype);
-    cb(new Error(`Invalid image file type: ${file.mimetype}. Allowed: ${allowedExts.join(', ')}`), false);
+    cb(new Error(`Invalid image file type: ${file.mimetype}. Allowed: ${allowedExts.join(', ')}`));
   }
 };
 
@@ -109,7 +109,7 @@ export const uploadAudioToS3 = async (
   file: Express.Multer.File, 
   projectId: string,  // Required for audio uploads
   includeOriginalName: boolean = false
-) => {
+): Promise<UploadResult> => {
   try {
     logWithTimestamp('🎵 Uploading audio to S3:', {
       originalname: file.originalname,
@@ -142,7 +142,7 @@ export const uploadImageToS3 = async (
   file: Express.Multer.File, 
   userId: string,  // Required for image uploads
   includeOriginalName: boolean = false
-) => {
+): Promise<UploadResult> => {
   try {
     logWithTimestamp('🖼️ Uploading image to S3:', {
       originalname: file.originalname,

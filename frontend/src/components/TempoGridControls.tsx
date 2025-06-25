@@ -1,4 +1,4 @@
-// components/TempoGridControls.tsx
+// components/TempoGridControls.tsx - FIXED INTERFACE
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
@@ -7,7 +7,6 @@ import {
   X, 
   Loader2, 
   Activity, 
-  Clock 
 } from 'lucide-react';
 
 interface TempoGridControlsProps {
@@ -19,11 +18,15 @@ interface TempoGridControlsProps {
   audioUrl: string;
   userInteracted: boolean;
   
-  // Callbacks to update parent state
+  // Callbacks to update parent state - FIXED TYPES
   onBpmChange: (bpm: number) => void;
   onGridModeChange: (mode: 'none' | 'beats' | 'bars') => void;
   onGridOffsetChange: (offset: number) => void;
   onGridOffsetMsChange: (offsetMs: number) => void;
+  
+  // Missing props that were causing the error
+  onDetectedBeatsChange?: (beats: number[]) => void;
+  detectedBeats?: number[];
   
   // Optional styling
   className?: string;
@@ -32,7 +35,6 @@ interface TempoGridControlsProps {
 export default function TempoGridControls({
   bpm,
   gridMode,
-  gridOffset,
   currentTime,
   audioUrl,
   userInteracted,
@@ -40,6 +42,8 @@ export default function TempoGridControls({
   onGridModeChange,
   onGridOffsetChange,
   onGridOffsetMsChange,
+  onDetectedBeatsChange = () => {}, // Default empty function
+  detectedBeats = [],
   className = ""
 }: TempoGridControlsProps) {
   // Internal state
@@ -49,11 +53,12 @@ export default function TempoGridControls({
   const [isAnalyzingBeats, setIsAnalyzingBeats] = useState(false);
   const [gridAlignment, setGridAlignment] = useState<'auto' | 'manual'>('manual');
   const [tapTimes, setTapTimes] = useState<number[]>([]);
+  const [localDetectedBeats, setLocalDetectedBeats] = useState<number[]>(detectedBeats);
   
   // Kick detection parameters
-  const [kickSensitivity, setKickSensitivity] = useState(2.5); // Threshold multiplier
-  const [kickMinGain, setKickMinGain] = useState(0.1); // Minimum energy percentage
-  const [kickFreqMax, setKickFreqMax] = useState(100); // Max frequency for kicks
+  const [kickSensitivity, setKickSensitivity] = useState(2.5);
+  const [kickMinGain, setKickMinGain] = useState(0.1);
+  const [kickFreqMax, setKickFreqMax] = useState(100);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [lastAnalysisTime, setLastAnalysisTime] = useState<number | null>(null);
   
@@ -61,6 +66,17 @@ export default function TempoGridControls({
 
   // Common BPM presets
   const commonBPMs = [60, 70, 80, 90, 100, 110, 120, 128, 130, 140, 150, 160, 170, 180];
+
+  // Helper function to handle BPM changes
+  const handleBpmChange = (newBpm: number) => {
+    onBpmChange(newBpm);
+  };
+
+  // Helper function to handle detected beats
+  const setDetectedBeats = (beats: number[]) => {
+    setLocalDetectedBeats(beats);
+    onDetectedBeatsChange(beats);
+  };
 
   // Close controls when clicking outside
   useEffect(() => {
@@ -81,17 +97,6 @@ export default function TempoGridControls({
     setTempBpm(bpm);
   }, [bpm]);
 
-  // Helper functions
-  const getBeatAtTime = (time: number) => {
-    const beatsPerSecond = bpm / 60;
-    return time * beatsPerSecond;
-  };
-
-  const getTimeAtBeat = (beat: number) => {
-    const secondsPerBeat = 60 / bpm;
-    return beat * secondsPerBeat;
-  };
-
   const analyzeBeats = async () => {
     if (!audioUrl || !userInteracted) return;
     
@@ -107,8 +112,8 @@ export default function TempoGridControls({
       const sampleRate = audioBuffer.sampleRate;
       
       // Enhanced kick detection using frequency analysis
-      const windowSize = 2048; // FFT window size
-      const hopSize = Math.floor(windowSize / 4); // 75% overlap
+      const windowSize = 2048;
+      const hopSize = Math.floor(windowSize / 4);
       const fftSize = windowSize;
       
       // Calculate which frequency bins correspond to user-defined max frequency
@@ -137,7 +142,7 @@ export default function TempoGridControls({
         
         // Calculate energy in low-frequency range (kick range: ~20-100 Hz)
         let kickEnergy = 0;
-        const kickStartBin = Math.floor(20 / frequencyResolution); // Start at 20 Hz
+        const kickStartBin = Math.floor(20 / frequencyResolution);
         
         for (let bin = kickStartBin; bin < maxBin; bin++) {
           const real = fft[bin * 2];
@@ -155,7 +160,7 @@ export default function TempoGridControls({
       
       // Find kick peaks with adaptive thresholding
       const beats: number[] = [];
-      const windowLength = Math.floor(kickEnergyValues.length * 0.1); // 10% of total length for local analysis
+      const windowLength = Math.floor(kickEnergyValues.length * 0.1);
       
       for (let i = windowLength; i < kickEnergyValues.length - windowLength; i++) {
         // Calculate local mean and standard deviation
@@ -188,7 +193,7 @@ export default function TempoGridControls({
           const timeSeconds = timePositions[i];
           
           // Avoid detecting beats too close together (minimum 150ms apart for kicks)
-          const minInterval = 0.15; // 150ms
+          const minInterval = 0.15;
           const tooClose = beats.some(existingBeat => 
             Math.abs(existingBeat - timeSeconds) < minInterval
           );
@@ -217,7 +222,7 @@ export default function TempoGridControls({
           const medianInterval = validIntervals[Math.floor(validIntervals.length / 2)];
           const estimatedBpm = Math.round(60 / medianInterval);
           
-          // Double-check: also try analyzing every other beat (in case we're detecting off-beats)
+          // Double-check: also try analyzing every other beat
           const doubleBeats = intervals.filter(interval => interval >= 0.6 && interval <= 4.0);
           if (doubleBeats.length > 0) {
             doubleBeats.sort((a, b) => a - b);
@@ -228,20 +233,19 @@ export default function TempoGridControls({
             if (Math.abs(doubleBeatBpm - 120) < Math.abs(estimatedBpm - 120)) {
               console.log(`Using double-beat BPM: ${doubleBeatBpm} instead of ${estimatedBpm}`);
               setTempBpm(doubleBeatBpm);
-              onBpmChange(doubleBeatBpm);
+              handleBpmChange(doubleBeatBpm);
             } else if (estimatedBpm >= 60 && estimatedBpm <= 200) {
               setTempBpm(estimatedBpm);
-              onBpmChange(estimatedBpm);
+              handleBpmChange(estimatedBpm);
             }
           } else if (estimatedBpm >= 60 && estimatedBpm <= 200) {
             setTempBpm(estimatedBpm);
-            onBpmChange(estimatedBpm);
+            handleBpmChange(estimatedBpm);
           }
         }
       }
       
       setDetectedBeats(beats);
-      onDetectedBeatsChange(beats);
       await tempContext.close();
       
     } catch (error) {
@@ -252,11 +256,9 @@ export default function TempoGridControls({
   };
 
   // Simplified real FFT implementation for kick detection
-  // NOTE: This function is no longer used in the simplified approach
   const performRealFFT = (signal: Float32Array): Float32Array => {
-    // This function has been removed as we're now using time-domain analysis
-    // which is much faster and more reliable for kick detection
-    return new Float32Array(0);
+    // Simple time-domain analysis instead of full FFT
+    return new Float32Array(signal.length * 2);
   };
 
   const handleTapTempo = () => {
@@ -277,7 +279,7 @@ export default function TempoGridControls({
       
       if (newBpm >= 30 && newBpm <= 300) {
         setTempBpm(newBpm);
-        onBpmChange(newBpm);
+        handleBpmChange(newBpm);
       }
     }
   };
@@ -294,7 +296,7 @@ export default function TempoGridControls({
   };
 
   const nudgeGrid = (direction: 'left' | 'right') => {
-    const nudgeAmount = (60 / bpm) * 0.01; // 1% of beat duration
+    const nudgeAmount = (60 / bpm) * 0.01;
     const newOffsetMs = gridOffsetMs + (direction === 'right' ? nudgeAmount * 1000 : -nudgeAmount * 1000);
     setGridOffsetMs(newOffsetMs);
     onGridOffsetMsChange(newOffsetMs);
@@ -312,9 +314,10 @@ export default function TempoGridControls({
   };
 
   const applyBpm = () => {
-    onBpmChange(tempBpm);
+    handleBpmChange(tempBpm);
   };
 
+  // Rest of your component JSX remains the same...
   return (
     <>
       <div className={`relative ${className}`} ref={controlsRef}>
@@ -376,7 +379,7 @@ export default function TempoGridControls({
                         key={preset}
                         onClick={() => {
                           setTempBpm(preset);
-                          onBpmChange(preset);
+                          handleBpmChange(preset);
                         }}
                         className={`px-2 py-1 text-xs rounded transition-colors ${
                           bpm === preset

@@ -1,4 +1,4 @@
-// backend/src/routes/auth-simple.ts - COMPLETE FIX
+// backend/src/routes/auth-simple.ts - COMPLETE FIXED VERSION
 import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt, { SignOptions } from 'jsonwebtoken';
@@ -8,6 +8,24 @@ import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth';
 
 const router = express.Router();
+
+// Validate required environment variables
+if (!process.env.JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
+if (!process.env.JWT_REFRESH_SECRET) {
+  throw new Error('JWT_REFRESH_SECRET environment variable is required');
+}
+
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
+
+interface JWTPayload {
+  userId: string;
+  email: string;
+  role: string;
+  subscriptionTier: string;
+}
 
 // Test route
 router.get('/test', (req, res) => {
@@ -19,9 +37,6 @@ router.get('/test', (req, res) => {
 });
 
 // Register - Updated to handle both free and paid registrations
-// Update your backend/src/routes/auth-simple.ts registration route with this fixed version
-
-// Register - Now requires paid plan selection
 router.post('/register', [
   body('email').isEmail().normalizeEmail(),
   body('username').isLength({ min: 3, max: 30 }).trim(),
@@ -132,23 +147,32 @@ router.post('/register', [
 
     const user = result.rows[0];
 
-    // Generate tokens
-    const tokenOptions: SignOptions = { 
-      expiresIn: process.env.JWT_EXPIRES_IN || '1h'
+    // Generate tokens with proper payload
+    const payload: JWTPayload = {
+      userId: String(user.id),
+      email: String(user.email),
+      role: String(user.role),
+      subscriptionTier: String(user.subscription_tier || 'free')
     };
+
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || '',
-      tokenOptions
+      payload,
+      JWT_SECRET,
+      { 
+        expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+        issuer: 'skribble-app',
+        audience: 'skribble-users'
+      }
     );
 
-    const refreshTokenOptions: SignOptions = { 
-      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
-    };
     const refreshToken = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_REFRESH_SECRET || '',
-      refreshTokenOptions
+      { userId: String(user.id), type: 'refresh' },
+      JWT_REFRESH_SECRET,
+      { 
+        expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+        issuer: 'skribble-app',
+        audience: 'skribble-users'
+      }
     );
 
     res.status(201).json({
@@ -236,23 +260,24 @@ router.post('/login', [
       });
     }
 
-    // Generate tokens
-    const tokenOptions: SignOptions = { 
-      expiresIn: process.env.JWT_EXPIRES_IN || '1h'
+    // Generate tokens with consistent payload
+    const payload: JWTPayload = {
+      userId: String(user.id),
+      email: String(user.email),
+      role: String(user.role),
+      subscriptionTier: String(user.subscription_tier || 'free')
     };
+
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || '',
-      tokenOptions
+      payload,
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
     );
 
-    const refreshTokenOptions: SignOptions = { 
-      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d'
-    };
     const refreshToken = jwt.sign(
-      { userId: user.id },
-      process.env.JWT_REFRESH_SECRET || '',
-      refreshTokenOptions
+      { userId: String(user.id), type: 'refresh' },
+      JWT_REFRESH_SECRET,
+      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
     );
 
     // Check if payment is required
@@ -358,7 +383,7 @@ router.post('/refresh-token', [
     const { refreshToken } = req.body;
 
     try {
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET || '') as any;
+      const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET) as any;
       
       // Get user info
       const result = await pool.query(
@@ -379,10 +404,17 @@ router.post('/refresh-token', [
 
       const user = result.rows[0];
 
-      // Generate new access token
+      // Generate new access token with consistent payload
+      const payload: JWTPayload = {
+        userId: String(user.id),
+        email: String(user.email),
+        role: String(user.role),
+        subscriptionTier: String(user.subscription_tier || 'free')
+      };
+
       const newToken = jwt.sign(
-        { userId: user.id, email: user.email },
-        process.env.JWT_SECRET || '',
+        payload,
+        JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
       );
 

@@ -78,6 +78,90 @@ export class UserModel {
     }
   }
 
+  // Generate a unique referral code
+  static async generateReferralCode(): Promise<string> {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    
+    // Generate 8-character code
+    for (let i = 0; i < 8; i++) {
+      code += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    
+    try {
+      // Check if code already exists
+      const existing = await pool.query(
+        'SELECT id FROM users WHERE referral_code = $1',
+        [code]
+      );
+      
+      // If exists, try again (recursive)
+      if (existing.rows.length > 0) {
+        return this.generateReferralCode();
+      }
+      
+      return code;
+    } catch (error) {
+      console.error('Error generating referral code:', error);
+      // Return a fallback code with timestamp
+      return `REF${Date.now().toString().slice(-6)}`;
+    }
+  }
+
+  // Get referral statistics for a user
+  static async getReferralStats(userId: string): Promise<{
+    totalReferrals: number;
+    activeReferrals: number;
+    totalRewards: number;
+    pendingRewards: number;
+  }> {
+    try {
+      const result = await pool.query(`
+        SELECT 
+          COUNT(*) as total_referrals,
+          COUNT(CASE WHEN subscription_tier != 'free' THEN 1 END) as active_referrals,
+          COALESCE(SUM(referral_rewards_earned), 0) as total_rewards
+        FROM users 
+        WHERE referred_by_user_id = $1
+      `, [userId]);
+
+      const stats = result.rows[0];
+      
+      return {
+        totalReferrals: parseInt(stats.total_referrals) || 0,
+        activeReferrals: parseInt(stats.active_referrals) || 0,
+        totalRewards: parseInt(stats.total_rewards) || 0,
+        pendingRewards: 0 // Calculate based on your business logic
+      };
+    } catch (error) {
+      console.error('Error getting referral stats:', error);
+      return {
+        totalReferrals: 0,
+        activeReferrals: 0,
+        totalRewards: 0,
+        pendingRewards: 0
+      };
+    }
+  }
+
+  // Helper method to update referral rewards
+  static async updateReferralRewards(userId: string, amount: number): Promise<boolean> {
+    try {
+      await pool.query(`
+        UPDATE users 
+        SET referral_rewards_earned = COALESCE(referral_rewards_earned, 0) + $1,
+            updated_at = NOW()
+        WHERE id = $2
+      `, [amount, userId]);
+      
+      return true;
+    } catch (error) {
+      console.error('Error updating referral rewards:', error);
+      return false;
+    }
+  }
+
+
   // Find user by ID
   static async findById(id: string): Promise<User | null> {
     try {
@@ -208,6 +292,7 @@ export class UserModel {
       throw error;
     }
   }
+
 
   // Get user statistics
   static async getStats(id: string) {

@@ -20,6 +20,9 @@ if (!process.env.JWT_REFRESH_SECRET) {
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+
 interface JWTPayload {
   userId: string;
   email: string;
@@ -159,20 +162,20 @@ router.post('/register', [
       payload,
       JWT_SECRET,
       { 
-        expiresIn: process.env.JWT_EXPIRES_IN || '1h',
+        expiresIn: JWT_EXPIRES_IN,
         issuer: 'skribble-app',
         audience: 'skribble-users'
-      }
+      } as SignOptions
     );
 
     const refreshToken = jwt.sign(
       { userId: String(user.id), type: 'refresh' },
       JWT_REFRESH_SECRET,
       { 
-        expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
+        expiresIn: JWT_REFRESH_EXPIRES_IN,
         issuer: 'skribble-app',
         audience: 'skribble-users'
-      }
+      } as SignOptions
     );
 
     res.status(201).json({
@@ -271,13 +274,13 @@ router.post('/login', [
     const token = jwt.sign(
       payload,
       JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
+      { expiresIn: JWT_EXPIRES_IN } as SignOptions
     );
 
     const refreshToken = jwt.sign(
       { userId: String(user.id), type: 'refresh' },
       JWT_REFRESH_SECRET,
-      { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+      { expiresIn: JWT_REFRESH_EXPIRES_IN } as SignOptions
     );
 
     // Check if payment is required
@@ -415,7 +418,7 @@ router.post('/refresh-token', [
       const newToken = jwt.sign(
         payload,
         JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
+        { expiresIn: JWT_EXPIRES_IN } as SignOptions
       );
 
       res.json({

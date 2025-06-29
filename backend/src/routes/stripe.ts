@@ -144,11 +144,10 @@ router.post('/generate-referral-code', authenticateToken, async (req: Request, r
     
     // Generate new referral code if user doesn't have one
     if (!user.referral_code) {
-      referralCode = await UserModel.generateReferralCode(userId);
+      referralCode = await UserModel.generateReferralCode();
     } else {
       // Return existing referral code
-      const stats = await UserModel.getReferralStats(userId);
-      referralCode = stats.referral_code;
+      referralCode = user.referral_code;
     }
 
     res.json({

@@ -24,28 +24,55 @@ export default function ViewerPage() {
   const [project, setProject] = useState<ViewerProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [signedAudioUrl, setSignedAudioUrl] = useState<string | null>(null);
+  const [audioUrlLoading, setAudioUrlLoading] = useState(true);
+
+  const fetchSignedAudioUrl = async (audioFileId: string) => {
+    try {
+      setAudioUrlLoading(true);
+      
+      const token = localStorage.getItem('skribble_token');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success && data.data?.downloadUrl) {
+        console.log('✅ Signed URL fetched successfully');
+        setSignedAudioUrl(data.data.downloadUrl);
+      } else {
+        console.error('❌ Failed to get signed URL:', data.error);
+        setError('Failed to get audio file access URL');
+      }
+    } catch (error) {
+      console.error('💥 Error fetching signed URL:', error);
+      setError('Failed to load audio file');
+    } finally {
+      setAudioUrlLoading(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchProject() {
       try {
-        console.log('Fetching project with token:', token);
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/collaboration/projects/viewer/${token}`);
-        
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error?.message || 'Invalid or expired view link');
+          throw new Error('Invalid or expired view link');
         }
-        
         const data = await response.json();
-        console.log('Viewer project data:', data);
-        
         if (data.success) {
           setProject(data.data);
-        } else {
-          throw new Error('Failed to load project data');
+          
+          // Fetch signed URL for the audio file
+          if (data.data.currentAudioFile?.id) {
+            await fetchSignedAudioUrl(data.data.currentAudioFile.id);
+          }
         }
       } catch (error: any) {
-        console.error('Error fetching viewer project:', error);
         setError(error.message);
       } finally {
         setLoading(false);
@@ -57,16 +84,18 @@ export default function ViewerPage() {
     }
   }, [token]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-skribble-azure mx-auto mb-4" />
-          <p className="text-skribble-azure">Loading project...</p>
-        </div>
+  if (loading || audioUrlLoading) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="w-8 h-8 animate-spin text-skribble-azure mx-auto mb-4" />
+        <p className="text-skribble-azure">
+          {loading ? 'Loading project...' : 'Loading audio file...'}
+        </p>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   if (error || !project) {
     return (
@@ -84,9 +113,9 @@ export default function ViewerPage() {
   }
 
   // Construct full audio URL
-  const audioUrl = project.currentAudioFile.fileUrl.startsWith('http') 
-    ? project.currentAudioFile.fileUrl 
-    : `${process.env.NEXT_PUBLIC_API_URL}${project.currentAudioFile.fileUrl}`;
+  // const audioUrl = project.currentAudioFile.fileUrl.startsWith('http') 
+  //   ? project.currentAudioFile.fileUrl 
+  //   : `${process.env.NEXT_PUBLIC_API_URL}${project.currentAudioFile.fileUrl}`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark">
@@ -129,7 +158,7 @@ export default function ViewerPage() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         <IntegratedWaveformPlayer
-          audioUrl={audioUrl}
+          audioUrl={signedAudioUrl || ''}
           audioFileId={project.currentAudioFile.id}
           projectId={project.id}
           title={project.currentAudioFile.filename}

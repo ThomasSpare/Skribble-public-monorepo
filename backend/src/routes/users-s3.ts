@@ -1,8 +1,8 @@
-// backend/src/routes/users-s3.ts - Updated user routes with S3 image upload
+// backend/src/routes/users-s3.ts - COMPLETE FIXED VERSION
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
-import { UserModel } from '../models/User';
+// REMOVED: import { UserModel } from '../models/User'; // This was causing 500 errors
 import { pool } from '../config/database';
 import { uploadImageS3, uploadImageToS3 } from '../middleware/upload-s3';
 import { s3UploadService } from '../services/s3-upload';
@@ -13,29 +13,51 @@ const logWithTimestamp = (message: string, data?: any) => {
   console.log(`[${new Date().toISOString()}] ${message}`, data || '');
 };
 
-// Get current user profile
+// Test route
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Users-S3 routes are working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Get current user profile - FIXED: Use direct database query instead of UserModel
 router.get('/profile', authenticateToken, async (req: any, res: any) => {
   try {
     const userId = req.user.userId;
-    const user = await UserModel.findById(userId);
+    logWithTimestamp('🔍 Getting S3 profile for user:', userId);
     
-    if (!user) {
+    // FIXED: Direct database query instead of UserModel.findById()
+    const result = await pool.query(`
+      SELECT id, email, username, role, subscription_tier, subscription_status,
+             profile_image, stripe_customer_id, referral_code, referred_by,
+             created_at, updated_at 
+      FROM users WHERE id = $1
+    `, [userId]);
+    
+    if (result.rows.length === 0) {
+      logWithTimestamp('❌ User not found:', userId);
       return res.status(404).json({
         success: false,
         error: { message: 'User not found' }
       });
     }
 
+    const user = result.rows[0];
+    logWithTimestamp('✅ User profile found:', user.username);
+
     // If user has S3 profile image, generate signed URL for security
-    if (user.profileImage && user.profileImage.includes('s3')) {
+    if (user.profile_image && user.profile_image.includes('s3')) {
       try {
         // Extract S3 key from URL
-        const url = new URL(user.profileImage);
+        const url = new URL(user.profile_image);
         const s3Key = url.pathname.substring(1); // Remove leading slash
         
         // Generate signed URL (valid for 1 hour)
         const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
-        user.profileImage = signedUrl;
+        user.profile_image = signedUrl;
+        logWithTimestamp('🔗 Generated signed URL for profile image');
       } catch (error) {
         logWithTimestamp('⚠️ Failed to generate signed URL for profile image:', error);
         // Keep original URL as fallback
@@ -44,18 +66,34 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
 
     res.json({
       success: true,
-      data: user
+      data: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role,
+        subscriptionTier: user.subscription_tier,
+        subscriptionStatus: user.subscription_status || 'active',
+        profileImage: user.profile_image,
+        stripeCustomerId: user.stripe_customer_id,
+        referralCode: user.referral_code,
+        referredBy: user.referred_by,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at
+      }
     });
   } catch (error: any) {
-    console.error('Get profile error:', error);
+    logWithTimestamp('❌ Get S3 profile error:', error);
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to get profile' }
+      error: { 
+        message: 'Failed to get profile',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }
     });
   }
 });
 
-// Update user profile with S3 image upload
+// Update user profile with S3 image upload - FIXED SQL syntax errors
 router.put('/profile', 
   authenticateToken,
   uploadImageS3.single('profileImage'),
@@ -79,6 +117,7 @@ router.put('/profile',
 
       const userId = req.user.userId;
       const { username, role, email } = req.body;
+      logWithTimestamp('🔄 Updating S3 profile:', { userId, username, role, email, hasFile: !!req.file });
 
       // Check if username is available (if changing)
       if (username) {
@@ -174,7 +213,8 @@ router.put('/profile',
         updateValues.push(role);
       }
       if (profileImageUrl) {
-        updateFields.push(`profile_image = ${paramIndex++}`);
+        // FIXED: Missing $ prefix in SQL parameter
+        updateFields.push(`profile_image = $${paramIndex++}`);
         updateValues.push(profileImageUrl);
       }
 
@@ -189,14 +229,25 @@ router.put('/profile',
       updateFields.push(`updated_at = NOW()`);
       updateValues.push(userId);
 
+      // FIXED: Missing $ prefix in WHERE clause
       const query = `
         UPDATE users 
         SET ${updateFields.join(', ')}
-        WHERE id = ${paramIndex}
-        RETURNING id, username, email, role, profile_image, created_at, updated_at
+        WHERE id = $${paramIndex}
+        RETURNING id, username, email, role, subscription_tier, subscription_status,
+                  profile_image, created_at, updated_at
       `;
 
+      logWithTimestamp('📝 Executing update query:', { query, paramCount: updateValues.length });
       const result = await pool.query(query, updateValues);
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: { message: 'User not found' }
+        });
+      }
+
       const updatedUser = result.rows[0];
 
       // Delete old profile image from S3 if we uploaded a new one
@@ -217,6 +268,7 @@ router.put('/profile',
           const s3Key = url.pathname.substring(1);
           const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
           updatedUser.profile_image = signedUrl;
+          logWithTimestamp('🔗 Generated signed URL for updated profile image');
         } catch (error) {
           logWithTimestamp('⚠️ Failed to generate signed URL:', error);
         }
@@ -224,15 +276,28 @@ router.put('/profile',
 
       res.json({
         success: true,
-        data: updatedUser,
+        data: {
+          id: updatedUser.id,
+          email: updatedUser.email,
+          username: updatedUser.username,
+          role: updatedUser.role,
+          subscriptionTier: updatedUser.subscription_tier,
+          subscriptionStatus: updatedUser.subscription_status || 'active',
+          profileImage: updatedUser.profile_image,
+          createdAt: updatedUser.created_at,
+          updatedAt: updatedUser.updated_at
+        },
         message: 'Profile updated successfully'
       });
 
     } catch (error) {
-      logWithTimestamp('❌ Profile update error:', error);
+      logWithTimestamp('❌ S3 Profile update error:', error);
       res.status(500).json({
         success: false,
-        error: { message: 'Failed to update profile' }
+        error: { 
+          message: 'Failed to update profile',
+          details: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+        }
       });
     }
   }

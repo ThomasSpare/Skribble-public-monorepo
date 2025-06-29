@@ -325,7 +325,7 @@ useEffect(() => {
     // Test if the URL is accessible
     if (currentAudio?.fileUrl) {
       const testUrl1 = `${process.env.NEXT_PUBLIC_API_URL}${currentAudio.fileUrl}`;
-      const testUrl2 = `${process.env.NEXT_PUBLIC_API_URL}/api/upload/audio/${currentAudio.filename}`;
+      const testUrl2 = `${process.env.NEXT_PUBLIC_API_URL}/api/upload-s3/audio/${currentAudio.filename}`;
       
       
       fetch(testUrl1, { method: 'HEAD' })

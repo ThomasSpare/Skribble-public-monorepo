@@ -31,7 +31,7 @@ export default function ReferralDashboard() {
       }
 
       // Use users endpoint directly since it's confirmed to work
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/users/referral-stats`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/users-s3/referral-stats`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -67,7 +67,7 @@ export default function ReferralDashboard() {
       }
 
       // Use users endpoint directly since it's confirmed to work
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/users/generate-referral-code`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/users-s3/generate-referral-code`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

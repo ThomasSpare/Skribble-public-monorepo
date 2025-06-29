@@ -126,7 +126,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
       addDebugInfo(`Token available: ${token ? 'YES' : 'NO'}`);
       addDebugInfo(`File details: ${selectedFile.name}, ${selectedFile.size} bytes, ${selectedFile.type}`);
       addDebugInfo(`API URL: ${process.env.NEXT_PUBLIC_API_URL}`);
-      addDebugInfo(`Upload endpoint: ${process.env.NEXT_PUBLIC_API_URL}/upload/project`);
+      addDebugInfo(`Upload endpoint: ${process.env.NEXT_PUBLIC_API_URL}/upload-s3/project`);
 
       if (!token) {
         throw new Error('No authentication token found. Please log in again.');
@@ -147,7 +147,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
       // Track upload progress if possible
       const startTime = Date.now();
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/project`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload-s3/project`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

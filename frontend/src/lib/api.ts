@@ -130,7 +130,7 @@ export const apiClient = {
 
   // Referral System
   async generateReferralCode(): Promise<ApiResponse<{ referralCode: string }>> {
-    const response = await fetch(`${API_BASE_URL}/users-s3/generate-referral-code`, {
+    const response = await fetch(`${API_BASE_URL}/users/generate-referral-code`, {
       method: 'POST',
       headers: getAuthHeaders(),
     });
@@ -144,7 +144,7 @@ export const apiClient = {
     pending_referrals: number;
     rewards_earned: number;
   }>> {
-    const response = await fetch(`${API_BASE_URL}/users-s3/referral-stats`, {
+    const response = await fetch(`${API_BASE_URL}/users/referral-stats`, {
       headers: getAuthHeaders(),
     });
     
@@ -160,7 +160,7 @@ export const apiClient = {
     createdAt: string;
     rewardEarned: boolean;
   }>>> {
-    const response = await fetch(`${API_BASE_URL}/users-s3/referral-history`, {
+    const response = await fetch(`${API_BASE_URL}/users/referral-history`, {
       headers: getAuthHeaders(),
     });
     
@@ -169,7 +169,7 @@ export const apiClient = {
 
   // User Management
   async updateProfile(data: Partial<User>): Promise<ApiResponse<User>> {
-    const response = await fetch(`${API_BASE_URL}/users-s3/profile`, {
+    const response = await fetch(`${API_BASE_URL}/users/profile`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify(data),
@@ -185,7 +185,7 @@ export const apiClient = {
     trialEnd?: string;
     hasStripeSubscription: boolean;
   }>> {
-    const response = await fetch(`${API_BASE_URL}/users-s3/subscription`, {
+    const response = await fetch(`${API_BASE_URL}/users/subscription`, {
       headers: getAuthHeaders(),
     });
     

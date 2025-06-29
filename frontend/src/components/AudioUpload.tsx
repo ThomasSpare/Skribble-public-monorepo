@@ -96,43 +96,6 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
     }
   });
 
-  const testConnection = async () => {
-    try {
-      setUploadStage('testing-connection');
-      addDebugInfo('Testing API connection...');
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for test
-      
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/test`, {
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      addDebugInfo(`API test success: ${JSON.stringify(data)}`);
-      setUploadStage('connection-ok');
-      return data;
-    } catch (error) {
-      setUploadStage('connection-failed');
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          addDebugInfo('API test timeout after 10 seconds');
-          throw new Error('Connection test timed out - server may be unreachable');
-        } else {
-          addDebugInfo(`API test failed: ${error.message}`);
-          throw error;
-        }
-      }
-      throw new Error('Unknown connection error');
-    }
-  };
-
   const handleUpload = async () => {
     if (!selectedFile || !title.trim()) {
       setError('Please provide a file and title.');
@@ -148,7 +111,6 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
     try {
       // Test connection first
       addDebugInfo('Starting upload process...');
-      await testConnection();
 
       setUploadStage('preparing-upload');
       

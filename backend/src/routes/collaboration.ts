@@ -8,6 +8,14 @@ import crypto from 'crypto';
 
 const router = express.Router();
 
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Collaboration routes are working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Generate invite link for project
 router.post('/projects/:projectId/invite-link', [
   authenticateToken,

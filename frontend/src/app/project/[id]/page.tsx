@@ -111,33 +111,37 @@ export default function ProjectPage() {
 
 
   const fetchSignedAudioUrl = async (audioFileId: string) => {
-  try {
-    setAudioUrlLoading(true);
-    
-    const token = localStorage.getItem('skribble_token');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
+    try {
+      setAudioUrlLoading(true);
+      setError(null);
+      
+      const token = localStorage.getItem('skribble_token');
+      if (!token) throw new Error('No auth token');
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload-s3/download/${audioFileId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success && data.data?.downloadUrl) {
+        console.log('✅ Signed URL fetched for:', audioFileId);
+        setSignedAudioUrl(data.data.downloadUrl);
+      } else {
+        throw new Error(data.error?.message || 'Failed to get signed URL');
       }
-    });
-    
-    const data = await response.json();
-    
-    if (response.ok && data.success && data.data?.downloadUrl) {
-      console.log('✅ Signed URL fetched successfully');
-      setSignedAudioUrl(data.data.downloadUrl);
-    } else {
-      console.error('❌ Failed to get signed URL:', data.error);
-      setError('Failed to get audio file access URL');
+    } catch (error) {
+      console.error('❌ Signed URL error:', error);
+      if (!signedAudioUrl) { // Only set error on first load
+        setError('Failed to load audio file');
+      }
+    } finally {
+      setAudioUrlLoading(false);
     }
-  } catch (error) {
-    console.error('💥 Error fetching signed URL:', error);
-    setError('Failed to load audio file');
-  } finally {
-    setAudioUrlLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     if (currentAudioFile?.id) {

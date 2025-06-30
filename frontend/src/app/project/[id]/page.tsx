@@ -262,7 +262,7 @@ const debugCurrentState = () => {
             id: projectData.data.id,
             title: projectData.data.title,
             audioFilesCount: projectData.data.audioFiles?.length || 0,
-            audioFiles: projectData.data.audioFiles?.map(f => ({ id: f.id, filename: f.filename, isActive: f.isActive }))
+            audioFiles: projectData.data.audioFiles?.map((f: any) => ({ id: f.id, filename: f.filename, isActive: f.isActive }))
           });
           
           setProject(projectData.data);

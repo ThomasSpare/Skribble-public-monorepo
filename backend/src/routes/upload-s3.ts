@@ -192,10 +192,25 @@ router.post('/project', authenticateToken, (req: Request, res: Response) => {
 });
 
 // Get file download URL (signed URL for security)
+// Add this to your upload-s3.ts file (or create the endpoint if missing)
+
+// Get file download URL (signed URL for security)
 router.get('/download/:fileId', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { fileId } = req.params;
     const userId = req.user!.userId;
+
+    logWithTimestamp('🔗 Download URL requested for file:', fileId);
+    logWithTimestamp('👤 Requested by user:', userId);
+
+    // FIXED: Add proper null checking
+    if (!fileId) {
+      logWithTimestamp('❌ No file ID provided');
+      return res.status(400).json({
+        success: false,
+        error: { message: 'File ID is required' }
+      });
+    }
 
     // Get file info and check permissions
     const result = await pool.query(`
@@ -205,7 +220,9 @@ router.get('/download/:fileId', authenticateToken, async (req: Request, res: Res
       WHERE af.id = $1
     `, [fileId]);
 
-    if (result.rows.length === 0) {
+    // FIXED: Check if result exists and has rows
+    if (!result || !result.rows || result.rows.length === 0) {
+      logWithTimestamp('❌ File not found in database:', fileId);
       return res.status(404).json({
         success: false,
         error: { message: 'File not found' }
@@ -213,16 +230,23 @@ router.get('/download/:fileId', authenticateToken, async (req: Request, res: Res
     }
 
     const file = result.rows[0];
+    logWithTimestamp('✅ File found:', {
+      filename: file.filename,
+      s3_key: file.s3_key,
+      project_title: file.project_title,
+      creator_id: file.creator_id
+    });
 
     // Check if user has access (creator or collaborator)
     if (file.creator_id !== userId) {
       // Check if user is a collaborator
       const collaboratorCheck = await pool.query(`
         SELECT 1 FROM project_collaborators 
-        WHERE project_id = $1 AND user_id = $2
+        WHERE project_id = $1 AND user_id = $2 AND status = 'accepted'
       `, [file.project_id, userId]);
 
-      if (collaboratorCheck.rows.length === 0) {
+      if (!collaboratorCheck || !collaboratorCheck.rows || collaboratorCheck.rows.length === 0) {
+        logWithTimestamp('❌ Access denied for user:', userId);
         return res.status(403).json({
           success: false,
           error: { message: 'Access denied' }
@@ -230,23 +254,57 @@ router.get('/download/:fileId', authenticateToken, async (req: Request, res: Res
       }
     }
 
-    // Generate signed URL (expires in 1 hour)
-    const signedUrl = await s3UploadService.getSignedDownloadUrl(file.s3_key, 3600);
+    // Check if file has S3 key
+    if (!file.s3_key) {
+      logWithTimestamp('❌ File missing S3 key:', fileId);
+      return res.status(400).json({
+        success: false,
+        error: { message: 'File not available - missing S3 key' }
+      });
+    }
 
-    res.json({
-      success: true,
-      data: {
-        downloadUrl: signedUrl,
-        filename: file.original_filename,
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
-      }
-    });
+    // Generate signed URL (expires in 1 hour)
+    logWithTimestamp('🔗 Generating signed URL for S3 key:', file.s3_key);
+    
+    try {
+      const signedUrl = await s3UploadService.getSignedDownloadUrl(file.s3_key, 3600);
+      
+      logWithTimestamp('✅ Signed URL generated successfully');
+      
+      res.json({
+        success: true,
+        data: {
+          downloadUrl: signedUrl,
+          filename: file.original_filename || file.filename,
+          expiresAt: new Date(Date.now() + 3600 * 1000).toISOString(),
+          fileSize: file.file_size,
+          mimeType: file.mime_type
+        }
+      });
+
+    } catch (s3Error) {
+      logWithTimestamp('❌ S3 signed URL generation failed:', s3Error);
+      return res.status(500).json({
+        success: false,
+        error: { message: 'Failed to generate download URL' }
+      });
+    }
 
   } catch (error) {
     logWithTimestamp('❌ Download URL error:', error);
+    
+    // FIXED: Better error handling to prevent null.length errors
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorStack = error instanceof Error ? error.stack : 'No stack trace';
+    
+    logWithTimestamp('Error details:', { message: errorMessage, stack: errorStack });
+    
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to generate download URL' }
+      error: { 
+        message: 'Failed to generate download URL',
+        details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      }
     });
   }
 });

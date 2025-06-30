@@ -147,7 +147,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
       // Track upload progress if possible
       const startTime = Date.now();
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload-s3/project`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/project`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`

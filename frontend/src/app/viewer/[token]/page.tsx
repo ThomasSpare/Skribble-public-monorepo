@@ -28,37 +28,126 @@ export default function ViewerPage() {
   const [audioUrlLoading, setAudioUrlLoading] = useState(true);
 
   const fetchSignedAudioUrl = async (audioFileId: string) => {
-    try {
-      setAudioUrlLoading(true);
-      setError(null);
+  try {
+    setAudioUrlLoading(true);
+    setError(null);
+    
+    const token = localStorage.getItem('skribble_token');
+    if (!token) throw new Error('No auth token');
+    
+    console.log('🔍 Fetching signed URL for file:', audioFileId);
+    
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const data = await response.json();
+    console.log('📋 Backend response:', data);
+    
+    if (response.ok && data.success && data.data?.downloadUrl) {
+      const signedUrl = data.data.downloadUrl;
+      console.log('✅ Signed URL received:', signedUrl);
       
-      const token = localStorage.getItem('skribble_token');
-      if (!token) throw new Error('No auth token');
+      // 🔍 CRITICAL DEBUG: Test the signed URL immediately
+      console.log('🧪 Testing signed URL accessibility...');
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload-s3/download/${audioFileId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+      try {
+        // Test with HEAD request first
+        const headTest = await fetch(signedUrl, { 
+          method: 'HEAD',
+          mode: 'cors' // Explicitly set CORS mode
+        });
+        console.log('📡 HEAD test result:', {
+          status: headTest.status,
+          statusText: headTest.statusText,
+          headers: Object.fromEntries(headTest.headers.entries())
+        });
+        
+        if (headTest.ok) {
+          console.log('✅ Signed URL is accessible via HEAD request');
+          
+          // Test with GET request for a small range
+          const rangeTest = await fetch(signedUrl, {
+            method: 'GET',
+            headers: { 'Range': 'bytes=0-1023' }, // First 1KB
+            mode: 'cors'
+          });
+          console.log('📡 Range test result:', {
+            status: rangeTest.status,
+            statusText: rangeTest.statusText,
+            headers: Object.fromEntries(rangeTest.headers.entries())
+          });
+          
+          if (rangeTest.ok || rangeTest.status === 206) {
+            console.log('✅ Signed URL supports range requests');
+          } else {
+            console.warn('⚠️ Signed URL does not support range requests');
+          }
+          
+        } else {
+          console.error('❌ Signed URL HEAD request failed:', {
+            status: headTest.status,
+            statusText: headTest.statusText
+          });
+          
+          // Log the URL details for analysis
+          const url = new URL(signedUrl);
+          console.error('🔗 URL Analysis:', {
+            protocol: url.protocol,
+            hostname: url.hostname,
+            pathname: url.pathname,
+            searchParams: url.search.length,
+            hasAwsParams: url.search.includes('X-Amz-'),
+            expiresParam: url.searchParams.get('X-Amz-Expires'),
+            algorithmParam: url.searchParams.get('X-Amz-Algorithm')
+          });
         }
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success && data.data?.downloadUrl) {
-        console.log('✅ Signed URL fetched for:', audioFileId);
-        setSignedAudioUrl(data.data.downloadUrl);
-      } else {
-        throw new Error(data.error?.message || 'Failed to get signed URL');
+        
+      } catch (urlTestError) {
+        console.error('❌ Signed URL test failed:', urlTestError);
+        
+        // Check if it's a CORS error
+        if (
+          typeof urlTestError === 'object' &&
+          urlTestError !== null &&
+          'message' in urlTestError &&
+          typeof (urlTestError as any).message === 'string' &&
+          (urlTestError as any).message.includes('CORS')
+        ) {
+          console.error('🚫 CORS Error detected - S3 bucket needs CORS configuration');
+        }
+        
+        // Check if it's a network error
+        if (
+          typeof urlTestError === 'object' &&
+          urlTestError !== null &&
+          'message' in urlTestError &&
+          typeof (urlTestError as any).message === 'string' &&
+          ((urlTestError as any).message.includes('network') ||
+            (urlTestError as any).name === 'TypeError')
+        ) {
+          console.error('🌐 Network error - check if S3 URL is reachable');
+        }
       }
-    } catch (error) {
-      console.error('❌ Signed URL error:', error);
-      if (!signedAudioUrl) { // Only set error on first load
-        setError('Failed to load audio file');
-      }
-    } finally {
-      setAudioUrlLoading(false);
+      
+      // Set the URL regardless of test results (let the audio player handle it)
+      setSignedAudioUrl(signedUrl);
+      
+    } else {
+      throw new Error(data.error?.message || 'Failed to get signed URL');
     }
-  };
+  } catch (error) {
+    console.error('❌ Signed URL fetch error:', error);
+    if (!signedAudioUrl) {
+      setError('Failed to load audio file');
+    }
+  } finally {
+    setAudioUrlLoading(false);
+  }
+};
 
   useEffect(() => {
     async function fetchProject() {

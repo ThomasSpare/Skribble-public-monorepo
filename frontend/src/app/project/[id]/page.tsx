@@ -118,7 +118,7 @@ export default function ProjectPage() {
       const token = localStorage.getItem('skribble_token');
       if (!token) throw new Error('No auth token');
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload-s3/download/${audioFileId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

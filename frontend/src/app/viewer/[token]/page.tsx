@@ -84,7 +84,7 @@ export default function ViewerPage() {
     }
   }, [token]);
 
-  if (loading || audioUrlLoading) {
+  if (loading) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark flex items-center justify-center">
       <div className="text-center">
@@ -113,7 +113,7 @@ export default function ViewerPage() {
   }
 
   // Construct full audio URL
-  // const audioUrl = project.currentAudioFile.fileUrl.startsWith('http') 
+  // const AudioUrl = project.currentAudioFile.fileUrl.startsWith('http') 
   //   ? project.currentAudioFile.fileUrl 
   //   : `${process.env.NEXT_PUBLIC_API_URL}${project.currentAudioFile.fileUrl}`;
 

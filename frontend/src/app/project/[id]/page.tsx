@@ -101,11 +101,50 @@ export default function ProjectPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  const [signedAudioUrl, setSignedAudioUrl] = useState<string | null>(null);
+  const [audioUrlLoading, setAudioUrlLoading] = useState(true);
 
 
   useEffect(() => {
     initializePage();
   }, [projectId]);
+
+
+  const fetchSignedAudioUrl = async (audioFileId: string) => {
+  try {
+    setAudioUrlLoading(true);
+    
+    const token = localStorage.getItem('skribble_token');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok && data.success && data.data?.downloadUrl) {
+      console.log('✅ Signed URL fetched successfully');
+      setSignedAudioUrl(data.data.downloadUrl);
+    } else {
+      console.error('❌ Failed to get signed URL:', data.error);
+      setError('Failed to get audio file access URL');
+    }
+  } catch (error) {
+    console.error('💥 Error fetching signed URL:', error);
+    setError('Failed to load audio file');
+  } finally {
+    setAudioUrlLoading(false);
+  }
+};
+
+  useEffect(() => {
+    if (currentAudioFile?.id) {
+      console.log('🔄 Audio file changed, fetching new signed URL for:', currentAudioFile.id);
+      fetchSignedAudioUrl(currentAudioFile.id);
+    }
+  }, [currentAudioFile?.id]);
   
   const initializePage = async () => {
     const token = localStorage.getItem('skribble_token');
@@ -235,6 +274,7 @@ export default function ProjectPage() {
 
 
 const handleVersionChange = (versionData: any) => {
+  console.log('🔄 Version change triggered:', versionData);
   
   // Convert the version data structure to match your audioFile structure
   const audioFile = {
@@ -253,6 +293,9 @@ const handleVersionChange = (versionData: any) => {
   };
   
   setCurrentAudioFile(audioFile);
+  setSignedAudioUrl(null); // Clear old signed URL
+  setAudioUrlLoading(true); // Show loading
+  // New signed URL will be fetched by useEffect
 };
   
   const formatFileSize = (bytes: number) => {
@@ -602,15 +645,24 @@ const handleDelete = async (project: Project): Promise<void> => {
                   </div>
                 </header>
 
-      {/* Main Content */}
-      <main className="w-full mx-auto px-6 py-8">
-        <div className="flex flex-col lg:flex-row gap-8 w-full max-w-none">
-          {/* Main Player Area */}
-          <div className="flex-1 min-w-0">
-            {currentAudioFile ? (
+        {/* Main Content */}
+        <main className="w-full mx-auto px-6 py-8">
+          <div className="flex flex-col lg:flex-row gap-8 w-full max-w-none">
+            {/* Main Player Area */}
+            <div className="flex-1 min-w-0">
+              {currentAudioFile ? (
+              <div className="relative">
+                {audioUrlLoading && (
+                  <div className="absolute inset-0 bg-skribble-dark/50 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+                    <div className="text-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-skribble-azure mx-auto mb-2" />
+                      <p className="text-skribble-azure text-sm">Loading audio...</p>
+                    </div>
+                  </div>
+                )}
                 <IntegratedWaveformPlayer
                   key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
-                  audioUrl={`${process.env.NEXT_PUBLIC_API_URL}/upload/audio/${currentAudioFile.filename}`}
+                  audioUrl={signedAudioUrl || ''}
                   audioFileId={currentAudioFile.id}
                   projectId={project.id}
                   title={`${project.title} - ${currentAudioFile.version}`}
@@ -618,9 +670,11 @@ const handleDelete = async (project: Project): Promise<void> => {
                   onVersionChange={handleVersionChange}
                   onLoadComplete={(duration) => {
                     console.log('Audio loaded, duration:', duration);
+                    setAudioUrlLoading(false); // Hide loading when audio loads
                   }}
                 />
-              ) : (
+              </div>
+            ) : (
                 <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">
                   <p className="text-skribble-azure text-lg mb-4">No audio files found</p>
                   <p className="text-skribble-purple text-sm">Upload an audio file to get started with annotations</p>
@@ -736,19 +790,23 @@ const handleDelete = async (project: Project): Promise<void> => {
                 </h3>
                 <div className="space-y-2">
                   {project.audioFiles
-                    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
-                    .map((file, index) => (
-                    <div
-                      key={file.id}
-                      className={`p-3 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
-                        currentAudioFile?.id === file.id
-                          ? 'border-skribble-azure bg-skribble-azure/10 shadow-lg'
-                          : 'border-skribble-azure/20 hover:border-skribble-azure/40'
-                      }`}
-                      onClick={() => {
-                        setCurrentAudioFile(file);
-                      }}
-                    >
+                      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+                      .map((file, index) => (
+                      <div
+                        key={file.id}
+                        className={`p-3 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
+                          currentAudioFile?.id === file.id
+                            ? 'border-skribble-azure bg-skribble-azure/10 shadow-lg'
+                            : 'border-skribble-azure/20 hover:border-skribble-azure/40'
+                        }`}
+                        onClick={() => {
+                          console.log('🎵 Switching to version:', file.version, 'ID:', file.id);
+                          setCurrentAudioFile(file);
+                          setSignedAudioUrl(null); // Clear old signed URL
+                          setAudioUrlLoading(true); // Show loading state
+                          // New signed URL will be fetched by useEffect
+                        }}
+                      >
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center space-x-2">
                           <span className="text-skribble-sky font-mono text-sm font-semibold">

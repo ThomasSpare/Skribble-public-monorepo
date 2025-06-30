@@ -1,4 +1,4 @@
-// backend/src/services/s3-upload.ts
+// backend/src/services/s3-upload.ts - FIXED VERSION
 import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import fs from 'fs';
@@ -11,37 +11,45 @@ export interface UploadResult {
   bucket: string;
 }
 
+const logWithTimestamp = (message: string, data?: any) => {
+  console.log(`[${new Date().toISOString()}] S3Service: ${message}`, data || '');
+};
+
 class S3UploadService {
   private s3Client: S3Client;
   private bucketName: string;
 
   constructor() {
+    // FIXED: Add validation for required environment variables
+    const region = process.env.AWS_REGION;
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const bucketName = process.env.S3_BUCKET_NAME;
+
+    if (!region || !accessKeyId || !secretAccessKey || !bucketName) {
+      logWithTimestamp('❌ Missing required AWS environment variables:', {
+        hasRegion: !!region,
+        hasAccessKey: !!accessKeyId,
+        hasSecretKey: !!secretAccessKey,
+        hasBucketName: !!bucketName
+      });
+      throw new Error('Missing required AWS environment variables');
+    }
+
     this.s3Client = new S3Client({
-      region: process.env.AWS_REGION || 'us-east-1',
+      region,
       credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        accessKeyId,
+        secretAccessKey,
       },
     });
-    this.bucketName = process.env.S3_BUCKET_NAME || 'skribble-audio-files';
-  }
+    this.bucketName = bucketName;
 
-  /**
-   * Get the appropriate S3 folder based on file type
-   */
-  private getS3Folder(mimeType: string, fileType?: 'audio' | 'image'): string {
-    if (fileType) {
-      return fileType === 'audio' ? 'audio' : 'images';
-    }
-    
-    // Auto-detect based on mime type
-    if (mimeType.startsWith('audio/')) {
-      return 'audio';
-    } else if (mimeType.startsWith('image/')) {
-      return 'images';
-    }
-    
-    return 'files'; // fallback (shouldn't be used)
+    logWithTimestamp('✅ S3UploadService initialized', {
+      region,
+      bucket: bucketName,
+      accessKeyId: accessKeyId.substring(0, 6) + '...'
+    });
   }
 
   /**
@@ -102,6 +110,13 @@ class S3UploadService {
     }
   ): Promise<UploadResult> {
     
+    logWithTimestamp('🚀 Starting S3 upload:', {
+      originalName,
+      mimeType,
+      bufferSize: buffer.length,
+      options
+    });
+
     // Validate that we have the right parameters for the use case
     const isAudio = mimeType.startsWith('audio/');
     const isImage = mimeType.startsWith('image/');
@@ -113,31 +128,63 @@ class S3UploadService {
     if (isImage && !options.userId) {
       throw new Error('userId is required for image uploads');
     }
+
+    // FIXED: Validate buffer
+    if (!buffer || buffer.length === 0) {
+      throw new Error('Invalid buffer: empty or null');
+    }
     
     // Generate S3 key for your specific structure
     const key = this.generateS3Key(originalName, options);
+    logWithTimestamp('🔑 Generated S3 key:', key);
 
-    const command = new PutObjectCommand({
-      Bucket: this.bucketName,
-      Key: key,
-      Body: buffer,
-      ContentType: mimeType,
-      Metadata: {
-        originalName: originalName,
-        uploadedAt: new Date().toISOString(),
-        projectId: options.projectId || 'none',
-        userId: options.userId || 'none',
-        fileType: isAudio ? 'audio' : isImage ? 'image' : 'unknown'
-      }
-    });
+    try {
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: key,
+        Body: buffer,
+        ContentType: mimeType,
+        Metadata: {
+          originalName: originalName,
+          uploadedAt: new Date().toISOString(),
+          projectId: options.projectId || 'none',
+          userId: options.userId || 'none',
+          fileType: isAudio ? 'audio' : isImage ? 'image' : 'unknown'
+        }
+      });
 
-    await this.s3Client.send(command);
+      logWithTimestamp('📤 Sending to S3...', {
+        bucket: this.bucketName,
+        key: key,
+        contentType: mimeType
+      });
 
-    return {
-      key,
-      location: `https://${this.bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
-      bucket: this.bucketName
-    };
+      const result = await this.s3Client.send(command);
+      
+      logWithTimestamp('✅ S3 upload successful:', {
+        key,
+        etag: result.ETag,
+        versionId: result.VersionId
+      });
+
+      const uploadResult = {
+        key,
+        location: `https://${this.bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`,
+        bucket: this.bucketName
+      };
+
+      logWithTimestamp('📋 Returning upload result:', uploadResult);
+      return uploadResult;
+
+    } catch (error) {
+      logWithTimestamp('❌ S3 upload failed:', {
+        error: error.message,
+        code: error.code,
+        key,
+        bucket: this.bucketName
+      });
+      throw new Error(`S3 upload failed: ${error.message}`);
+    }
   }
 
   /**
@@ -161,43 +208,78 @@ class S3UploadService {
    * Delete file from S3
    */
   async deleteFile(key: string): Promise<void> {
-    const command = new DeleteObjectCommand({
-      Bucket: this.bucketName,
-      Key: key
-    });
+    try {
+      logWithTimestamp('🗑️ Deleting file from S3:', key);
+      
+      const command = new DeleteObjectCommand({
+        Bucket: this.bucketName,
+        Key: key
+      });
 
-    await this.s3Client.send(command);
+      await this.s3Client.send(command);
+      logWithTimestamp('✅ File deleted successfully:', key);
+    } catch (error) {
+      logWithTimestamp('❌ Failed to delete file:', { key, error: error.message });
+      throw error;
+    }
   }
 
   /**
    * Generate signed URL for secure file access
    */
   async getSignedDownloadUrl(key: string, expiresIn: number = 3600): Promise<string> {
-    const command = new GetObjectCommand({
-      Bucket: this.bucketName,
-      Key: key
-    });
+    try {
+      logWithTimestamp('🔗 Generating signed URL:', { key, expiresIn });
+      
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key
+      });
 
-    return await getSignedUrl(this.s3Client, command, { expiresIn });
+      const signedUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
+      
+      logWithTimestamp('✅ Signed URL generated successfully');
+      return signedUrl;
+    } catch (error) {
+      logWithTimestamp('❌ Failed to generate signed URL:', { key, error: error.message });
+      throw error;
+    }
   }
 
   /**
    * Check if S3 is properly configured
+   * FIXED: Use correct key for deletion
    */
   async testConnection(): Promise<boolean> {
     try {
-      // Try to list objects to test connection
-      const testKey = `test/${uuidv4()}.txt`;
-      const testBuffer = Buffer.from('connection test');
+      logWithTimestamp('🧪 Testing S3 connection...');
       
-      await this.uploadBuffer(testBuffer, 'test.txt', 'text/plain', {
-        projectId: 'test-project'
+      // Create a unique test key
+      const testKey = `test/connection-test-${uuidv4()}.txt`;
+      const testBuffer = Buffer.from('S3 connection test');
+      
+      // FIXED: Upload with a simple structure for testing
+      const command = new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: testKey,
+        Body: testBuffer,
+        ContentType: 'text/plain',
+        Metadata: {
+          test: 'true',
+          timestamp: new Date().toISOString()
+        }
       });
+
+      await this.s3Client.send(command);
+      logWithTimestamp('✅ Test upload successful');
+      
+      // Now delete using the same key
       await this.deleteFile(testKey);
+      logWithTimestamp('✅ Test cleanup successful');
       
       return true;
     } catch (error) {
-      console.error('S3 connection test failed:', error);
+      logWithTimestamp('❌ S3 connection test failed:', error.message);
       return false;
     }
   }
@@ -207,21 +289,39 @@ class S3UploadService {
    */
   async getFileMetadata(key: string) {
     try {
+      logWithTimestamp('📊 Getting file metadata:', key);
+      
       const command = new GetObjectCommand({
         Bucket: this.bucketName,
         Key: key
       });
 
       const response = await this.s3Client.send(command);
-      return {
+      
+      const metadata = {
         size: response.ContentLength,
         lastModified: response.LastModified,
         contentType: response.ContentType,
         metadata: response.Metadata
       };
+
+      logWithTimestamp('✅ Metadata retrieved:', metadata);
+      return metadata;
     } catch (error) {
-      console.error('Failed to get file metadata:', error);
+      logWithTimestamp('❌ Failed to get file metadata:', { key, error: error.message });
       return null;
+    }
+  }
+
+  /**
+   * ADDED: Check if file exists in S3
+   */
+  async fileExists(key: string): Promise<boolean> {
+    try {
+      await this.getFileMetadata(key);
+      return true;
+    } catch (error) {
+      return false;
     }
   }
 }

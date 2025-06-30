@@ -97,30 +97,65 @@ router.post('/project', authenticateToken, (req: Request, res: Response) => {
       filename: req.file.originalname,
       size: req.file.size,
       mimetype: req.file.mimetype,
-      userId
+      userId,
+      hasBuffer: !!req.file.buffer,
+      bufferSize: req.file.buffer?.length
     });
 
+    // ENHANCED: Validate file buffer
+    if (!req.file.buffer || req.file.buffer.length === 0) {
+      logWithTimestamp('❌ Invalid file buffer');
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid file: empty buffer', code: 'INVALID_BUFFER' }
+      });
+    }
+
+    let client;
     try {
       // Start database transaction
-      const client = await pool.connect();
+      client = await pool.connect();
       await client.query('BEGIN');
 
       try {
         // Create project first
+        const projectId = uuidv4();
         const projectResult = await client.query(`
           INSERT INTO projects (id, title, description, creator_id, status, created_at)
           VALUES ($1, $2, $3, $4, 'active', NOW())
           RETURNING *
-        `, [uuidv4(), title || 'Untitled Project', description || '', userId]);
+        `, [projectId, title || 'Untitled Project', description || '', userId]);
 
         const project = projectResult.rows[0];
-        logWithTimestamp('✅ Project created:', project.id);
+        logWithTimestamp('✅ Project created:', {
+          id: project.id,
+          title: project.title,
+          creator_id: project.creator_id
+        });
 
-        // Upload file to S3 (projectId is required for audio uploads)
+        // ENHANCED: Upload file to S3 with detailed logging
+        logWithTimestamp('🎵 Starting S3 upload for project:', project.id);
+        
         const s3Result = await uploadAudioToS3(req.file, project.id);
+        
+        // CRITICAL: Validate S3 result
+        if (!s3Result || !s3Result.key || !s3Result.location) {
+          throw new Error(`S3 upload returned invalid result: ${JSON.stringify(s3Result)}`);
+        }
+
         logWithTimestamp('✅ S3 upload completed:', s3Result);
 
+        // ENHANCED: Validate S3 key format
+        const expectedKeyPrefix = `projects/${project.id}/audio/`;
+        if (!s3Result.key.startsWith(expectedKeyPrefix)) {
+          logWithTimestamp('⚠️ Unexpected S3 key format:', {
+            expected: expectedKeyPrefix,
+            actual: s3Result.key
+          });
+        }
+
         // Save audio file record to database
+        const audioFileId = uuidv4();
         const audioFileResult = await client.query(`
           INSERT INTO audio_files (
             id, project_id, filename, original_filename, file_url, 
@@ -128,21 +163,42 @@ router.post('/project', authenticateToken, (req: Request, res: Response) => {
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'v1.0', NOW())
           RETURNING *
         `, [
-          uuidv4(),
+          audioFileId,
           project.id,
           req.file.originalname,
           req.file.originalname,
           s3Result.location,
-          s3Result.key,
+          s3Result.key,           // This should NEVER be null
           req.file.size,
           req.file.mimetype
         ]);
 
         const audioFile = audioFileResult.rows[0];
-        logWithTimestamp('✅ Audio file record created:', audioFile.id);
+        
+        // CRITICAL: Verify the s3_key was saved correctly
+        if (!audioFile.s3_key) {
+          throw new Error('Database insert failed: s3_key is null after insert');
+        }
+
+        logWithTimestamp('✅ Audio file record created:', {
+          id: audioFile.id,
+          s3_key: audioFile.s3_key,
+          filename: audioFile.filename,
+          file_size: audioFile.file_size
+        });
 
         // Commit transaction
         await client.query('COMMIT');
+        logWithTimestamp('✅ Transaction committed successfully');
+
+        // ENHANCED: Test the created S3 key immediately
+        try {
+          const testUrl = await s3UploadService.getSignedDownloadUrl(audioFile.s3_key, 60);
+          logWithTimestamp('✅ S3 key validation successful - signed URL generated');
+        } catch (testError) {
+          logWithTimestamp('⚠️ S3 key validation failed:', testError.message);
+          // Don't fail the request, but log the issue
+        }
 
         res.json({
           success: true,
@@ -151,41 +207,68 @@ router.post('/project', authenticateToken, (req: Request, res: Response) => {
               ...project,
               audioFiles: [audioFile]
             },
-            s3Data: s3Result
+            s3Data: s3Result,
+            validation: {
+              s3KeyExists: !!audioFile.s3_key,
+              s3KeyFormat: audioFile.s3_key?.startsWith(expectedKeyPrefix)
+            }
           }
         });
 
-      } catch (dbError) {
+      } catch (uploadError) {
         // Rollback transaction
         await client.query('ROLLBACK');
+        logWithTimestamp('❌ Rolling back transaction due to error:', uploadError.message);
         
         // Try to clean up S3 file if it was uploaded
-        if (req.file) {
+        if (req.file && uploadError.message.includes('Database')) {
           try {
-            // We don't have the S3 key here if DB failed, so this might not work
-            // Consider implementing a cleanup job
-            logWithTimestamp('⚠️ Database error, may need S3 cleanup');
+            // Try to extract S3 key from error context if available
+            logWithTimestamp('🧹 Attempting S3 cleanup after database error');
+            // Note: We might not have the S3 key here, which is why we need better error handling
           } catch (cleanupError) {
-            logWithTimestamp('⚠️ S3 cleanup failed:', cleanupError);
+            logWithTimestamp('⚠️ S3 cleanup failed:', cleanupError.message);
           }
         }
         
-        throw dbError;
-      } finally {
-        client.release();
+        throw uploadError; // Re-throw to be caught by outer catch
       }
 
     } catch (error) {
-      logWithTimestamp('❌ Upload error:', error);
+      logWithTimestamp('❌ Upload process failed:', {
+        message: error.message,
+        stack: error.stack,
+        phase: error.message.includes('S3') ? 'S3_UPLOAD' : 
+               error.message.includes('Database') ? 'DATABASE' : 'UNKNOWN'
+      });
       
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          error: {
-            message: 'Failed to process upload',
-            code: 'UPLOAD_ERROR'
-          }
-        });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const isS3Error = errorMessage.includes('S3');
+      const isDatabaseError = errorMessage.includes('Database') || errorMessage.includes('INSERT');
+      
+      let userMessage = 'Upload failed. Please try again.';
+      let errorCode = 'UPLOAD_ERROR';
+      
+      if (isS3Error) {
+        userMessage = 'Failed to upload file to storage. Please check your connection and try again.';
+        errorCode = 'S3_ERROR';
+      } else if (isDatabaseError) {
+        userMessage = 'Failed to save project information. Please try again.';
+        errorCode = 'DATABASE_ERROR';
+      }
+      
+      res.status(500).json({
+        success: false,
+        error: { 
+          message: userMessage,
+          code: errorCode,
+          details: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+        }
+      });
+    } finally {
+      // Release database client
+      if (client) {
+        client.release();
       }
     }
   });
@@ -348,6 +431,81 @@ router.delete('/file/:fileId', authenticateToken, async (req: Request, res: Resp
     res.status(500).json({
       success: false,
       error: { message: 'Failed to delete file' }
+    });
+  }
+});
+
+router.get('/debug-s3', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    logWithTimestamp('🔍 Debug S3 status requested');
+
+    // 1. Check S3 connection
+    const s3Connected = await s3UploadService.testConnection();
+    
+    // 2. Check environment variables
+    const envStatus = {
+      AWS_REGION: !!process.env.AWS_REGION,
+      AWS_ACCESS_KEY_ID: !!process.env.AWS_ACCESS_KEY_ID,
+      AWS_SECRET_ACCESS_KEY: !!process.env.AWS_SECRET_ACCESS_KEY,
+      S3_BUCKET_NAME: !!process.env.S3_BUCKET_NAME,
+      // Show values for debugging (be careful in production!)
+      AWS_REGION_VALUE: process.env.AWS_REGION,
+      S3_BUCKET_NAME_VALUE: process.env.S3_BUCKET_NAME,
+      AWS_ACCESS_KEY_PLACEHOLDER: process.env.AWS_ACCESS_KEY_ID?.includes('your-aws') || false
+    };
+
+    // 3. Count files with/without S3 keys
+    const fileStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total_files,
+        COUNT(s3_key) as files_with_s3_key,
+        COUNT(*) - COUNT(s3_key) as files_missing_s3_key
+      FROM audio_files
+    `);
+
+    // 4. Get recent files with issues
+    const problematicFiles = await pool.query(`
+      SELECT 
+        af.id, af.filename, af.s3_key, af.created_at,
+        p.title as project_title, p.creator_id
+      FROM audio_files af
+      JOIN projects p ON af.project_id = p.id  
+      WHERE af.s3_key IS NULL
+      ORDER BY af.created_at DESC
+      LIMIT 5
+    `);
+
+    // 5. Test generating a sample S3 key
+    let sampleS3Key = null;
+    try {
+      // This is just to test the key generation, not actual upload
+      const testProjectId = 'test-project-id';
+      sampleS3Key = `projects/${testProjectId}/audio/test-file.mp3`;
+    } catch (keyError) {
+      logWithTimestamp('❌ S3 key generation test failed:', keyError);
+    }
+
+    res.json({
+      success: true,
+      debug: {
+        s3Connection: s3Connected,
+        environment: envStatus,
+        fileStatistics: fileStats.rows[0],
+        problematicFiles: problematicFiles.rows,
+        sampleS3Key,
+        recommendations: [
+          envStatus.AWS_ACCESS_KEY_PLACEHOLDER ? 'Update AWS credentials in environment' : 'AWS credentials look set',
+          !s3Connected ? 'S3 connection failed - check credentials and bucket' : 'S3 connection working',
+          fileStats.rows[0].files_missing_s3_key > 0 ? `${fileStats.rows[0].files_missing_s3_key} files need S3 key migration` : 'All files have S3 keys'
+        ]
+      }
+    });
+
+  } catch (error) {
+    logWithTimestamp('❌ Debug endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });

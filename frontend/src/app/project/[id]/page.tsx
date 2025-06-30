@@ -143,11 +143,23 @@ export default function ProjectPage() {
     
     if (data.success && data.data?.downloadUrl) {
       const signedUrl = data.data.downloadUrl;
-      console.log('✅ ProjectPage: Signed URL received:', signedUrl.substring(0, 100) + '...');
+      console.log('✅ ProjectPage: Full signed URL received:', signedUrl);
       
       // 🧪 Test the signed URL immediately
       try {
-        console.log('🧪 ProjectPage: Testing signed URL accessibility...');
+        const url = new URL(signedUrl);
+        console.log('🔍 Signed URL analysis:', {
+          hostname: url.hostname,
+          pathname: url.pathname,
+          hasAwsParams: url.search.includes('X-Amz-'),
+          searchParamsCount: url.searchParams.size,
+          expiresParam: url.searchParams.get('X-Amz-Expires'),
+          signatureParam: url.searchParams.get('X-Amz-Signature')?.substring(0, 20) + '...'
+        });
+      } catch (urlError) {
+        console.error('❌ Invalid URL format:', urlError);
+      }
+      try {
         const headTest = await fetch(signedUrl, { 
           method: 'HEAD',
           mode: 'cors'
@@ -156,12 +168,21 @@ export default function ProjectPage() {
         
         if (headTest.ok) {
           console.log('✅ ProjectPage: Signed URL is accessible');
+        } else if (headTest.status === 403) {
+          console.error('❌ ProjectPage: 403 Forbidden - AWS credentials or expired signature');
         } else {
-          console.warn('⚠️ ProjectPage: Signed URL HEAD test failed but proceeding');
+          console.warn('⚠️ ProjectPage: Unexpected status but proceeding:', headTest.status);
         }
       } catch (testError) {
-        console.warn('⚠️ ProjectPage: Signed URL test failed but proceeding:', testError);
+        console.warn(
+          '⚠️ ProjectPage: URL test failed but proceeding:',
+          testError instanceof Error ? testError.message : String(testError)
+        );
       }
+      
+      setSignedAudioUrl(signedUrl);
+      console.log('🎯 ProjectPage: signedAudioUrl state updated with:', signedUrl.substring(0, 100) + '...');
+    
       
       setSignedAudioUrl(signedUrl);
       console.log('🎯 ProjectPage: signedAudioUrl state updated');
@@ -440,30 +461,12 @@ const handleVersionChange = (versionData: any) => {
 
 useEffect(() => {
   if (project && project.audioFiles && project.audioFiles.length > 0) {
-    const currentAudio = project.audioFiles.find(af => af.isActive) || project.audioFiles[0];
-    
-    // Test if the URL is accessible
-    if (currentAudio?.fileUrl) {
-      const testUrl1 = `${process.env.NEXT_PUBLIC_API_URL}${currentAudio.fileUrl}`;
-      const testUrl2 = `${process.env.NEXT_PUBLIC_API_URL}/api/upload/audio/${currentAudio.filename}`;
-      
-      
-      fetch(testUrl1, { method: 'HEAD' })
-      .then(response => {
-        console.log('URL 1 response:', response.status, response.statusText);
-      })
-      .catch(error => {
-          console.error('URL 1 failed:', error);
-        });
-        
-      fetch(testUrl2, { method: 'HEAD' })
-      .then(response => {
-          console.log('URL 2 response:', response.status, response.statusText);
-        })
-        .catch(error => {
-          console.error('URL 2 failed:', error);
-        });
-    }
+    console.log('🎵 ProjectPage: Project loaded with audio files:', {
+      projectId: project.id,
+      audioFilesCount: project.audioFiles.length,
+      activeFile: project.audioFiles.find(af => af.isActive)?.filename || 'none',
+      firstFile: project.audioFiles[0]?.filename
+    });
   }
 }, [project]);
 
@@ -728,18 +731,25 @@ const handleDelete = async (project: Project): Promise<void> => {
             {/* Main Player Area */}
             <div className="flex-1 min-w-0">
               {currentAudioFile ? (
-              <div className="relative">
-                {audioUrlLoading && (
-                  <div className="absolute inset-0 bg-skribble-dark/50 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
-                    <div className="text-center">
-                      <Loader2 className="w-6 h-6 animate-spin text-skribble-azure mx-auto mb-2" />
-                      <p className="text-skribble-azure text-sm">Loading audio...</p>
-                    </div>
+                <div className="relative">
+                  {/* Add this debugging div temporarily */}
+                  <div style={{ display: 'none' }}>
+                    DEBUG: audioUrl={signedAudioUrl || 'NULL'}, 
+                    audioFileId={currentAudioFile.id}, 
+                    loading={audioUrlLoading}
                   </div>
-                )}
-                <IntegratedWaveformPlayer
+                  
+                  {audioUrlLoading && (
+                    <div className="absolute inset-0 bg-skribble-dark/50 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+                      <div className="text-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-skribble-azure mx-auto mb-2" />
+                        <p className="text-skribble-azure text-sm">Loading audio...</p>
+                      </div>
+                    </div>
+                  )}
+                  <IntegratedWaveformPlayer
                     key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
-                    audioUrl={signedAudioUrl || ''}
+                    audioUrl={signedAudioUrl || ''} // Make sure this is not empty!
                     audioFileId={currentAudioFile.id}
                     projectId={project.id}
                     title={`${project.title} - ${currentAudioFile.version}`}
@@ -750,8 +760,8 @@ const handleDelete = async (project: Project): Promise<void> => {
                       setAudioUrlLoading(false);
                     }}
                   />
-              </div>
-            ) : (
+                </div>
+              ) : (
                 <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">
                   <p className="text-skribble-azure text-lg mb-4">No audio files found</p>
                   <p className="text-skribble-purple text-sm">Upload an audio file to get started with annotations</p>

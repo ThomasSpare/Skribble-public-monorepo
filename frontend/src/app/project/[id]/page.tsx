@@ -111,42 +111,104 @@ export default function ProjectPage() {
 
 
   const fetchSignedAudioUrl = async (audioFileId: string) => {
-    try {
-      setAudioUrlLoading(true);
-      setError(null);
-      
-      const token = localStorage.getItem('skribble_token');
-      if (!token) throw new Error('No auth token');
-      
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok && data.success && data.data?.downloadUrl) {
-        console.log('✅ Signed URL fetched for:', audioFileId);
-        setSignedAudioUrl(data.data.downloadUrl);
-      } else {
-        throw new Error(data.error?.message || 'Failed to get signed URL');
-      }
-    } catch (error) {
-      console.error('❌ Signed URL error:', error);
-      if (!signedAudioUrl) { // Only set error on first load
-        setError('Failed to load audio file');
-      }
-    } finally {
-      setAudioUrlLoading(false);
+  try {
+    console.log('🔍 ProjectPage: Starting signed URL fetch for:', audioFileId);
+    setAudioUrlLoading(true);
+    setError(null);
+    
+    const token = localStorage.getItem('skribble_token');
+    if (!token) {
+      console.error('❌ ProjectPage: No auth token found');
+      throw new Error('No auth token');
     }
+    
+    console.log('📡 ProjectPage: Making request to download endpoint...');
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('📊 ProjectPage: Response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ ProjectPage: Response not OK:', response.status, errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('📋 ProjectPage: Response data:', data);
+    
+    if (data.success && data.data?.downloadUrl) {
+      const signedUrl = data.data.downloadUrl;
+      console.log('✅ ProjectPage: Signed URL received:', signedUrl.substring(0, 100) + '...');
+      
+      // 🧪 Test the signed URL immediately
+      try {
+        console.log('🧪 ProjectPage: Testing signed URL accessibility...');
+        const headTest = await fetch(signedUrl, { 
+          method: 'HEAD',
+          mode: 'cors'
+        });
+        console.log('📡 ProjectPage: HEAD test result:', headTest.status);
+        
+        if (headTest.ok) {
+          console.log('✅ ProjectPage: Signed URL is accessible');
+        } else {
+          console.warn('⚠️ ProjectPage: Signed URL HEAD test failed but proceeding');
+        }
+      } catch (testError) {
+        console.warn('⚠️ ProjectPage: Signed URL test failed but proceeding:', testError);
+      }
+      
+      setSignedAudioUrl(signedUrl);
+      console.log('🎯 ProjectPage: signedAudioUrl state updated');
+    } else {
+      console.error('❌ ProjectPage: Invalid response structure:', data);
+      throw new Error(data.error?.message || 'Failed to get signed URL');
+    }
+  } catch (error) {
+    console.error('❌ ProjectPage: Signed URL error:', error);
+    if (!signedAudioUrl) {
+      setError('Failed to load audio file');
+    }
+  } finally {
+    setAudioUrlLoading(false);
+    console.log('🏁 ProjectPage: fetchSignedAudioUrl completed');
+  }
+};
+
+const debugCurrentState = () => {
+    console.log('🔍 ProjectPage Current State:', {
+      currentAudioFile: currentAudioFile ? {
+        id: currentAudioFile.id,
+        filename: currentAudioFile.filename,
+        version: currentAudioFile.version
+      } : 'null',
+      signedAudioUrl: signedAudioUrl ? `${signedAudioUrl.substring(0, 50)}...` : 'null',
+      audioUrlLoading,
+      error
+    });
   };
 
   useEffect(() => {
+    (window as any).debugProjectPageState = debugCurrentState;
+  }, [currentAudioFile, signedAudioUrl, audioUrlLoading, error]);
+
+  useEffect(() => {
+    console.log('🔄 ProjectPage: currentAudioFile changed:', {
+      id: currentAudioFile?.id,
+      filename: currentAudioFile?.filename,
+      version: currentAudioFile?.version
+    });
+    
     if (currentAudioFile?.id) {
-      console.log('🔄 Audio file changed, fetching new signed URL for:', currentAudioFile.id);
+      console.log('🚀 ProjectPage: Triggering signed URL fetch for:', currentAudioFile.id);
       fetchSignedAudioUrl(currentAudioFile.id);
+    } else {
+      console.log('⚠️ ProjectPage: No currentAudioFile.id, skipping signed URL fetch');
     }
   }, [currentAudioFile?.id]);
   
@@ -195,21 +257,32 @@ export default function ProjectPage() {
       }
 
       const projectData = await projectResponse.json();
-      if (projectData.success) {
-        setProject(projectData.data);
+        if (projectData.success) {
+          console.log('📋 ProjectPage: Project data received:', {
+            id: projectData.data.id,
+            title: projectData.data.title,
+            audioFilesCount: projectData.data.audioFiles?.length || 0,
+            audioFiles: projectData.data.audioFiles?.map(f => ({ id: f.id, filename: f.filename, isActive: f.isActive }))
+          });
+          
+          setProject(projectData.data);
         
         // Set the active audio file
         const activeAudioFile = projectData.data.audioFiles.find((file: any) => file.isActive);
-        if (activeAudioFile) {
-          setCurrentAudioFile(activeAudioFile);
-        } else if (projectData.data.audioFiles.length > 0) {
-          // If no active file, use the most recent one
-          const sortedFiles = projectData.data.audioFiles.sort(
-            (a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
-          );
-          setCurrentAudioFile(sortedFiles[0]);
+          if (activeAudioFile) {
+            console.log('✅ ProjectPage: Found active audio file:', activeAudioFile.id, activeAudioFile.filename);
+            setCurrentAudioFile(activeAudioFile);
+          } else if (projectData.data.audioFiles.length > 0) {
+            // If no active file, use the most recent one
+            const sortedFiles = projectData.data.audioFiles.sort(
+              (a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+            );
+            console.log('📁 ProjectPage: Using most recent audio file:', sortedFiles[0].id, sortedFiles[0].filename);
+            setCurrentAudioFile(sortedFiles[0]);
+          } else {
+            console.log('⚠️ ProjectPage: No audio files found in project');
+          }
         }
-      }
       
     } catch (error) {
       console.error('Error initializing project page:', error);
@@ -665,18 +738,18 @@ const handleDelete = async (project: Project): Promise<void> => {
                   </div>
                 )}
                 <IntegratedWaveformPlayer
-                  key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
-                  audioUrl={signedAudioUrl || ''}
-                  audioFileId={currentAudioFile.id}
-                  projectId={project.id}
-                  title={`${project.title} - ${currentAudioFile.version}`}
-                  currentUser={user}
-                  onVersionChange={handleVersionChange}
-                  onLoadComplete={(duration) => {
-                    console.log('Audio loaded, duration:', duration);
-                    setAudioUrlLoading(false); // Hide loading when audio loads
-                  }}
-                />
+                    key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
+                    audioUrl={signedAudioUrl || ''}
+                    audioFileId={currentAudioFile.id}
+                    projectId={project.id}
+                    title={`${project.title} - ${currentAudioFile.version}`}
+                    currentUser={user}
+                    onVersionChange={handleVersionChange}
+                    onLoadComplete={(duration) => {
+                      console.log('🎵 ProjectPage: Audio loaded successfully, duration:', duration);
+                      setAudioUrlLoading(false);
+                    }}
+                  />
               </div>
             ) : (
                 <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">

@@ -968,17 +968,12 @@ const handleDelete = async (project: Project): Promise<void> => {
                   </div>
                   
                   <div className="mt-4 text-xs text-skribble-azure/70 text-center">
-                    💡 Click any version above to switch audio tracks
+                    💡 Click any version above to switch
                   </div>
                 </div>
               )}
-                </div>
-                
-                {/* Add helpful text */}
-                <div className="mt-4 text-xs text-skribble-azure/70 text-center">
-                  💡 Click any version above to switch audio tracks
-                </div>
-              </div> 
+            </div>
+          </div> 
       </main>
     </div>
   );

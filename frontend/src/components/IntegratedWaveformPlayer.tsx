@@ -8,6 +8,7 @@ import { Music2, ChevronDown } from 'lucide-react';
 import VersionControl from './VersionControl';
 import { getImageUrl } from '@/utils/images';
 import { version } from 'os';
+import UserAvatar from './UserAvatar';
 
 
 interface WaveformPlayerProps {
@@ -1716,9 +1717,7 @@ useEffect(() => {
             onMouseMove={handleMouseMove}
             onMouseLeave={handleMouseLeave}
             style={{ touchAction: 'none' }}
-          />
-          
-          {/* Enhanced Annotation Tooltip with Better Positioning */}
+          />        
           {/* Enhanced Annotation Tooltip with Better Positioning */}
             {hoveredAnnotation && (
               <div
@@ -1738,17 +1737,10 @@ useEffect(() => {
                     {(() => {
                       const annotation = annotations.find(a => a.id === hoveredAnnotation.id);
                       return annotation?.user?.profileImage ? (
-                        <Image 
-                          src={getImageUrl(annotation.user.profileImage)} 
-                          alt={hoveredAnnotation.user}
-                          width={16}
-                          height={16}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            console.error('Failed to load user image:', getImageUrl(annotation.user.profileImage));
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
+                        <UserAvatar 
+                            user={{ username: annotation.user.username, profileImage: annotation.user.profileImage }}
+                            size="xs"
+                          />
                       ) : (
                         <div className="w-full h-full bg-skribble-azure/20 flex items-center justify-center">
                           <User className="w-2 h-2 text-skribble-azure" />

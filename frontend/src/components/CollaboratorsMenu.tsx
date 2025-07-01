@@ -12,6 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import Image from 'next/image';
+import UserAvatar from './UserAvatar';
 
 interface User {
   id: string;
@@ -198,17 +199,11 @@ const fetchCollaborators = async () => {
         {/* Profile Image */}
         <div className="w-10 h-10 rounded-full overflow-hidden bg-skribble-azure/20 flex-shrink-0">
           {creator.profileImage ? (
-            <Image
-              src={getImageUrl(creator.profileImage)}
-              alt={creator.username}
-              width={40}
-              height={40}
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                console.error('Failed to load creator image:', getImageUrl(creator.profileImage));
-                e.currentTarget.style.display = 'none';
-              }}
-            />
+            <UserAvatar 
+                user={creator}
+                size="md"
+                showFallbackIcon={false} // Show initials for better identification
+              />
           ) : (
             <div className="w-full h-full bg-skribble-azure/20 flex items-center justify-center">
               <span className="text-skribble-azure font-medium text-sm">

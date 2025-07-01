@@ -11,6 +11,7 @@ import Image from 'next/image';
 import { auth } from '@/lib/auth';
 import ReferralDashboard from './ReferralDashboard';
 import { getImageUrl } from '@/utils/images';
+import UserAvatar from './UserAvatar';
 
 interface User {
   id: string;
@@ -487,29 +488,21 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
                   <div className="relative">
                     <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden">
                       {previewImage ? (
-                        <Image
-                          src={previewImage}
-                          alt="Profile Preview"
-                          width={80}
-                          height={80}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : profileData.profileImage ? (
-                        <Image
-                          src={getImageUrl(profileData.profileImage)}
-                          alt="Profile"
-                          width={80}
-                          height={80}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            console.error('Failed to load profile image:', getImageUrl(profileData.profileImage));
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-skribble-azure">
-                          <User className="w-8 h-8" />
+                        <div className="w-20 h-20 rounded-full overflow-hidden">
+                          <Image
+                            src={previewImage}
+                            alt="Profile Preview"
+                            width={80}
+                            height={80}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
+                      ) : (
+                        <UserAvatar 
+                          user={{ username: profileData.username, profileImage: profileData.profileImage }}
+                          size="xl"
+                          showFallbackIcon={false} // Show initials instead of icon
+                        />
                       )}
                     </div>
                     <button

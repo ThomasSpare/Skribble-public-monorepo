@@ -26,6 +26,8 @@ import {
 import Image from 'next/image';
 import SoundMonitor from './SoundMonitor';
 import { getImageUrl } from '@/utils/images';
+import UserAvatar from './UserAvatar';
+
 
 // Types (keeping your existing types)
 interface AnnotationType {
@@ -689,17 +691,10 @@ export default function AnnotationSystem({
                           <div className="flex items-center gap-2">
                             <div className="w-7 h-7 rounded-full overflow-hidden border-2 border-skribble-dark hover:border-skribble-azure transition-colors">
                               {parent.user.profileImage ? (
-                                <Image
-                                  src={getImageUrl(parent.user.profileImage)}
-                                  alt={parent.user.username}
-                                  title={parent.user.username}
-                                  width={28}
-                                  height={28}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    console.error('Failed to load user image:', getImageUrl(parent.user.profileImage));
-                                    e.currentTarget.style.display = 'none';
-                                  }}
+                                <UserAvatar 
+                                  user={parent.user}
+                                  size="sm"
+                                  className="border-2 border-skribble-dark hover:border-skribble-azure transition-colors"
                                 />
                               ) : (
                                 <div className="w-full h-full bg-skribble-plum/30 flex items-center justify-center">

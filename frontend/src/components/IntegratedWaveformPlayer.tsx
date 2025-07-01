@@ -1466,6 +1466,48 @@ const drawWaveform = useCallback(() => {
     }
   }, []);
 
+  useEffect(() => {
+  const handleKeyDown = (e: KeyboardEvent) => {
+    // Only handle spacebar if:
+    // 1. The key is spacebar
+    // 2. No input/textarea is focused
+    // 3. No modifier keys are pressed
+    if (
+      e.code === 'Space' && 
+      !e.ctrlKey && 
+      !e.metaKey && 
+      !e.altKey && 
+      !e.shiftKey
+    ) {
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true' ||
+        activeElement.getAttribute('role') === 'textbox'
+      );
+
+      // Don't interfere with input fields
+      if (isInputFocused) {
+        return;
+      }
+
+      // Prevent page scrolling
+      e.preventDefault();
+      
+      console.log('⌨️ Spacebar pressed - toggling playback');
+      togglePlayPause();
+    }
+  };
+
+  // Add event listener to document
+  document.addEventListener('keydown', handleKeyDown);
+
+  return () => {
+    document.removeEventListener('keydown', handleKeyDown);
+  };
+}, []);
+
   // Animation loop
   useEffect(() => {
     if (isPlaying) {
@@ -1880,8 +1922,12 @@ const drawWaveform = useCallback(() => {
           </div>
 
           <div className="text-sm text-skribble-azure font-mono">
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </div>
+            <div className="text-sm text-skribble-azure font-mono flex items-center gap-2">
+              {formatTime(currentTime)} / {formatTime(duration)}
+              <span className="text-xs text-skribble-purple/70 ml-2">
+                Press <kbd className="px-1 py-0.5 bg-skribble-dark/50 rounded text-xs">Space</kbd> to play/pause
+              </span>
+            </div>
 
           <div className="flex items-center gap-2">
             <button

@@ -717,7 +717,7 @@ const handleDelete = async (project: Project): Promise<void> => {
                   ) : (
                     // Only render the player when we have a valid signed URL
                     <IntegratedWaveformPlayer
-                      key={`audio-${currentAudioFile.id}-${currentAudioFile.version}-${Date.now()}`} // Add timestamp to force re-mount
+                      key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
                       audioUrl={signedAudioUrl}
                       audioFileId={currentAudioFile.id}
                       projectId={project.id}

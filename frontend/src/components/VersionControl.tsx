@@ -1,19 +1,22 @@
-// frontend/src/components/VersionControl.tsx
+// frontend/src/components/VersionControl.tsx - FIXED
 import React, { useState, useEffect } from 'react';
-import { Upload, History, FileText, Users, Clock, Download, Music, MessageCircle, Plus, X } from 'lucide-react';
+import { Upload, History, FileText, Users, Clock, Download, Music, MessageCircle, Plus, X, Play } from 'lucide-react';
 
 interface Version {
   id: string;
-  version_number: number;
+  version: string; // 🔑 FIXED: Use 'version' not 'version_number'
   original_filename: string;
   file_url: string;
+  s3_key?: string; // 🔑 ADDED: S3 key field
   file_size: number;
   uploaded_by_name: string;
   uploaded_at: string;
   version_notes: string;
   is_current_version: boolean;
+  is_active: boolean; // 🔑 ADDED: Active field
   annotation_count: number;
   mime_type: string;
+  created_at: string; // 🔑 ADDED: For proper sorting
 }
 
 interface VersionControlProps {
@@ -34,6 +37,7 @@ export default function VersionControl({
   const [versionNotes, setVersionNotes] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSwitching, setIsSwitching] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
@@ -45,30 +49,59 @@ export default function VersionControl({
   });
 
   const fetchVersions = async () => {
+    if (!projectId) {
+      console.warn('⚠️ No projectId provided to fetchVersions');
+      return;
+    }
+    
     try {
       setIsLoading(true);
+      console.log('🔄 Fetching versions for project:', projectId);
+      
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/versions`, {
         headers: getAuthHeaders()
       });
       
+      console.log('📊 Versions fetch response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Failed to fetch versions:', errorText);
+        throw new Error(`Failed to fetch versions: ${response.status}`);
+      }
+      
       const data = await response.json();
+      console.log('📋 Versions data received:', data);
+      
       if (data.success) {
-        setVersions(data.data.versions);
+        // 🔑 CRITICAL FIX: Backend returns data.data directly as array
+        const versionsArray = Array.isArray(data.data) ? data.data : [];
+        setVersions(versionsArray);
+        console.log('✅ Loaded versions:', versionsArray.length);
       } else {
-        onError(data.error?.message || 'Failed to fetch versions');
+        throw new Error(data.error?.message || 'Failed to load versions');
       }
     } catch (error) {
-      console.error('Error fetching versions:', error);
-      onError('Network error while fetching versions');
+      console.error('❌ Error fetching versions:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Network error while fetching versions';
+      onError(errorMessage);
+      setVersions([]); // 🔑 CRITICAL: Set empty array on error
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleUpload = async () => {
-    if (!uploadFile) return;
+    if (!uploadFile || !projectId) return;
     
     setIsUploading(true);
+    console.log('🔄 Starting version upload:', {
+      projectId,
+      fileName: uploadFile.name,
+      fileSize: uploadFile.size,
+      fileType: uploadFile.type
+    });
+    
     const formData = new FormData();
     formData.append('audioFile', uploadFile);
     formData.append('versionNotes', versionNotes);
@@ -77,64 +110,164 @@ export default function VersionControl({
       const token = localStorage.getItem('skribble_token');
       if (!token) throw new Error('No authentication token found');
       
+      console.log('📤 Uploading to backend...');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/versions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
       
+      console.log('📊 Upload response status:', response.status);
+      
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText);
+        const errorData = await response.text();
+        console.error('❌ Upload failed:', errorData);
+        throw new Error(`Upload failed: ${response.status} - ${errorData}`);
       }
       
       const data = await response.json();
+      console.log('📋 Upload response data:', data);
       
       if (data.success) {
-        await fetchVersions();
+        console.log('✅ Version uploaded successfully');
+        await fetchVersions(); // Refresh the versions list
         setShowUpload(false);
         setUploadFile(null);
         setVersionNotes('');
+        
+        // 🔑 FIXED: Pass the audioFile object
         onVersionChange(data.data.audioFile);
       } else {
-        onError(data.error?.message || 'Failed to upload version');
+        throw new Error(data.error?.message || 'Upload failed - unknown error');
       }
     } catch (error) {
-      console.error('Upload error:', error);
-      onError(error instanceof Error ? error.message : 'Upload failed');
+      console.error('❌ Version upload error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload new version';
+      onError(errorMessage);
     } finally {
       setIsUploading(false);
     }
   };
 
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setDragOver(true);
-    };
-    const handleDragLeave = () => {
-      setDragOver(false);
-    };
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setDragOver(false);
-      const files = e.dataTransfer.files;
-      if (files.length > 0) {
-        setUploadFile(files[0]);
-      }
-    };
-
-    const formatFileSize = (bytes: number) => {
-      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    };
-
-    const formatDate = (dateString: string) => {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+  // 🔑 ADDED: Version switching functionality
+  const handleVersionSwitch = async (audioFileId: string) => {
+    console.log('🔄 Switching to version with audioFileId:', audioFileId);
+    setIsSwitching(audioFileId);
+    
+    try {
+      const token = localStorage.getItem('skribble_token');
+      if (!token) throw new Error('No authentication token found');
+      
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/versions/${audioFileId}/activate`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
-    };
+      
+      console.log('📊 Version switch response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Version switch failed:', errorText);
+        throw new Error(`Failed to switch version: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('📋 Version switch data:', data);
+      
+      if (data.success) {
+        console.log('✅ Version switched successfully');
+        await fetchVersions(); // Refresh to update active status
+        onVersionChange(data.data.audioFile); // Pass the audioFile object
+      } else {
+        throw new Error(data.error?.message || 'Failed to switch version');
+      }
+    } catch (error) {
+      console.error('❌ Error switching version:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to switch version';
+      onError(errorMessage);
+    } finally {
+      setIsSwitching(null);
+    }
+  };
+
+  // 🔑 ADDED: File validation
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    console.log('📁 File selected:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    });
+    
+    // Validate file type
+    const allowedTypes = [
+      'audio/mpeg', 'audio/wav', 'audio/wave', 'audio/x-wav',
+      'audio/aiff', 'audio/x-aiff', 'audio/flac', 'audio/x-flac',
+      'audio/mp4', 'audio/m4a', 'audio/ogg', 'audio/webm'
+    ];
+    
+    const allowedExtensions = ['.mp3', '.wav', '.aiff', '.flac', '.m4a', '.ogg'];
+    const hasValidExtension = allowedExtensions.some(ext => 
+      file.name.toLowerCase().endsWith(ext)
+    );
+    
+    if (!allowedTypes.includes(file.type) && !hasValidExtension) {
+      onError(`Invalid file type: ${file.type}. Please upload an audio file.`);
+      e.target.value = '';
+      return;
+    }
+    
+    // Validate file size (50MB limit)
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      onError('File too large. Maximum size is 50MB.');
+      e.target.value = '';
+      return;
+    }
+    
+    setUploadFile(file);
+    console.log('✅ File validation passed');
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      // Create a fake event to reuse validation logic
+      const fakeEvent = {
+        target: { files: files, value: '' }
+      } as any;
+      handleFileSelect(fakeEvent);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const getFileIcon = (mimeType: string) => {
     if (mimeType.includes('wav')) return '✪';
@@ -144,7 +277,7 @@ export default function VersionControl({
     return '💾';
   };
 
- if (isLoading) {
+  if (isLoading) {
     return (
       <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20">
         <div className="flex items-center justify-center py-12">
@@ -184,7 +317,6 @@ export default function VersionControl({
             </span>
           </div>
           
-          {/* Animated background effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-skribble-purple to-skribble-azure transform translate-x-full group-hover:translate-x-0 transition-transform duration-300 -z-10"></div>
         </button>
       </div>
@@ -192,7 +324,6 @@ export default function VersionControl({
       {/* Enhanced Upload Section */}
       {showUpload && (
         <div className="mb-6 relative">
-          {/* Animated entrance */}
           <div className="animate-in slide-in-from-top-2 duration-300">
             <div className="bg-skribble-dark/40 backdrop-blur-sm rounded-xl p-6 border border-skribble-azure/30">
               <div className="space-y-4">
@@ -207,7 +338,6 @@ export default function VersionControl({
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
                 >
-                  {/* Background pattern */}
                   <div className="absolute inset-0 opacity-5">
                     <div className="w-full h-full bg-gradient-to-br from-skribble-azure via-transparent to-skribble-purple rounded-xl"></div>
                   </div>
@@ -245,7 +375,7 @@ export default function VersionControl({
                             <input
                               type="file"
                               accept="audio/*"
-                              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                              onChange={handleFileSelect}
                               className="hidden"
                             />
                           </label>
@@ -253,7 +383,7 @@ export default function VersionControl({
                       </div>
                       <div className="text-xs text-skribble-azure/70">
                         <p>🎵 Supports MP3, WAV, AIFF, FLAC, M4A</p>
-                        <p>📁 Maximum file size: 200MB</p>
+                        <p>📁 Maximum file size: 50MB</p>
                       </div>
                     </div>
                   )}
@@ -311,24 +441,6 @@ export default function VersionControl({
         </div>
       )}
 
-      {/* Enhanced Info Panel */}
-      {!showUpload && (
-        <div className="bg-skribble-azure/10 border border-skribble-azure/20 rounded-lg p-4 mb-6">
-          <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-skribble-azure/20 rounded-full flex items-center justify-center flex-shrink-0">
-              <FileText className="w-4 h-4 text-skribble-azure" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-skribble-sky mb-1">Version Management</p>
-              <p className="text-sm text-skribble-azure leading-relaxed">
-                Use the <span className="font-medium text-skribble-purple">All Versions</span> section in the sidebar to switch between audio versions. 
-                Download any version using the buttons below.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Enhanced Version List */}
       <div className="space-y-3 max-h-96 overflow-y-auto pr-2 scrollbar-thin scrollbar-track-skribble-dark/20 scrollbar-thumb-skribble-azure/40">
         {versions.map((version, index) => (
@@ -340,14 +452,12 @@ export default function VersionControl({
                 : 'border-skribble-azure/20 bg-skribble-dark/20 hover:border-skribble-azure/40 hover:bg-skribble-azure/5'
             }`}
           >
-            {/* Current version indicator */}
             {version.is_current_version && (
               <div className="absolute -top-2 -right-2 w-4 h-4 bg-gradient-to-r from-skribble-azure to-skribble-purple rounded-full animate-pulse"></div>
             )}
             
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                {/* Enhanced Header */}
                 <div className="flex items-center space-x-4 mb-3">
                   <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
                     version.is_current_version 
@@ -362,7 +472,7 @@ export default function VersionControl({
                       <span className={`text-lg font-bold font-mono ${
                         version.is_current_version ? 'text-skribble-sky' : 'text-skribble-azure'
                       }`}>
-                        v{version.version_number}
+                        {version.version} {/* 🔑 FIXED: Use version field */}
                       </span>
                       
                       {version.is_current_version && (
@@ -384,7 +494,6 @@ export default function VersionControl({
                   </div>
                 </div>
                 
-                {/* Enhanced Metadata */}
                 <div className="grid grid-cols-2 gap-4 text-sm mb-3">
                   <div className="flex items-center space-x-2 text-skribble-azure">
                     <Users className="w-4 h-4" />
@@ -393,7 +502,7 @@ export default function VersionControl({
                   
                   <div className="flex items-center space-x-2 text-skribble-azure">
                     <Clock className="w-4 h-4" />
-                    <span>{formatDate(version.uploaded_at)}</span>
+                    <span>{formatDate(version.uploaded_at || version.created_at)}</span>
                   </div>
                   
                   <div className="flex items-center space-x-2 text-skribble-azure">
@@ -401,13 +510,13 @@ export default function VersionControl({
                     <span>{formatFileSize(version.file_size)}</span>
                   </div>
                   
-                  <div className="flex items-center space-x-2 text-skribble-azure">
-                    <MessageCircle className="w-4 h-4" />
-                    <span>{version.annotation_count} note{version.annotation_count !== 1 ? 's' : ''}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className={version.s3_key ? 'text-green-400' : 'text-red-400'}>
+                      {version.s3_key ? '✓ Cloud Ready' : '✗ Missing S3'}
+                    </span>
                   </div>
                 </div>
                 
-                {/* Enhanced Version Notes */}
                 {version.version_notes && (
                   <div className="bg-skribble-dark/30 border-l-4 border-skribble-purple rounded-r-lg p-3 mt-3">
                     <p className="text-sm text-skribble-sky italic">
@@ -417,8 +526,25 @@ export default function VersionControl({
                 )}
               </div>
               
-              {/* Enhanced Action Button */}
+              {/* Enhanced Action Buttons */}
               <div className="flex items-center space-x-2 ml-4">
+                {/* Version Switch Button */}
+                {!version.is_current_version && version.s3_key && (
+                  <button
+                    onClick={() => handleVersionSwitch(version.id)}
+                    disabled={isSwitching === version.id}
+                    className="w-10 h-10 bg-skribble-purple/20 hover:bg-gradient-to-r hover:from-skribble-purple hover:to-skribble-azure rounded-lg flex items-center justify-center transition-all duration-300 hover:shadow-lg hover:shadow-skribble-purple/25 disabled:opacity-50"
+                    title="Activate this version"
+                  >
+                    {isSwitching === version.id ? (
+                      <div className="w-4 h-4 border-2 border-skribble-purple border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Play className="w-4 h-4 text-skribble-purple group-hover:text-white transition-colors" />
+                    )}
+                  </button>
+                )}
+                
+                {/* Download Button */}
                 <a
                   href={version.file_url}
                   download={version.original_filename}
@@ -426,11 +552,6 @@ export default function VersionControl({
                   title={`Download ${version.original_filename}`}
                 >
                   <Download className="w-4 h-4 text-skribble-azure group-hover:text-white transition-colors" />
-                  
-                  {/* Tooltip */}
-                  <div className="absolute bottom-full mb-2 left-1/2 transform -translate-x-1/2 bg-skribble-dark/90 text-skribble-sky text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    Download
-                  </div>
                 </a>
               </div>
             </div>
@@ -439,13 +560,19 @@ export default function VersionControl({
       </div>
       
       {/* Enhanced Empty State */}
-      {versions.length === 0 && (
+      {!isLoading && versions.length === 0 && (
         <div className="text-center py-12">
           <div className="w-20 h-20 bg-skribble-azure/10 rounded-full flex items-center justify-center mx-auto mb-4">
             <History className="w-10 h-10 text-skribble-azure/50" />
           </div>
           <p className="text-lg font-madimi text-skribble-azure mb-2">No versions yet</p>
-          <p className="text-sm text-skribble-azure/70">Upload your first audio file to get started</p>
+          <p className="text-sm text-skribble-azure/70 mb-4">Upload your first audio file to get started</p>
+          <button
+            onClick={() => setShowUpload(true)}
+            className="bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-skribble-azure/25 hover:scale-105"
+          >
+            Upload Audio File
+          </button>
         </div>
       )}
     </div>

@@ -1466,12 +1466,9 @@ const drawWaveform = useCallback(() => {
     }
   }, []);
 
-  useEffect(() => {
+
+useEffect(() => {
   const handleKeyDown = (e: KeyboardEvent) => {
-    // Only handle spacebar if:
-    // 1. The key is spacebar
-    // 2. No input/textarea is focused
-    // 3. No modifier keys are pressed
     if (
       e.code === 'Space' && 
       !e.ctrlKey && 
@@ -1487,20 +1484,54 @@ const drawWaveform = useCallback(() => {
         activeElement.getAttribute('role') === 'textbox'
       );
 
-      // Don't interfere with input fields
       if (isInputFocused) {
         return;
       }
 
-      // Prevent page scrolling
       e.preventDefault();
       
       console.log('⌨️ Spacebar pressed - toggling playback');
-      togglePlayPause();
+      
+      // 🔑 CRITICAL FIX: Use current values instead of closure values
+      const currentAudioRef = audioRef.current;
+      const currentIsAudioReady = isAudioReady;
+      const currentUserInteracted = userInteracted;
+      const currentAudioUrl = audioUrlState;
+      
+      console.log('🔍 Spacebar state check:', {
+        hasAudioRef: !!currentAudioRef,
+        isAudioReady: currentIsAudioReady,
+        userInteracted: currentUserInteracted,
+        hasAudioUrl: !!currentAudioUrl,
+        audioSrc: currentAudioRef?.src?.substring(0, 50)
+      });
+      
+      // Handle the toggle directly instead of calling the function
+      if (!currentUserInteracted) {
+        console.log('🎯 First user interaction via spacebar');
+        setUserInteracted(true);
+        if (currentAudioUrl && currentAudioUrl.startsWith('http')) {
+          initializeAudio(currentAudioUrl);
+        }
+        return;
+      }
+
+      if (!currentAudioRef || !currentIsAudioReady) {
+        console.warn('⚠️ Audio not ready for spacebar playback');
+        return;
+      }
+
+      // Direct audio control
+      if (currentAudioRef.paused) {
+        console.log('▶️ Spacebar play');
+        currentAudioRef.play().catch(console.error);
+      } else {
+        console.log('⏸️ Spacebar pause');
+        currentAudioRef.pause();
+      }
     }
   };
 
-  // Add event listener to document
   document.addEventListener('keydown', handleKeyDown);
 
   return () => {

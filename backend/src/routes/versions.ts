@@ -1,8 +1,9 @@
-// backend/src/routes/versions.ts - FIXED VERSION
+// backend/src/routes/versions.ts - PROPERLY FIXED WITH S3
 import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { authenticateToken } from '../middleware/auth';
 import { uploadAudioVersion, cleanupFile, validateUploadedFile } from '../middleware/upload';
+import { s3UploadService } from '../services/s3-upload'; // 🔑 CRITICAL: Import S3 service
 import { pool } from '../config/database';
 
 const router = express.Router();
@@ -12,19 +13,28 @@ const logWithTimestamp = (message: string, data?: any) => {
 };
 
 // Helper function to get next version number
-async function getNextVersionNumber(projectId: string): Promise<number> {
+async function getNextVersionNumber(projectId: string): Promise<string> {
   const result = await pool.query(
-    'SELECT MAX(version_number) as max_version FROM audio_files WHERE project_id = $1',
+    `SELECT version FROM audio_files 
+     WHERE project_id = $1 AND is_active = true 
+     ORDER BY created_at DESC 
+     LIMIT 1`,
     [projectId]
   );
-  return (result.rows[0].max_version || 0) + 1;
+  
+  if (result.rows.length === 0) {
+    return 'v1.0';
+  }
+  
+  const currentVersion = result.rows[0].version;
+  const versionNum = parseFloat(currentVersion.replace('v', '')) + 0.1;
+  return `v${versionNum.toFixed(1)}`;
 }
 
-// Upload new version - FIXED URL PATTERN
+// Upload new version - FIXED WITH S3 INTEGRATION
 router.post('/:projectId/versions', 
   authenticateToken, 
   (req: Request, res: Response) => {
-    // Set response timeout
     const responseTimeout = setTimeout(() => {
       if (!res.headersSent) {
         logWithTimestamp('❌ Version upload timeout');
@@ -36,7 +46,7 @@ router.post('/:projectId/versions',
           }
         });
       }
-    }, 60000); // 60 second timeout for versions
+    }, 60000);
 
     const multerMiddleware = uploadAudioVersion.single('audioFile');
     
@@ -76,7 +86,6 @@ router.post('/:projectId/versions',
         });
       }
 
-      // Validate the uploaded file
       if (!validateUploadedFile(req.file)) {
         cleanupFile(req.file.path);
         return res.status(400).json({
@@ -90,10 +99,18 @@ router.post('/:projectId/versions',
       const userId = req.user!.userId;
 
       const client = await pool.connect();
+      let s3Result: any = null;
       
       try {
         await client.query('BEGIN');
         
+        logWithTimestamp('🔄 Version upload started:', {
+          projectId,
+          userId,
+          fileName: req.file.originalname,
+          fileSize: req.file.size
+        });
+
         // Check if user has permission to upload to this project
         const permissionCheck = await client.query(`
           SELECT p.creator_id, pc.role 
@@ -113,41 +130,72 @@ router.post('/:projectId/versions',
           throw new Error('Permission denied - insufficient privileges to upload versions');
         }
         
+        // 🔑 CRITICAL: Upload to S3 FIRST
+        logWithTimestamp('📤 Starting S3 upload...');
+        try {
+          s3Result = await s3UploadService.uploadFile(
+            req.file.path, // Use the temporary file path
+            req.file.originalname,
+            req.file.mimetype,
+            { 
+              projectId: projectId,
+              includeOriginalName: true 
+            }
+          );
+          logWithTimestamp('✅ S3 upload successful:', {
+            key: s3Result.key,
+            location: s3Result.location
+          });
+        } catch (s3Error) {
+          logWithTimestamp('❌ S3 upload failed:', s3Error);
+          throw new Error('Failed to upload file to cloud storage');
+        }
+        
         // Get next version number
         const nextVersion = await getNextVersionNumber(projectId);
         
         // Mark all previous versions as not current
         await client.query(`
           UPDATE audio_files 
-          SET is_current_version = false 
+          SET is_current_version = false, is_active = false
           WHERE project_id = $1
         `, [projectId]);
         
-        // Create new audio file record
+        // Create new audio file record with S3 data
         const audioFileId = uuidv4();
-        const fileUrl = `/uploads/audio/${req.file.filename}`; // FIXED: /uploads/ instead of /upload/
         const now = new Date();
         
+        logWithTimestamp('💾 Creating audio file record with S3 key:', s3Result.key);
         const newAudioFile = await client.query(`
           INSERT INTO audio_files (
-            id, project_id, version, version_number, filename, original_filename, 
-            file_url, file_size, mime_type, uploaded_by, version_notes,
-            is_current_version, uploaded_at, is_active, duration, sample_rate
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            id, project_id, version, filename, original_filename, 
+            file_url, s3_key, file_size, mime_type, uploaded_by, version_notes,
+            is_current_version, uploaded_at, is_active, duration, sample_rate, created_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
           RETURNING *
         `, [
-          audioFileId, projectId, `v${nextVersion}`, nextVersion, req.file.filename,
-          req.file.originalname, fileUrl, req.file.size, req.file.mimetype, 
-          userId, versionNotes || null, true, now, true, 0, 44100
+          audioFileId, projectId, nextVersion, req.file.originalname,
+          req.file.originalname, s3Result.location, s3Result.key, req.file.size, 
+          req.file.mimetype, userId, versionNotes || null, true, now, true, 0, 44100, now
         ]);
-        
-        // Add to version history
-        await client.query(`
-          INSERT INTO version_history (
-            project_id, audio_file_id, version_number, 
-            change_type, change_summary, user_id
-          ) VALUES ($1, $2, $3, $4, $5, $6)
-        `, [projectId, audioFileId, nextVersion, 'upload', versionNotes || `Version ${nextVersion} uploaded`, userId]);
+
+        if (!newAudioFile.rows.length) {
+          throw new Error('Failed to create audio file record');
+        }
+
+        const audioFile = newAudioFile.rows[0];
+
+        // Verify S3 key was saved
+        if (!audioFile.s3_key) {
+          logWithTimestamp('❌ S3 key not saved to database!');
+          throw new Error('Database error: S3 key not saved');
+        }
+
+        logWithTimestamp('✅ Audio file record created with S3 key:', {
+          id: audioFile.id,
+          s3_key: audioFile.s3_key,
+          version: audioFile.version
+        });
         
         // Update project's updated_at timestamp
         await client.query(`
@@ -157,13 +205,17 @@ router.post('/:projectId/versions',
         `, [now, projectId]);
         
         await client.query('COMMIT');
+
+        // Clean up temporary file
+        cleanupFile(req.file.path);
                 
         res.json({
           success: true,
           data: {
-            audioFile: newAudioFile.rows[0],
+            audioFile: audioFile,
             versionNumber: nextVersion,
-            message: `Version ${nextVersion} uploaded successfully`
+            message: `Version ${nextVersion} uploaded successfully`,
+            s3Data: s3Result
           }
         });
         
@@ -171,13 +223,24 @@ router.post('/:projectId/versions',
         await client.query('ROLLBACK');
         logWithTimestamp('❌ Version upload failed:', error);
         
-        // Clean up uploaded file on error
+        // Clean up S3 file if it was uploaded
+        if (s3Result?.key) {
+          try {
+            await s3UploadService.deleteFile(s3Result.key);
+            logWithTimestamp('🧹 Cleaned up S3 file after error:', s3Result.key);
+          } catch (cleanupError) {
+            logWithTimestamp('⚠️ Failed to cleanup S3 file:', cleanupError);
+          }
+        }
+        
+        // Clean up temporary file
         cleanupFile(req.file.path);
         
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         res.status(500).json({ 
           success: false, 
           error: { 
-            message: error instanceof Error ? error.message : 'Unknown error',
+            message: errorMessage,
             code: 'VERSION_UPLOAD_FAILED'
           }
         });
@@ -188,7 +251,7 @@ router.post('/:projectId/versions',
   }
 );
 
-// Get all versions for a project - FIXED URL PATTERN
+// Get all versions for a project - UPDATED TO MATCH FRONTEND EXPECTATIONS
 router.get('/:projectId/versions', authenticateToken, async (req: Request, res: Response) => {
   try {
     const { projectId } = req.params;
@@ -228,18 +291,20 @@ router.get('/:projectId/versions', authenticateToken, async (req: Request, res: 
       FROM audio_files af
       JOIN users u ON af.uploaded_by = u.id
       WHERE af.project_id = $1 AND af.is_active = true
-      ORDER BY af.version_number DESC
+      ORDER BY af.created_at DESC
     `;
     
     const result = await pool.query(versionsQuery, [projectId]);
+
+    logWithTimestamp('📋 Versions fetched:', {
+      projectId,
+      versionsCount: result.rows.length,
+      versions: result.rows.map(v => ({ id: v.id, version: v.version, s3_key: v.s3_key ? 'present' : 'missing' }))
+    });
         
     res.json({
       success: true,
-      data: {
-        versions: result.rows,
-        currentVersion: result.rows.find(v => v.is_current_version),
-        totalVersions: result.rows.length
-      }
+      data: result.rows // Return array directly to match frontend expectations
     });
     
   } catch (error) {
@@ -253,6 +318,99 @@ router.get('/:projectId/versions', authenticateToken, async (req: Request, res: 
     });
   }
 });
+
+// Switch to specific version - FIXED TO USE VERSION STRING
+router.post('/:projectId/versions/:versionId/activate', 
+  authenticateToken, 
+  async (req: Request, res: Response) => {
+    const { projectId, versionId } = req.params; // Use versionId (audio file ID)
+    const userId = req.user!.userId;    
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      logWithTimestamp('🔄 Version switch started:', { projectId, versionId, userId });
+      
+      // Check permissions
+      const permissionCheck = await client.query(`
+        SELECT p.creator_id, pc.role 
+        FROM projects p
+        LEFT JOIN project_collaborators pc ON p.id = pc.project_id AND pc.user_id = $2
+        WHERE p.id = $1
+      `, [projectId, userId]);
+
+      if (permissionCheck.rows.length === 0) {
+        throw new Error('Project not found');
+      }
+
+      const { creator_id, role } = permissionCheck.rows[0];
+      const canSwitch = creator_id === userId || ['admin', 'producer'].includes(role);
+
+      if (!canSwitch) {
+        throw new Error('Permission denied - insufficient privileges to switch versions');
+      }
+      
+      // Mark all versions as not current
+      await client.query(`
+        UPDATE audio_files 
+        SET is_current_version = false, is_active = false
+        WHERE project_id = $1
+      `, [projectId]);
+      
+      // Activate the selected version by ID
+      const result = await client.query(`
+        UPDATE audio_files 
+        SET is_current_version = true, is_active = true
+        WHERE project_id = $1 AND id = $2
+        RETURNING *
+      `, [projectId, versionId]);
+      
+      if (result.rows.length === 0) {
+        throw new Error(`Version not found`);
+      }
+
+      const activeVersion = result.rows[0];
+      
+      // Update project timestamp
+      await client.query(`
+        UPDATE projects 
+        SET updated_at = $1 
+        WHERE id = $2
+      `, [new Date(), projectId]);
+      
+      await client.query('COMMIT');
+      
+      logWithTimestamp('✅ Version switch completed:', {
+        activeVersionId: activeVersion.id,
+        version: activeVersion.version
+      });
+      
+      res.json({
+        success: true,
+        data: { 
+          audioFile: activeVersion, // Match frontend expectations
+          message: `Switched to ${activeVersion.version}`
+        }
+      });
+      
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logWithTimestamp('❌ Version switch failed:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: { 
+          message: error instanceof Error ? error.message : 'Unknown error',
+          code: 'VERSION_SWITCH_FAILED'
+        }
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// These below might be buggy because no s3 fix
 
 // Switch to specific version - FIXED URL PATTERN
 router.post('/:projectId/versions/:versionNumber/activate', 

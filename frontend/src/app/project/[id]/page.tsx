@@ -103,6 +103,7 @@ export default function ProjectPage() {
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [signedAudioUrl, setSignedAudioUrl] = useState<string | null>(null);
   const [audioUrlLoading, setAudioUrlLoading] = useState(true);
+  const [isSwitchingVersion, setIsSwitchingVersion] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -284,6 +285,56 @@ const debugCurrentState = () => {
     }
   };
 
+  const handleVersionSwitch = async (audioFile: any) => {
+  console.log('🔄 ProjectPage: Switching to version:', audioFile.version, 'ID:', audioFile.id);
+  setIsSwitchingVersion(audioFile.id);
+  
+  try {
+    const token = localStorage.getItem('skribble_token');
+    if (!token) throw new Error('No authentication token found');
+    
+    // Call the backend to activate this version
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/versions/${audioFile.id}/activate`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('📊 ProjectPage: Version switch response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ ProjectPage: Version switch failed:', errorText);
+      throw new Error(`Failed to switch version: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('📋 ProjectPage: Version switch data:', data);
+    
+    if (data.success) {
+      console.log('✅ ProjectPage: Version switched successfully');
+      
+      // Update the current audio file
+      setCurrentAudioFile(audioFile);
+      setSignedAudioUrl(null); // Clear old signed URL
+      setAudioUrlLoading(true); // Show loading state
+      
+      // Refresh project data to update isActive flags
+      await initializePage();
+      
+    } else {
+      throw new Error(data.error?.message || 'Failed to switch version');
+    }
+  } catch (error) {
+    console.error('❌ ProjectPage: Error switching version:', error);
+    alert(`Failed to switch version: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    setIsSwitchingVersion(null);
+  }
+};
+
   const handleSetDeadline = async (project: Project): Promise<void> => {
   const deadlineInput = prompt(
     'Set project deadline (YYYY-MM-DD HH:MM or YYYY-MM-DD):',
@@ -342,29 +393,35 @@ const debugCurrentState = () => {
 
 
 
-const handleVersionChange = (versionData: any) => {
-  console.log('🔄 Version change triggered:', versionData);
+const handleVersionChange = async (versionData: any) => {
+  console.log('🔄 ProjectPage: Version change triggered:', versionData);
   
   // Convert the version data structure to match your audioFile structure
   const audioFile = {
     id: versionData.id,
-    projectId: versionData.projectId || projectId,
-    version: versionData.version || `v${versionData.version_number}`,
+    projectId: versionData.project_id || projectId,
+    version: versionData.version,
     filename: versionData.filename,
-    originalFilename: versionData.originalFilename || versionData.original_filename,
+    originalFilename: versionData.original_filename || versionData.originalFilename,
     fileUrl: versionData.file_url || versionData.fileUrl,
-    duration: versionData.duration,
-    sampleRate: versionData.sampleRate || versionData.sample_rate,
-    fileSize: versionData.fileSize || versionData.file_size,
-    mimeType: versionData.mimeType || versionData.mime_type,
-    uploadedAt: versionData.uploadedAt || versionData.uploaded_at,
-    isActive: versionData.isActive || versionData.is_current_version || false
+    duration: versionData.duration || 0,
+    sampleRate: versionData.sample_rate || versionData.sampleRate || 44100,
+    fileSize: versionData.file_size || versionData.fileSize,
+    mimeType: versionData.mime_type || versionData.mimeType,
+    uploadedAt: versionData.uploaded_at || versionData.uploadedAt,
+    isActive: versionData.is_current_version || versionData.isActive || false
   };
   
   setCurrentAudioFile(audioFile);
   setSignedAudioUrl(null); // Clear old signed URL
   setAudioUrlLoading(true); // Show loading
-  // New signed URL will be fetched by useEffect
+  
+  // 🔑 NEW: Refresh project data to update the "All Versions" section
+  try {
+    await initializePage();
+  } catch (error) {
+    console.error('Failed to refresh project data after version change:', error);
+  }
 };
   
   const formatFileSize = (bytes: number) => {
@@ -840,77 +897,88 @@ const handleDelete = async (project: Project): Promise<void> => {
               </div>
             )}
             {/* All Versions */}
-            {project.audioFiles.length > 1 && (
-              <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 w-full">
-                <h3 className="font-madimi text-lg text-skribble-sky mb-4">
-                  All Versions ({project.audioFiles.length})
-                </h3>
-                <div className="space-y-2">
-                  {project.audioFiles
-                      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
-                      .map((file, index) => (
-                      <div
-                        key={file.id}
-                        className={`p-3 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
-                          currentAudioFile?.id === file.id
-                            ? 'border-skribble-azure bg-skribble-azure/10 shadow-lg'
-                            : 'border-skribble-azure/20 hover:border-skribble-azure/40'
-                        }`}
-                        onClick={() => {
-                          console.log('🎵 Switching to version:', file.version, 'ID:', file.id);
-                          setCurrentAudioFile(file);
-                          setSignedAudioUrl(null); // Clear old signed URL
-                          setAudioUrlLoading(true); // Show loading state
-                          // New signed URL will be fetched by useEffect
-                        }}
-                      >
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-skribble-sky font-mono text-sm font-semibold">
-                            {file.version}
-                          </span>
-                          {file.isActive && (
-                            <span className="bg-green-500/20 text-green-200 px-2 py-0.5 rounded-full text-xs">
-                              Active
+              {project.audioFiles.length > 1 && (
+                <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 w-full">
+                  <h3 className="font-madimi text-lg text-skribble-sky mb-4">
+                    All Versions ({project.audioFiles.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {project.audioFiles
+                        .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
+                        .map((file, index) => (
+                        <div
+                          key={file.id}
+                          className={`p-3 rounded-lg border transition-all cursor-pointer hover:shadow-md ${
+                            currentAudioFile?.id === file.id
+                              ? 'border-skribble-azure bg-skribble-azure/10 shadow-lg'
+                              : 'border-skribble-azure/20 hover:border-skribble-azure/40'
+                          } ${isSwitchingVersion === file.id ? 'opacity-50 pointer-events-none' : ''}`}
+                          onClick={() => {
+                            // 🔑 FIXED: Use the proper version switching function
+                            if (currentAudioFile?.id !== file.id && isSwitchingVersion !== file.id) {
+                              handleVersionSwitch(file);
+                            }
+                          }}
+                        >
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-skribble-sky font-mono text-sm font-semibold">
+                              {file.version}
                             </span>
-                          )}
-                          {currentAudioFile?.id === file.id && (
-                            <span className="bg-skribble-azure/20 text-skribble-azure px-2 py-0.5 rounded-full text-xs">
-                              Playing
-                            </span>
-                          )}
-                          {index === 0 && (
-                            <span className="bg-skribble-purple/20 text-skribble-purple px-2 py-0.5 rounded-full text-xs">
-                              Latest
-                            </span>
-                          )}
+                            {file.isActive && (
+                              <span className="bg-green-500/20 text-green-200 px-2 py-0.5 rounded-full text-xs">
+                                Active
+                              </span>
+                            )}
+                            {currentAudioFile?.id === file.id && (
+                              <span className="bg-skribble-azure/20 text-skribble-azure px-2 py-0.5 rounded-full text-xs">
+                                Current
+                              </span>
+                            )}
+                            {index === 0 && !file.isActive && (
+                              <span className="bg-skribble-purple/20 text-skribble-purple px-2 py-0.5 rounded-full text-xs">
+                                Latest
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="text-xs text-skribble-azure flex items-center gap-2">
+                            {isSwitchingVersion === file.id ? (
+                              <>
+                                <div className="w-3 h-3 border border-skribble-azure border-t-transparent rounded-full animate-spin" />
+                                <span>Switching...</span>
+                              </>
+                            ) : currentAudioFile?.id === file.id ? (
+                              <span className="text-green-400">✓ Loaded</span>
+                            ) : (
+                              <span>Click to load</span>
+                            )}
+                          </div>
                         </div>
                         
                         <div className="text-xs text-skribble-azure">
-                          Click to load
+                          {formatFileSize(file.fileSize)} • {new Date(file.uploadedAt).toLocaleDateString()}
+                        </div>
+                        
+                        <div className="text-xs text-skribble-purple/70 mt-1">
+                          {file.originalFilename || file.filename}
                         </div>
                       </div>
-                      
-                      <div className="text-xs text-skribble-azure">
-                        {formatFileSize(file.fileSize)} • {new Date(file.uploadedAt).toLocaleDateString()}
-                      </div>
-                      
-                      {/* Optional: Add hover effect instructions */}
-                      <div className="text-xs text-skribble-purple/70 mt-1">
-                        {file.originalFilename || file.filename}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  
+                  <div className="mt-4 text-xs text-skribble-azure/70 text-center">
+                    💡 Click any version above to switch audio tracks
+                  </div>
+                </div>
+              )}
                 </div>
                 
                 {/* Add helpful text */}
                 <div className="mt-4 text-xs text-skribble-azure/70 text-center">
                   💡 Click any version above to switch audio tracks
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
+              </div> 
       </main>
     </div>
   );

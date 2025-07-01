@@ -151,7 +151,7 @@ export default function VersionControl({
 
   // 🔑 ADDED: Version switching functionality
   const handleVersionSwitch = async (audioFileId: string) => {
-    console.log('🔄 Switching to version with audioFileId:', audioFileId);
+    console.log('🔄 VersionControl: Switching to version with audioFileId:', audioFileId);
     setIsSwitching(audioFileId);
     
     try {
@@ -166,32 +166,33 @@ export default function VersionControl({
         }
       });
       
-      console.log('📊 Version switch response status:', response.status);
+      console.log('📊 VersionControl: Version switch response status:', response.status);
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Version switch failed:', errorText);
+        console.error('❌ VersionControl: Version switch failed:', errorText);
         throw new Error(`Failed to switch version: ${response.status}`);
       }
       
       const data = await response.json();
-      console.log('📋 Version switch data:', data);
+      console.log('📋 VersionControl: Version switch data:', data);
       
       if (data.success) {
-        console.log('✅ Version switched successfully');
+        console.log('✅ VersionControl: Version switched successfully');
         await fetchVersions(); // Refresh to update active status
         onVersionChange(data.data.audioFile); // Pass the audioFile object
       } else {
         throw new Error(data.error?.message || 'Failed to switch version');
       }
     } catch (error) {
-      console.error('❌ Error switching version:', error);
+      console.error('❌ VersionControl: Error switching version:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to switch version';
       onError(errorMessage);
     } finally {
       setIsSwitching(null);
     }
   };
+
 
   // 🔑 ADDED: File validation
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

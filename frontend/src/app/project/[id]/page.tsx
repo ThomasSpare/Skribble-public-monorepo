@@ -732,34 +732,33 @@ const handleDelete = async (project: Project): Promise<void> => {
             <div className="flex-1 min-w-0">
               {currentAudioFile ? (
                 <div className="relative">
-                  {/* Add this debugging div temporarily */}
-                  <div style={{ display: 'none' }}>
-                    DEBUG: audioUrl={signedAudioUrl || 'NULL'}, 
-                    audioFileId={currentAudioFile.id}, 
-                    loading={audioUrlLoading}
-                  </div>
-                  
-                  {audioUrlLoading && (
-                    <div className="absolute inset-0 bg-skribble-dark/50 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+                  {/* Show loading state while fetching signed URL */}
+                  {audioUrlLoading || !signedAudioUrl ? (
+                    <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 flex items-center justify-center">
                       <div className="text-center">
-                        <Loader2 className="w-6 h-6 animate-spin text-skribble-azure mx-auto mb-2" />
-                        <p className="text-skribble-azure text-sm">Loading audio...</p>
+                        <Loader2 className="w-8 h-8 animate-spin text-skribble-azure mx-auto mb-4" />
+                        <p className="text-skribble-azure text-lg mb-2">Loading audio...</p>
+                        <p className="text-skribble-purple text-sm">
+                          {audioUrlLoading ? 'Fetching signed URL...' : 'Preparing audio player...'}
+                        </p>
                       </div>
                     </div>
+                  ) : (
+                    // Only render the player when we have a valid signed URL
+                    <IntegratedWaveformPlayer
+                      key={`audio-${currentAudioFile.id}-${currentAudioFile.version}-${Date.now()}`} // Add timestamp to force re-mount
+                      audioUrl={signedAudioUrl}
+                      audioFileId={currentAudioFile.id}
+                      projectId={project.id}
+                      title={`${project.title} - ${currentAudioFile.version}`}
+                      currentUser={user}
+                      onVersionChange={handleVersionChange}
+                      onLoadComplete={(duration) => {
+                        console.log('🎵 ProjectPage: Audio loaded successfully, duration:', duration);
+                        setAudioUrlLoading(false);
+                      }}
+                    />
                   )}
-                  <IntegratedWaveformPlayer
-                    key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
-                    audioUrl={signedAudioUrl || ''} // Make sure this is not empty!
-                    audioFileId={currentAudioFile.id}
-                    projectId={project.id}
-                    title={`${project.title} - ${currentAudioFile.version}`}
-                    currentUser={user}
-                    onVersionChange={handleVersionChange}
-                    onLoadComplete={(duration) => {
-                      console.log('🎵 ProjectPage: Audio loaded successfully, duration:', duration);
-                      setAudioUrlLoading(false);
-                    }}
-                  />
                 </div>
               ) : (
                 <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">

@@ -512,10 +512,10 @@ export default function IntegratedWaveformPlayer({
         (reject as any).cleanup = cleanup;
       });
       console.log('🔗 IntegratedWaveformPlayer: Setting audio src to:', newAudioUrl);
-        audio.src = newAudioUrl;
-        audio.load();
+      audio.src = newAudioUrl;
+      audio.load();
 
-        await audioLoadPromise;
+      await audioLoadPromise;
   
       // Try to setup Web Audio API (but don't fail if it doesn't work)
       try {
@@ -1372,81 +1372,79 @@ const drawWaveform = useCallback(() => {
 
   // Set up persistent audio event listeners
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+  const audio = audioRef.current;
+  if (!audio) return;
 
-    const handleTimeUpdate = () => {
-      const currentTime = audio.currentTime;
-      setCurrentTime(currentTime);
-      onTimeUpdate?.(currentTime);
-    };
+  const handleTimeUpdate = () => {
+    const currentTime = audio.currentTime;
+    setCurrentTime(currentTime);
+    onTimeUpdate?.(currentTime);
+  };
 
-    const handleDurationChange = () => {
-      setDuration(audio.duration);
-    };
+  const handleDurationChange = () => {
+    setDuration(audio.duration);
+  };
 
-    const handleEnded = () => {
-      setIsPlaying(false);
-      setCurrentTime(0);
-    };
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
 
-    const handlePause = () => {
-      setIsPlaying(false);
-    };
+  const handlePause = () => {
+    setIsPlaying(false);
+  };
 
-    const handlePlay = async () => {
-  if (!audioUrlState || !audioUrlState.startsWith('http')) {
-    console.error('❌ IntegratedWaveformPlayer: Cannot play - no valid audio URL');
-    setError('Audio not ready - waiting for signed URL');
-    return;
-  }
+  // 🔑 FIXED: Simple play handler that just updates state
+  const handlePlay = () => {
+    setIsPlaying(true);
+  };
 
-  if (!userInteracted) {
-    setUserInteracted(true);
-    await initializeAudio(audioUrlState);
-  }
+  const handleError = (e: Event) => {
+    console.error('Audio error:', audio.error, e);
+    setError(`Playback error: ${audio.error?.message || 'Unknown error'}`);
+    setIsPlaying(false);
+  };
 
-  if (audioRef.current && isAudioReady) {
-    try {
-      await audioRef.current.play();
-      setIsPlaying(true);
-    } catch (error) {
-      console.error('Play error:', error);
-      setError('Failed to play audio');
-    }
-  }
-};
+  const handleLoadedMetadata = () => {
+    console.log('✅ Audio metadata loaded, duration:', audio.duration);
+    setDuration(audio.duration);
+    setIsAudioReady(true);
+  };
 
-    const handleError = (e: Event) => {
-      console.error('Audio error:', audio.error, e);
-      setError(`Playback error: ${audio.error?.message || 'Unknown error'}`);
-      setIsPlaying(false);
-    };
+  const handleCanPlayThrough = () => {
+    console.log('✅ Audio can play through');
+    setIsAudioReady(true);
+  };
 
-    audio.addEventListener('timeupdate', handleTimeUpdate);
-    audio.addEventListener('durationchange', handleDurationChange);
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('pause', handlePause);
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('error', handleError);
-    
-    return () => {
-      audio.removeEventListener('timeupdate', handleTimeUpdate);
-      audio.removeEventListener('durationchange', handleDurationChange);
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('error', handleError);
-    };
-  }, [onTimeUpdate]);
+  // Add all event listeners
+  audio.addEventListener('timeupdate', handleTimeUpdate);
+  audio.addEventListener('durationchange', handleDurationChange);
+  audio.addEventListener('ended', handleEnded);
+  audio.addEventListener('pause', handlePause);
+  audio.addEventListener('play', handlePlay);
+  audio.addEventListener('error', handleError);
+  audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+  audio.addEventListener('canplaythrough', handleCanPlayThrough);
+  
+  return () => {
+    audio.removeEventListener('timeupdate', handleTimeUpdate);
+    audio.removeEventListener('durationchange', handleDurationChange);
+    audio.removeEventListener('ended', handleEnded);
+    audio.removeEventListener('pause', handlePause);
+    audio.removeEventListener('play', handlePlay);
+    audio.removeEventListener('error', handleError);
+    audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    audio.removeEventListener('canplaythrough', handleCanPlayThrough);
+  };
+}, [onTimeUpdate]);
 
   useEffect(() => {
-    console.log('🔄 IntegratedWaveformPlayer: audioUrl prop changed:', audioUrl);
-    
-    // Only update if we have a valid URL and it's different from current state
-    if (audioUrl && audioUrl !== audioUrlState && audioUrl.startsWith('http')) {
-      console.log('✅ IntegratedWaveformPlayer: Updating audioUrlState with new URL');
-      setAudioUrlState(audioUrl);
+  console.log('🔄 IntegratedWaveformPlayer: audioUrl prop changed:', audioUrl);
+  
+  // Only update if we have a valid URL and it's different from current state
+  if (audioUrl && audioUrl !== audioUrlState && audioUrl.startsWith('http')) {
+    console.log('✅ IntegratedWaveformPlayer: Updating audioUrlState with new URL');
+    setAudioUrlState(audioUrl);
       
       // Re-initialize audio with the new URL
       if (userInteracted) {
@@ -1454,13 +1452,14 @@ const drawWaveform = useCallback(() => {
         initializeAudio(audioUrl);
       }
     }
-  }, [audioUrl]);
+  }, [audioUrl, audioUrlState]);
 
   useEffect(() => {
     console.log('🎬 IntegratedWaveformPlayer: Component mounted, audioUrl:', audioUrl);
     
     if (audioUrl && audioUrl.startsWith('http')) {
       console.log('✅ IntegratedWaveformPlayer: Valid URL available, ready to initialize');
+      setAudioUrlState(audioUrl);
       // Audio will be initialized on first user interaction
     } else {
       console.log('⏳ IntegratedWaveformPlayer: Waiting for valid audio URL...');

@@ -111,95 +111,66 @@ export default function ProjectPage() {
 
 
   const fetchSignedAudioUrl = async (audioFileId: string) => {
-  try {
-    console.log('🔍 ProjectPage: Starting signed URL fetch for:', audioFileId);
-    setAudioUrlLoading(true);
-    setError(null);
-    
-    const token = localStorage.getItem('skribble_token');
-    if (!token) {
-      console.error('❌ ProjectPage: No auth token found');
-      throw new Error('No auth token');
-    }
-    
-    console.log('📡 ProjectPage: Making request to download endpoint...');
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    
-    console.log('📊 ProjectPage: Response status:', response.status);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ ProjectPage: Response not OK:', response.status, errorText);
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-    
-    const data = await response.json();
-    console.log('📋 ProjectPage: Response data:', data);
-    
-    if (data.success && data.data?.downloadUrl) {
-      const signedUrl = data.data.downloadUrl;
-      console.log('✅ ProjectPage: Full signed URL received:', signedUrl);
+    try {
+      console.log('🔍 ProjectPage: Starting signed URL fetch for:', audioFileId);
+      setAudioUrlLoading(true);
+      setError(null);
       
-      // 🧪 Test the signed URL immediately
-      try {
-        const url = new URL(signedUrl);
-        console.log('🔍 Signed URL analysis:', {
-          hostname: url.hostname,
-          pathname: url.pathname,
-          hasAwsParams: url.search.includes('X-Amz-'),
-          searchParamsCount: url.searchParams.size,
-          expiresParam: url.searchParams.get('X-Amz-Expires'),
-          signatureParam: url.searchParams.get('X-Amz-Signature')?.substring(0, 20) + '...'
-        });
-      } catch (urlError) {
-        console.error('❌ Invalid URL format:', urlError);
+      const token = localStorage.getItem('skribble_token');
+      if (!token) {
+        console.error('❌ ProjectPage: No auth token found');
+        throw new Error('No auth token');
       }
-      try {
-        const headTest = await fetch(signedUrl, { 
-          method: 'HEAD',
-          mode: 'cors'
-        });
-        console.log('📡 ProjectPage: HEAD test result:', headTest.status);
-        
-        if (headTest.ok) {
-          console.log('✅ ProjectPage: Signed URL is accessible');
-        } else if (headTest.status === 403) {
-          console.error('❌ ProjectPage: 403 Forbidden - AWS credentials or expired signature');
-        } else {
-          console.warn('⚠️ ProjectPage: Unexpected status but proceeding:', headTest.status);
+      
+      console.log('📡 ProjectPage: Making request to download endpoint...');
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
-      } catch (testError) {
-        console.warn(
-          '⚠️ ProjectPage: URL test failed but proceeding:',
-          testError instanceof Error ? testError.message : String(testError)
-        );
+      });
+      
+      console.log('📊 ProjectPage: Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ ProjectPage: Response not OK:', response.status, errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
       
-      setSignedAudioUrl(signedUrl);
-      console.log('🎯 ProjectPage: signedAudioUrl state updated with:', signedUrl.substring(0, 100) + '...');
-    
+      const data = await response.json();
+      console.log('📋 ProjectPage: Response data:', data);
       
-      setSignedAudioUrl(signedUrl);
-      console.log('🎯 ProjectPage: signedAudioUrl state updated');
-    } else {
-      console.error('❌ ProjectPage: Invalid response structure:', data);
-      throw new Error(data.error?.message || 'Failed to get signed URL');
-    }
-  } catch (error) {
-    console.error('❌ ProjectPage: Signed URL error:', error);
-    if (!signedAudioUrl) {
+      if (data.success && data.data?.downloadUrl) {
+        const signedUrl = data.data.downloadUrl;
+        console.log('✅ ProjectPage: Full signed URL received:', signedUrl);
+        
+        // Validate the URL format
+        try {
+          const url = new URL(signedUrl);
+          if (!url.hostname.includes('s3') || !url.search.includes('X-Amz-')) {
+            throw new Error('Invalid S3 signed URL format');
+          }
+          console.log('✅ ProjectPage: URL validation passed');
+        } catch (urlError) {
+          console.error('❌ ProjectPage: Invalid URL format:', urlError);
+          throw new Error('Received invalid download URL');
+        }    
+        setSignedAudioUrl(signedUrl);
+        console.log('🎯 ProjectPage: signedAudioUrl state updated successfully');
+        
+      } else {
+        console.error('❌ ProjectPage: Invalid response structure:', data);
+        throw new Error(data.error?.message || 'Failed to get signed URL');
+      }
+    } catch (error) {
+      console.error('❌ ProjectPage: Signed URL error:', error);
       setError('Failed to load audio file');
+    } finally {
+      setAudioUrlLoading(false);
+      console.log('🏁 ProjectPage: fetchSignedAudioUrl completed');
     }
-  } finally {
-    setAudioUrlLoading(false);
-    console.log('🏁 ProjectPage: fetchSignedAudioUrl completed');
-  }
-};
+  };
 
 const debugCurrentState = () => {
     console.log('🔍 ProjectPage Current State:', {

@@ -281,9 +281,12 @@ export class UserModel {
 
   // Generate referral code
   static async generateReferralCode(userId: string): Promise<string> {
-    if (!pool) {
-      throw new Error('Database pool not initialized');
+     if (!pool) {
+    console.error('❌ Database pool not available in UserModel.generateReferralCode');
+    throw new Error('Database pool not initialized');
     }
+
+    console.log('✅ Generating referral code for user:', userId);
 
     // Generate a unique referral code
     const referralCode = `REF_${userId.slice(0, 8)}_${Date.now().toString(36).toUpperCase()}`;
@@ -294,20 +297,23 @@ export class UserModel {
       WHERE id = $3
       RETURNING referral_code
     `;
-
     try {
-      const result = await pool.query(query, [referralCode, new Date(), userId]);
-      return result.rows[0].referral_code;
-    } catch (error) {
-      throw error;
-    }
+    const result = await pool.query(query, [referralCode, new Date(), userId]);
+    console.log('✅ Referral code generated:', result.rows[0].referral_code);
+    return result.rows[0].referral_code;
+  } catch (error) {
+    console.error('❌ Error generating referral code:', error);
+    throw error;
   }
+}
 
   // Get referral stats
   static async getReferralStats(userId: string) {
     if (!pool) {
-      throw new Error('Database pool not initialized');
+    console.error('❌ Database pool not available in UserModel.getReferralStats');
+    throw new Error('Database pool not initialized');
     }
+    console.log('✅ Getting referral stats for user:', userId);
 
     const query = `
       SELECT 
@@ -322,17 +328,20 @@ export class UserModel {
     `;
 
     try {
-      const result = await pool.query(query, [userId]);
-      return result.rows[0] || {
-        referral_code: null,
-        successful_referrals: 0,
-        pending_referrals: 0,
-        rewards_earned: 0
-      };
-    } catch (error) {
-      throw error;
-    }
+    const result = await pool.query(query, [userId]);
+    const stats = result.rows[0] || {
+      referral_code: null,
+      successful_referrals: 0,
+      pending_referrals: 0,
+      rewards_earned: 0
+    };
+    console.log('✅ Referral stats retrieved:', stats);
+    return stats;
+  } catch (error) {
+    console.error('❌ Error getting referral stats:', error);
+    throw error;
   }
+}
 
   // Check if username is available
   static async isUsernameAvailable(username: string, excludeUserId?: string): Promise<boolean> {

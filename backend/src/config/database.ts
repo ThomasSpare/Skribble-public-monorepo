@@ -1,4 +1,4 @@
-// backend/src/config/database.ts
+// backend/src/config/database.ts - FIXED VERSION
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 
@@ -22,6 +22,29 @@ const dbConfig = {
 // Create the connection pool
 export const pool = new Pool(dbConfig);
 
+// Add connection event listeners for better debugging
+pool.on('connect', (client) => {
+  console.log('🔗 New database client connected');
+});
+
+pool.on('error', (err, client) => {
+  console.error('❌ Unexpected database client error:', err);
+});
+
+pool.on('acquire', (client) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('📦 Database client acquired from pool');
+  }
+});
+
+pool.on('release', (err, client) => {
+  if (err) {
+    console.error('❌ Error releasing database client:', err);
+  } else if (process.env.NODE_ENV === 'development') {
+    console.log('🔓 Database client released back to pool');
+  }
+});
+
 // Initialize database connection
 export const initializeDatabase = async (): Promise<void> => {
   try {
@@ -30,7 +53,12 @@ export const initializeDatabase = async (): Promise<void> => {
     console.log('✅ Database connected successfully');
     
     // Run a simple query to verify
-    const result = await client.query('SELECT NOW()');    
+    const result = await client.query('SELECT NOW() as current_time, version() as pg_version');
+    console.log('📊 Database info:', {
+      currentTime: result.rows[0].current_time,
+      version: result.rows[0].pg_version.split(' ')[0] // Just show PostgreSQL version
+    });
+    
     client.release();
   } catch (error) {
     console.error('❌ Database connection failed:', error);
@@ -57,12 +85,20 @@ export const query = async (text: string, params?: any[]): Promise<any> => {
     const duration = Date.now() - start;
     
     if (process.env.NODE_ENV === 'development') {
-      console.log('📝 Query executed:', { text, duration, rows: result.rowCount });
+      console.log('📝 Query executed:', { 
+        text: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+        duration: `${duration}ms`, 
+        rows: result.rowCount 
+      });
     }
     
     return result;
   } catch (error) {
-    console.error('❌ Database query error:', error);
+    console.error('❌ Database query error:', {
+      query: text.substring(0, 100) + (text.length > 100 ? '...' : ''),
+      params: params,
+      error: error.message
+    });
     throw error;
   }
 };
@@ -75,11 +111,17 @@ export const withTransaction = async <T>(
   
   try {
     await client.query('BEGIN');
+    console.log('🔄 Transaction started');
+    
     const result = await callback(client);
+    
     await client.query('COMMIT');
+    console.log('✅ Transaction committed');
+    
     return result;
   } catch (error) {
     await client.query('ROLLBACK');
+    console.log('🔄 Transaction rolled back due to error:', error.message);
     throw error;
   } finally {
     client.release();
@@ -89,12 +131,17 @@ export const withTransaction = async <T>(
 // Health check
 export const checkDatabaseHealth = async (): Promise<boolean> => {
   try {
+    const start = Date.now();
     await pool.query('SELECT 1');
+    const duration = Date.now() - start;
+    
+    console.log('💚 Database health check passed', `(${duration}ms)`);
     return true;
   } catch (error) {
-    console.error('Database health check failed:', error);
+    console.error('💔 Database health check failed:', error);
     return false;
   }
 };
 
+// FIXED: Remove the circular import line and add proper default export
 export default pool;

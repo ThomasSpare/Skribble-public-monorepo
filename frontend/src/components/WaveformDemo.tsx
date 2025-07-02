@@ -202,7 +202,7 @@ export default function WaveformDemo() {
                   key={i}
                   className={`rounded-sm transition-all duration-75 flex-1 min-w-[2px] ${
                     isActive 
-                      ? 'bg-gradient-to-t from-green-400 to-green-300 shadow-sm shadow-green-400/30' 
+                      ? 'bg-gradient-to-t from-blue-400 to-blue-300 shadow-sm shadow-blue-400/30' 
                       : 'bg-gradient-to-t from-skribble-azure/60 to-skribble-sky/60'
                   }`}
                   style={{

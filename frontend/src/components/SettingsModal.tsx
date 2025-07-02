@@ -550,51 +550,23 @@ const [showPasswords, setShowPasswords] = useState({
                 {/* Profile Image */}
                 <div className="flex items-center gap-6">
                   <div className="relative">
-                    <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden border-2 border-skribble-azure/20">
+                    <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden">
                       {previewImage ? (
-                        // Show preview while uploading
-                        <Image
-                          src={previewImage}
-                          alt="Profile Preview"
-                          width={80}
-                          height={80}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : profileData.profileImage ? (
-                        // Show actual profile image (signed URL from S3)
-                        <Image
-                          src={profileData.profileImage} // Use direct URL instead of getImageUrl for signed URLs
-                          alt="Profile"
-                          width={80}
-                          height={80}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            console.error('❌ Failed to load profile image:', profileData.profileImage);
-                            // Show fallback instead of hiding
-                            const target = e.currentTarget as HTMLImageElement;
-                            target.style.display = 'none';
-                            
-                            // Create fallback element
-                            const fallback = document.createElement('div');
-                            fallback.className = 'w-full h-full flex items-center justify-center bg-gradient-to-br from-skribble-azure to-skribble-purple';
-                            fallback.innerHTML = `
-                              <span class="text-white font-medium text-lg">
-                                ${profileData.username.charAt(0).toUpperCase()}
-                              </span>
-                            `;
-                            target.parentElement?.appendChild(fallback);
-                          }}
-                          onLoad={() => {
-                            console.log('✅ Profile image loaded successfully:', profileData.profileImage);
-                          }}
-                        />
-                      ) : (
-                        // Show default avatar with initials
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-skribble-azure to-skribble-purple">
-                          <span className="text-white font-medium text-lg">
-                            {profileData.username.charAt(0).toUpperCase()}
-                          </span>
+                        <div className="w-20 h-20 rounded-full overflow-hidden">
+                          <Image
+                            src={previewImage}
+                            alt="Profile Preview"
+                            width={80}
+                            height={80}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
+                      ) : (
+                        <UserAvatar 
+                          user={{ username: profileData.username, profileImage: profileData.profileImage }}
+                          size="xl"
+                          showFallbackIcon={false} // Show initials instead of icon
+                        />
                       )}
                     </div>
                     <button
@@ -616,12 +588,6 @@ const [showPasswords, setShowPasswords] = useState({
                     <p className="text-skribble-azure/70 text-sm">
                       Upload a photo to personalize your profile
                     </p>
-                    {/* Debug info in development */}
-                    {process.env.NODE_ENV === 'development' && profileData.profileImage && (
-                      <p className="text-xs text-skribble-azure/50 mt-1 font-mono">
-                        URL: {profileData.profileImage.substring(0, 50)}...
-                      </p>
-                    )}
                   </div>
                 </div>
 

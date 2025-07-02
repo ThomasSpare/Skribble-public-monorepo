@@ -8,7 +8,7 @@ import { Music2, ChevronDown } from 'lucide-react';
 import VersionControl from './VersionControl';
 import { getImageUrl } from '@/utils/images';
 import { version } from 'os';
-import UserAvatar from './UserAvatar';
+import UserAvatar from './userAvatar';
 
 
 interface WaveformPlayerProps {

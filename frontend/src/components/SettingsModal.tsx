@@ -11,7 +11,7 @@ import Image from 'next/image';
 import { auth } from '@/lib/auth';
 import ReferralDashboard from './ReferralDashboard';
 import { getImageUrl } from '@/utils/images';
-import UserAvatar from './UserAvatar';
+import UserAvatar from './userAvatar';
 
 interface User {
   id: string;

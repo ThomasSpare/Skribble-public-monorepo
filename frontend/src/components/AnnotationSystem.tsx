@@ -26,7 +26,7 @@ import {
 import Image from 'next/image';
 import SoundMonitor from './SoundMonitor';
 import { getImageUrl } from '@/utils/images';
-import UserAvatar from './UserAvatar';
+import UserAvatar from './userAvatar';
 
 
 // Types (keeping your existing types)

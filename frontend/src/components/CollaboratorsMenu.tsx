@@ -12,7 +12,7 @@ import {
   Loader2
 } from 'lucide-react';
 import Image from 'next/image';
-import UserAvatar from './UserAvatar';
+import UserAvatar from './userAvatar';
 
 interface User {
   id: string;

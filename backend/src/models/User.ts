@@ -1,14 +1,7 @@
-import { Pool } from 'pg';
+// backend/src/models/User.ts - FIXED VERSION
+import { pool } from '../config/database'; // Import pool directly like other models
 import { v4 as uuidv4 } from 'uuid';
-import { User } from '../types/index';
-
-
-// Database connection (you'll need to set this up)
-let pool: Pool;
-
-export const initializePool = (dbPool: Pool) => {
-  pool = dbPool;
-};
+import { User } from '../types';
 
 interface PostgresError extends Error {
   code?: string;
@@ -22,6 +15,7 @@ interface CreateUserData {
   role: 'producer' | 'artist' | 'both';
   subscriptionTier: 'free' | 'indie' | 'producer' | 'studio';
   profileImage?: string;
+  stripeCustomerId?: string;
 }
 
 interface UpdateUserData {
@@ -41,10 +35,11 @@ export class UserModel {
     const query = `
       INSERT INTO users (
         id, email, username, password, role, subscription_tier, 
-        profile_image, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        profile_image, stripe_customer_id, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id, email, username, role, subscription_tier, 
-                profile_image, created_at, updated_at
+                profile_image, stripe_customer_id, referral_code, referred_by,
+                created_at, updated_at
     `;
 
     const values = [
@@ -55,6 +50,7 @@ export class UserModel {
       userData.role,
       userData.subscriptionTier,
       userData.profileImage || null,
+      userData.stripeCustomerId || null,
       now,
       now
     ];
@@ -63,7 +59,7 @@ export class UserModel {
       const result = await pool.query(query, values);
       return this.mapRowToUser(result.rows[0]);
     } catch (error: unknown) {
-      if (typeof error === 'object' && error !== null && 'code' in error) {
+      if (error instanceof Error) {
         const pgError = error as PostgresError;
         if (pgError.code === '23505') { // Unique violation
           if (pgError.constraint === 'users_email_key') {
@@ -78,129 +74,35 @@ export class UserModel {
     }
   }
 
-  // Generate a unique referral code
-  static async generateReferralCode(): Promise<string> {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let code = '';
-    
-    // Generate 8-character code
-    for (let i = 0; i < 8; i++) {
-      code += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    
-    try {
-      // Check if code already exists
-      const existing = await pool.query(
-        'SELECT id FROM users WHERE referral_code = $1',
-        [code]
-      );
-      
-      // If exists, try again (recursive)
-      if (existing.rows.length > 0) {
-        return this.generateReferralCode();
-      }
-      
-      return code;
-    } catch (error) {
-      console.error('Error generating referral code:', error);
-      // Return a fallback code with timestamp
-      return `REF${Date.now().toString().slice(-6)}`;
-    }
-  }
-
-  // Get referral statistics for a user
-  static async getReferralStats(userId: string): Promise<{
-    totalReferrals: number;
-    activeReferrals: number;
-    totalRewards: number;
-    pendingRewards: number;
-  }> {
-    try {
-      const result = await pool.query(`
-        SELECT 
-          COUNT(*) as total_referrals,
-          COUNT(CASE WHEN subscription_tier != 'free' THEN 1 END) as active_referrals,
-          COALESCE(SUM(referral_rewards_earned), 0) as total_rewards
-        FROM users 
-        WHERE referred_by_user_id = $1
-      `, [userId]);
-
-      const stats = result.rows[0];
-      
-      return {
-        totalReferrals: parseInt(stats.total_referrals) || 0,
-        activeReferrals: parseInt(stats.active_referrals) || 0,
-        totalRewards: parseInt(stats.total_rewards) || 0,
-        pendingRewards: 0 // Calculate based on your business logic
-      };
-    } catch (error) {
-      console.error('Error getting referral stats:', error);
-      return {
-        totalReferrals: 0,
-        activeReferrals: 0,
-        totalRewards: 0,
-        pendingRewards: 0
-      };
-    }
-  }
-
-  // Helper method to update referral rewards
-  static async updateReferralRewards(userId: string, amount: number): Promise<boolean> {
-    try {
-      await pool.query(`
-        UPDATE users 
-        SET referral_rewards_earned = COALESCE(referral_rewards_earned, 0) + $1,
-            updated_at = NOW()
-        WHERE id = $2
-      `, [amount, userId]);
-      
-      return true;
-    } catch (error) {
-      console.error('Error updating referral rewards:', error);
-      return false;
-    }
-  }
-
-
   // Find user by ID
   static async findById(id: string): Promise<User | null> {
+    const query = `
+      SELECT id, email, username, role, subscription_tier, subscription_status,
+             profile_image, stripe_customer_id, referral_code, referred_by, 
+             created_at, updated_at
+      FROM users WHERE id = $1
+    `;
+
     try {
-      const result = await pool.query(`
-        SELECT id, email, username, role, subscription_tier, subscription_status,
-              profile_image, created_at, updated_at, trial_used, trial_end_date,
-              referral_code, referral_rewards_earned, stripe_customer_id, 
-              stripe_subscription_id, notification_settings, privacy_settings
-        FROM users 
-        WHERE id = $1
-      `, [id]);
-
-      if (result.rows.length === 0) {
-        return null;
-      }
-
-      return this.mapRowToUser(result.rows[0]);
+      const result = await pool.query(query, [id]);
+      return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
     } catch (error) {
       throw error;
     }
-}
+  }
 
-  // Find user by email (for authentication)
-  static async findByEmail(email: string): Promise<(User & { password: string }) | null> {
+  // Find user by email
+  static async findByEmail(email: string): Promise<User | null> {
     const query = `
-      SELECT id, email, username, password, role, subscription_tier, 
-             profile_image, stripe_customer_id, created_at, updated_at
+      SELECT id, email, username, password, role, subscription_tier, subscription_status,
+             profile_image, stripe_customer_id, referral_code, referred_by,
+             created_at, updated_at
       FROM users WHERE email = $1
     `;
 
     try {
       const result = await pool.query(query, [email]);
-      if (result.rows.length === 0) return null;
-      
-      const row = result.rows[0];
-      return {
-        ...this.mapRowToUser(row),
-        password: row.password
-      };
+      return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
     } catch (error) {
       throw error;
     }
@@ -209,8 +111,9 @@ export class UserModel {
   // Find user by username
   static async findByUsername(username: string): Promise<User | null> {
     const query = `
-      SELECT id, email, username, role, subscription_tier, 
-             profile_image, stripe_customer_id, created_at, updated_at
+      SELECT id, email, username, role, subscription_tier, subscription_status,
+             profile_image, stripe_customer_id, referral_code, referred_by,
+             created_at, updated_at
       FROM users WHERE username = $1
     `;
 
@@ -223,85 +126,91 @@ export class UserModel {
   }
 
   // Update user
-    // Update user method (if not already implemented)
   static async update(id: string, updateData: UpdateUserData): Promise<User | null> {
     const fields = [];
     const values = [];
     let paramCount = 1;
 
-    // Build dynamic update query
-    Object.entries(updateData).forEach(([key, value]) => {
+    for (const [key, value] of Object.entries(updateData)) {
       if (value !== undefined) {
-        const dbField = this.camelToSnake(key);
-        fields.push(`${dbField} = $${paramCount}`);
+        fields.push(`${this.camelToSnake(key)} = $${paramCount}`);
         values.push(value);
         paramCount++;
       }
-    });
-
-    if (fields.length === 0) {
-      throw new Error('No fields to update');
     }
 
-    // Add updated_at
+    if (fields.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+
     fields.push(`updated_at = $${paramCount}`);
     values.push(new Date());
-    paramCount++;
-
-    // Add ID for WHERE clause
     values.push(id);
 
     const query = `
       UPDATE users 
       SET ${fields.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING id, email, username, role, subscription_tier, 
-                profile_image, stripe_customer_id, created_at, updated_at
+      WHERE id = $${paramCount + 1}
+      RETURNING id, email, username, role, subscription_tier, subscription_status,
+                profile_image, stripe_customer_id, referral_code, referred_by,
+                created_at, updated_at
     `;
 
     try {
       const result = await pool.query(query, values);
       return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        const pgError = error as PostgresError;
-        if (pgError.code === '23505') { // Unique violation
-          if (pgError.constraint === 'users_username_key') {
-            throw new Error('Username already taken');
-          }
-        }
-      }
-      throw error;
-    }
-  }
-
-
-
-  // Delete user (soft delete by updating status)
-  static async delete(id: string): Promise<boolean> {
-    const query = `
-      UPDATE users 
-      SET updated_at = $1, email = email || '_deleted_' || $2
-      WHERE id = $3
-    `;
-
-    try {
-      const result = await pool.query(query, [new Date(), Date.now(), id]);
-      return result.rowCount ? result.rowCount > 0 : false;
     } catch (error) {
       throw error;
     }
   }
 
+  // Delete user
+  static async delete(id: string): Promise<boolean> {
+    const query = 'DELETE FROM users WHERE id = $1';
 
-  // Get user statistics
-  static async getStats(id: string) {
+    try {
+      const result = await pool.query(query, [id]);
+      return result.rowCount > 0;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Update subscription
+  static async updateSubscription(id: string, subscriptionTier: User['subscriptionTier'], stripeCustomerId?: string): Promise<User | null> {
+    const query = `
+      UPDATE users 
+      SET subscription_tier = $1, 
+          stripe_customer_id = $2,
+          subscription_status = CASE 
+            WHEN $1 = 'free' THEN 'active'
+            ELSE 'active'
+          END,
+          updated_at = NOW()
+      WHERE id = $3
+      RETURNING id, email, username, role, subscription_tier, subscription_status,
+                profile_image, stripe_customer_id, referral_code, referred_by,
+                created_at, updated_at
+    `;
+
+    try {
+      const result = await pool.query(query, [subscriptionTier, stripeCustomerId || null, id]);
+      return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Get user stats
+  static async getStats(id: string): Promise<any> {
     const query = `
       SELECT 
-        (SELECT COUNT(*) FROM projects WHERE creator_id = $1) as total_projects,
-        (SELECT COUNT(*) FROM project_collaborators WHERE user_id = $1) as total_collaborations,
-        (SELECT COUNT(*) FROM annotations WHERE user_id = $1) as total_annotations,
-        (SELECT COUNT(*) FROM projects WHERE creator_id = $1 AND status = 'completed') as completed_projects
+        COUNT(DISTINCT p.id) as project_count,
+        COUNT(DISTINCT pc.project_id) as collaboration_count
+      FROM users u
+      LEFT JOIN projects p ON u.id = p.creator_id
+      LEFT JOIN project_collaborators pc ON u.id = pc.user_id
+      WHERE u.id = $1
     `;
 
     try {
@@ -312,48 +221,55 @@ export class UserModel {
     }
   }
 
-  // Search users (for collaboration invites)
-  static async search(searchTerm: string, limit: number = 10): Promise<Partial<User>[]> {
+  // Get referral stats
+  static async getReferralStats(userId: string): Promise<any> {
     const query = `
-      SELECT id, username, email, role, profile_image
+      SELECT 
+        u.referral_code,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' AND ref.subscription_status = 'active' THEN 1 END) as successful_referrals,
+        COUNT(CASE WHEN ref.subscription_tier = 'free' OR ref.subscription_status != 'active' THEN 1 END) as pending_referrals,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' AND ref.subscription_status = 'active' THEN 1 END) as rewards_earned
+      FROM users u
+      LEFT JOIN users ref ON ref.referred_by = u.referral_code
+      WHERE u.id = $1
+      GROUP BY u.referral_code
+    `;
+
+    try {
+      const result = await pool.query(query, [userId]);
+      
+      const stats = result.rows[0] || {
+        referral_code: null,
+        successful_referrals: 0,
+        pending_referrals: 0,
+        rewards_earned: 0
+      };
+
+      // Convert string numbers to integers
+      stats.successful_referrals = parseInt(stats.successful_referrals) || 0;
+      stats.pending_referrals = parseInt(stats.pending_referrals) || 0;
+      stats.rewards_earned = parseInt(stats.rewards_earned) || 0;
+
+      return stats;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  // Search users
+  static async search(searchTerm: string, limit: number = 10): Promise<User[]> {
+    const query = `
+      SELECT id, email, username, role, subscription_tier, subscription_status,
+             profile_image, created_at, updated_at
       FROM users 
-      WHERE (username ILIKE $1 OR email ILIKE $1)
-      AND email NOT LIKE '%_deleted_%'
+      WHERE username ILIKE $1 OR email ILIKE $1
       ORDER BY username
       LIMIT $2
     `;
 
     try {
       const result = await pool.query(query, [`%${searchTerm}%`, limit]);
-      return result.rows.map(row => ({
-        id: row.id,
-        username: row.username,
-        email: row.email,
-        role: row.role,
-        profileImage: row.profile_image
-      }));
-    } catch (error) {
-      throw error;
-    }
-  }
-
-  // Update subscription
-  static async updateSubscription(
-    id: string, 
-    subscriptionTier: User['subscriptionTier'], 
-    stripeCustomerId?: string
-  ): Promise<User | null> {
-    const query = `
-      UPDATE users 
-      SET subscription_tier = $1, stripe_customer_id = $2, updated_at = $3
-      WHERE id = $4
-      RETURNING id, email, username, role, subscription_tier, 
-                profile_image, stripe_customer_id, created_at, updated_at
-    `;
-
-    try {
-      const result = await pool.query(query, [subscriptionTier, stripeCustomerId, new Date(), id]);
-      return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
+      return result.rows.map(row => this.mapRowToUser(row));
     } catch (error) {
       throw error;
     }
@@ -404,16 +320,11 @@ export class UserModel {
       role: row.role,
       subscriptionTier: row.subscription_tier,
       profileImage: row.profile_image,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      trial_used: row.trial_used,
-      trial_end_date: row.trial_end_date,
-      referral_code: row.referral_code,
-      referral_rewards_earned: row.referral_rewards_earned,
       stripe_customer_id: row.stripe_customer_id,
-      stripe_subscription_id: row.stripe_subscription_id,
-      notification_settings: row.notification_settings,
-      privacy_settings: row.privacy_settings
+      referralCode: row.referral_code,
+      referredBy: row.referred_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
     };
   }
 
@@ -429,3 +340,9 @@ export const findUserById = (id: string) => UserModel.findById(id);
 export const findUserByEmail = (email: string) => UserModel.findByEmail(email);
 export const findUserByUsername = (username: string) => UserModel.findByUsername(username);
 export const updateUser = (id: string, updateData: UpdateUserData) => UserModel.update(id, updateData);
+export const deleteUser = (id: string) => UserModel.delete(id);
+export const getUserStats = (id: string) => UserModel.getStats(id);
+export const searchUsers = (searchTerm: string, limit: number = 10) => UserModel.search(searchTerm, limit);
+export const updateUserSubscription = (id: string, subscriptionTier: User['subscriptionTier'], stripeCustomerId?: string) =>
+  UserModel.updateSubscription(id, subscriptionTier, stripeCustomerId);
+export const getReferralStats = (userId: string) => UserModel.getReferralStats(userId);

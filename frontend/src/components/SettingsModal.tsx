@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   X, User, Camera, Save, Loader2, Users, Gift, Copy, Check, Share2,
-  Crown, CreditCard, Bell, Shield, Mail, AlertCircle, Eye, EyeOff,
+  Crown, CreditCard, Bell, Shield, Mail, AlertCircle, Eye, Lock, EyeOff,
   Trash2, ExternalLink, DollarSign, Calendar, CreditCard as CreditCardIcon,
   Settings, LogOut, Download, Upload
 } from 'lucide-react';
@@ -76,6 +76,16 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [passwordData, setPasswordData] = useState({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+});
+const [showPasswords, setShowPasswords] = useState({
+  current: false,
+  new: false,
+  confirm: false
+});
 
   // Profile form state
   const [profileData, setProfileData] = useState({
@@ -193,6 +203,59 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
       setIsLoading(false);
     }
   };
+
+  const handlePasswordChange = async () => {
+    setIsSaving(true);
+    setError(null);
+
+    // Validation
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      setError('All password fields are required');
+      setIsSaving(false);
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setError('New passwords do not match');
+      setIsSaving(false);
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      setError('New password must be at least 6 characters');
+      setIsSaving(false);
+      return;
+    }
+
+    try {
+      const token = auth.getToken();
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/change-password`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(passwordData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSuccess('Password changed successfully');
+        setPasswordData({
+          currentPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+      } else {
+        throw new Error(data.error.message);
+      }
+    } catch (error: any) {
+      setError(error.message || 'Failed to change password');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -892,76 +955,136 @@ export default function SettingsModal({ user, isOpen, onClose, onUserUpdate, onL
               <div className="space-y-6">
                 <h3 className="font-madimi text-xl text-skribble-sky mb-4">Data & Security</h3>
                 
-                <div className="space-y-4">
-                  {/* Data Export */}
-                  <div className="bg-skribble-plum/20 rounded-lg p-4">
-                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
-                      <Download className="w-5 h-5" />
-                      Export Your Data
-                    </h4>
-                    <p className="text-skribble-azure/70 text-sm mb-4">
-                      Download a copy of all your data including projects, collaborations, and settings.
-                    </p>
-                    <button
-                      onClick={handleDataExport}
-                      className="px-4 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors"
-                    >
-                      <Download className="w-4 h-4 inline mr-2" />
-                      Export Data
-                    </button>
-                  </div>
-
-                  {/* Account Security */}
-                  <div className="bg-skribble-plum/20 rounded-lg p-4">
-                    <h4 className="text-skribble-sky font-medium mb-3 flex items-center gap-2">
-                      <Shield className="w-5 h-5" />
-                      Account Security
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-skribble-azure font-medium">Two-Factor Authentication</p>
-                          <p className="text-skribble-azure/70 text-sm">Add an extra layer of security to your account</p>
-                        </div>
-                        <button className="px-3 py-1 text-sm border border-skribble-azure text-skribble-azure rounded hover:bg-skribble-azure hover:text-white transition-colors">
-                          Enable
-                        </button>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-skribble-azure font-medium">Change Password</p>
-                          <p className="text-skribble-azure/70 text-sm">Update your account password</p>
-                        </div>
-                        <button className="px-3 py-1 text-sm border border-skribble-azure text-skribble-azure rounded hover:bg-skribble-azure hover:text-white transition-colors">
-                          Change
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Danger Zone */}
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-                    <h4 className="text-red-400 font-medium mb-3 flex items-center gap-2">
-                      <AlertCircle className="w-5 h-5" />
-                      Danger Zone
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-red-400 font-medium">Delete Account</p>
-                          <p className="text-red-400/70 text-sm">Permanently delete your account and all data</p>
-                        </div>
+                {/* Change Password Section */}
+                <div className="bg-skribble-plum/20 p-6 rounded-lg border border-skribble-azure/20">
+                  <h4 className="text-skribble-sky font-medium mb-4 flex items-center gap-2">
+                    <Lock className="w-5 h-5" />
+                    Change Password
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-skribble-azure text-sm font-medium mb-2">
+                        Current Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPasswords.current ? 'text' : 'password'}
+                          value={passwordData.currentPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                          placeholder="Enter current password"
+                        />
                         <button
-                          onClick={handleDeleteAccount}
-                          className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+                          type="button"
+                          onClick={() => setShowPasswords({ ...showPasswords, current: !showPasswords.current })}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-skribble-azure hover:text-skribble-sky"
                         >
-                          <Trash2 className="w-4 h-4 inline mr-1" />
-                          Delete
+                          {showPasswords.current ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                       </div>
                     </div>
+
+                    <div>
+                      <label className="block text-skribble-azure text-sm font-medium mb-2">
+                        New Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPasswords.new ? 'text' : 'password'}
+                          value={passwordData.newPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                          placeholder="Enter new password (min 6 characters)"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords({ ...showPasswords, new: !showPasswords.new })}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-skribble-azure hover:text-skribble-sky"
+                        >
+                          {showPasswords.new ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-skribble-azure text-sm font-medium mb-2">
+                        Confirm New Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPasswords.confirm ? 'text' : 'password'}
+                          value={passwordData.confirmPassword}
+                          onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                          className="w-full px-3 py-2 pr-10 bg-skribble-plum/30 border border-skribble-azure/20 rounded-lg text-skribble-sky"
+                          placeholder="Confirm new password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPasswords({ ...showPasswords, confirm: !showPasswords.confirm })}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-skribble-azure hover:text-skribble-sky"
+                        >
+                          {showPasswords.confirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        onClick={handlePasswordChange}
+                        disabled={isSaving}
+                        className="px-6 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isSaving ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Changing...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="w-4 h-4" />
+                            Change Password
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
+                </div>
+
+                {/* Export Data Section */}
+                <div className="bg-skribble-plum/20 p-6 rounded-lg border border-skribble-azure/20">
+                  <h4 className="text-skribble-sky font-medium mb-4 flex items-center gap-2">
+                    <Download className="w-5 h-5" />
+                    Export Your Data
+                  </h4>
+                  <p className="text-skribble-azure/70 text-sm mb-4">
+                    Download a copy of all your data including projects, collaborations, and annotations.
+                  </p>
+                  <button
+                    onClick={handleDataExport}
+                    className="px-4 py-2 bg-skribble-azure text-white rounded-lg hover:bg-skribble-azure/80 transition-colors flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export Data
+                  </button>
+                </div>
+
+                {/* Delete Account Section */}
+                <div className="bg-red-500/10 p-6 rounded-lg border border-red-400/20">
+                  <h4 className="text-red-400 font-medium mb-4 flex items-center gap-2">
+                    <Trash2 className="w-5 h-5" />
+                    Delete Account
+                  </h4>
+                  <p className="text-red-400/70 text-sm mb-4">
+                    Permanently delete your account and all associated data. This action cannot be undone.
+                  </p>
+                  <button
+                    onClick={handleDeleteAccount}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Delete Account
+                  </button>
                 </div>
               </div>
             )}

@@ -4,6 +4,7 @@ import { authenticateToken } from '../middleware/auth';
 import { uploadImageS3, uploadImageToS3 } from '../middleware/upload-s3'; 
 import { s3UploadService } from '../services/s3-upload';
 import { body, validationResult } from 'express-validator';
+import bcrypt from 'bcrypt';
 import pool from '../config/database';
 
 const router = express.Router();
@@ -520,6 +521,195 @@ router.delete('/delete-account', authenticateToken, async (req: any, res: any) =
     });
   }
 });
+
+router.put('/change-password', 
+  authenticateToken,
+  [
+    body('currentPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+    body('confirmPassword').custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error('Password confirmation does not match');
+      }
+      return true;
+    })
+  ],
+  async (req: any, res: any) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            message: 'Validation failed',
+            details: errors.array()
+          }
+        });
+      }
+
+      const userId = req.user.userId;
+      const { currentPassword, newPassword } = req.body;
+
+      // Get current user
+      const result = await pool.query(
+        'SELECT password FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: { message: 'User not found' }
+        });
+      }
+
+      const user = result.rows[0];
+
+      // Verify current password
+      const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isCurrentPasswordValid) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Current password is incorrect' }
+        });
+      }
+
+      // Hash new password
+      const saltRounds = 12;
+      const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+      // Update password
+      await pool.query(
+        'UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2',
+        [hashedNewPassword, userId]
+      );
+
+      logWithTimestamp('✅ Password changed successfully for user:', userId);
+
+      res.json({
+        success: true,
+        message: 'Password changed successfully'
+      });
+
+    } catch (error) {
+      logWithTimestamp('❌ Change password error:', error);
+      res.status(500).json({
+        success: false,
+        error: { message: 'Failed to change password' }
+      });
+    }
+  }
+);
+
+// Get referral stats (ADD THIS - to have it in users routes too for fallback)
+router.get('/referral-stats', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const query = `
+      SELECT 
+        u.referral_code,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' AND ref.subscription_status = 'active' THEN 1 END) as successful_referrals,
+        COUNT(CASE WHEN ref.subscription_tier = 'free' OR ref.subscription_status != 'active' THEN 1 END) as pending_referrals,
+        COUNT(CASE WHEN ref.subscription_tier != 'free' AND ref.subscription_status = 'active' THEN 1 END) as rewards_earned
+      FROM users u
+      LEFT JOIN users ref ON ref.referred_by = u.referral_code
+      WHERE u.id = $1
+      GROUP BY u.referral_code
+    `;
+
+    const result = await pool.query(query, [userId]);
+    
+    const stats = result.rows[0] || {
+      referral_code: null,
+      successful_referrals: 0,
+      pending_referrals: 0,
+      rewards_earned: 0
+    };
+
+    // Convert string numbers to integers
+    stats.successful_referrals = parseInt(stats.successful_referrals) || 0;
+    stats.pending_referrals = parseInt(stats.pending_referrals) || 0;
+    stats.rewards_earned = parseInt(stats.rewards_earned) || 0;
+
+    res.json({
+      success: true,
+      data: stats
+    });
+
+  } catch (error) {
+    console.error('Get referral stats error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch referral stats' }
+    });
+  }
+});
+
+// Get referral history (ADD THIS - to have it in users routes too for fallback)
+router.get('/referral-history', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get user's referral code first
+    const userResult = await pool.query(
+      'SELECT referral_code FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    const referralCode = userResult.rows[0].referral_code;
+
+    if (!referralCode) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+
+    // Get referred users
+    const referralsResult = await pool.query(`
+      SELECT 
+        id,
+        username,
+        email,
+        subscription_tier,
+        subscription_status,
+        created_at
+      FROM users 
+      WHERE referred_by = $1
+      ORDER BY created_at DESC
+      LIMIT 50
+    `, [referralCode]);
+
+    const referrals = referralsResult.rows.map(row => ({
+      id: row.id,
+      username: row.username,
+      email: row.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'),
+      subscriptionTier: row.subscription_tier,
+      subscriptionStatus: row.subscription_status,
+      createdAt: row.created_at,
+      rewardEarned: row.subscription_tier !== 'free' && row.subscription_status === 'active'
+    }));
+
+    res.json({
+      success: true,
+      data: referrals
+    });
+
+  } catch (error) {
+    console.error('Get referral history error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch referral history' }
+    });
+  }
 
 // === REFERRAL CODE GENERATION ===
 router.post('/generate-referral-code', authenticateToken, async (req: any, res: any) => {

@@ -452,10 +452,15 @@ router.get('/export-data', authenticateToken, async (req: any, res: any) => {
   try {
     const userId = req.user.userId;
     
-    // Gather all user data
+    // Gather all user data - FIXED annotation query to use proper joins
     const [userResult, projectsResult, collaborationsResult, annotationsResult] = await Promise.all([
+      // User data query (unchanged)
       pool.query('SELECT * FROM users WHERE id = $1', [userId]),
+      
+      // Projects created by user (unchanged)  
       pool.query('SELECT * FROM projects WHERE creator_id = $1', [userId]),
+      
+      // Collaborations user is part of (unchanged)
       pool.query(`
         SELECT p.*, u.username as creator_name 
         FROM project_collaborators pc
@@ -463,11 +468,15 @@ router.get('/export-data', authenticateToken, async (req: any, res: any) => {
         JOIN users u ON p.creator_id = u.id
         WHERE pc.user_id = $1
       `, [userId]),
+      
+      // FIXED: Annotations query with proper joins through audio_files
       pool.query(`
-        SELECT a.*, p.title as project_title
+        SELECT a.*, p.title as project_title, af.filename as audio_filename
         FROM annotations a
-        JOIN projects p ON a.project_id = p.id
+        JOIN audio_files af ON a.audio_file_id = af.id
+        JOIN projects p ON af.project_id = p.id
         WHERE a.user_id = $1
+        ORDER BY a.created_at DESC
       `, [userId])
     ]);
 
@@ -476,15 +485,22 @@ router.get('/export-data', authenticateToken, async (req: any, res: any) => {
       projects: projectsResult.rows,
       collaborations: collaborationsResult.rows,
       annotations: annotationsResult.rows,
-      exportDate: new Date().toISOString()
+      exportDate: new Date().toISOString(),
+      exportInfo: {
+        totalProjects: projectsResult.rows.length,
+        totalCollaborations: collaborationsResult.rows.length,
+        totalAnnotations: annotationsResult.rows.length
+      }
     };
 
     // Remove sensitive data
-    delete exportData.user.password;
-    delete exportData.user.stripe_customer_id;
+    if (exportData.user) {
+      delete exportData.user.password;
+      delete exportData.user.stripe_customer_id;
+    }
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}.json"`);
+    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}-${new Date().toISOString().split('T')[0]}.json"`);
     res.json(exportData);
 
   } catch (error) {

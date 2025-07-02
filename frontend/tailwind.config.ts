@@ -1,14 +1,5 @@
 import type { Config } from 'tailwindcss'
 
-module.exports = {
-  theme: {
-    extend: {
-      animation: {
-        fadeIn: 'fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards',
-      },
-    },
-  },
-}
 /** @type {import('tailwindcss').Config} */
 const config: Config = {
   content: [

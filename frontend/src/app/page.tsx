@@ -1,6 +1,7 @@
 // frontend/src/app/page.tsx
 import Link from 'next/link';
 import { ArrowRight, Play, Users, Zap, Download, Star, Music, MessageCircle, Clock, Check } from 'lucide-react';
+import WaveformDemo from '@/components/WaveformDemo';
 
 export default function LandingPage() {
   return (
@@ -94,43 +95,7 @@ export default function LandingPage() {
           </div>
 
           {/* Demo Waveform */}
-          <div className="relative max-w-4xl mx-auto">
-            <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl p-8 border border-skribble-azure/20">
-              <div className="h-24 bg-gradient-to-r from-skribble-purple via-skribble-azure to-skribble-sky rounded-lg relative overflow-hidden">
-                {/* Waveform bars */}
-                <div className="absolute inset-0 flex items-end justify-center gap-1 p-2">
-                  {Array.from({ length: 60 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="bg-white/60 rounded-sm flex-1 animate-pulse"
-                      style={{
-                        height: `${Math.random() * 80 + 20}%`,
-                        animationDelay: `${i * 0.1}s`,
-                        animationDuration: '2s'
-                      }}
-                    />
-                  ))}
-                </div>
-                
-                {/* Cursor */}
-                <div className="absolute top-0 bottom-0 left-1/3 w-0.5 bg-red-400 shadow-lg shadow-red-400/50 animate-pulse" />
-                
-                {/* Annotation bubbles */}
-                <div className="absolute -top-12 left-1/4 bg-skribble-azure text-white px-3 py-1 rounded-lg rounded-bl-sm text-sm shadow-lg">
-                  "Love this part! 🔥"
-                </div>
-                <div className="absolute -top-12 right-1/4 bg-skribble-purple text-white px-3 py-1 rounded-lg rounded-br-sm text-sm shadow-lg">
-                  "Add more bass?"
-                </div>
-              </div>
-              
-              <div className="flex items-center justify-between mt-6 text-sm text-skribble-sky">
-                <span className="font-mono">0:00</span>
-                <span className="font-madimi text-lg">🎵 Summer Anthem v2.1</span>
-                <span className="font-mono">3:24</span>
-              </div>
-            </div>
-          </div>
+          <WaveformDemo />
         </div>
       </section>
 

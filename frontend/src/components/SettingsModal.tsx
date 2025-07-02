@@ -13,6 +13,7 @@ import ReferralDashboard from './ReferralDashboard';
 import { getImageUrl } from '@/utils/images';
 import UserAvatar from './userAvatar';
 
+
 interface User {
   id: string;
   email: string;

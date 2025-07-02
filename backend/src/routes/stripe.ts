@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import { stripe } from '../config/stripe';
 import { UserModel } from '../models/User';
 import { pool } from '../config/database';
+import { findUserById } from './User';
 
 const router = express.Router();
 
@@ -144,7 +145,7 @@ router.post('/generate-referral-code', authenticateToken, async (req: Request, r
     
     // Generate new referral code if user doesn't have one
     if (!user.referral_code) {
-      referralCode = await UserModel.generateReferralCode();
+      referralCode = await UserModel.generateReferralCode(userId);
     } else {
       // Return existing referral code
       referralCode = user.referral_code;

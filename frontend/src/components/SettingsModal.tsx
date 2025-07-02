@@ -2,16 +2,16 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { 
-  X, User, Camera, Save, Loader2, Users, Gift, Copy, Check, Share2,
+  X, User, Camera, Save, Loader2, Users, Check,
   Crown, CreditCard, Bell, Shield, Mail, AlertCircle, Eye, Lock, EyeOff,
-  Trash2, ExternalLink, DollarSign, Calendar, CreditCard as CreditCardIcon,
-  Settings, LogOut, Download, Upload
+  Trash2, Calendar, CreditCard as CreditCardIcon,
+  Settings, LogOut, Download
 } from 'lucide-react';
 import Image from 'next/image';
 import { auth } from '@/lib/auth';
 import ReferralDashboard from './ReferralDashboard';
-import { getImageUrl } from '@/utils/images';
-import UserAvatar from './userAvatar';
+// import { getImageUrl } from '@/utils/images';
+// import UserAvatar from './userAvatar';
 
 
 interface User {
@@ -127,6 +127,9 @@ const [showPasswords, setShowPasswords] = useState({
     { id: 'privacy' as SettingsTab, label: 'Privacy', icon: Shield },
     { id: 'data' as SettingsTab, label: 'Data & Security', icon: Settings }
   ];
+
+  const [imageUrlExpired, setImageUrlExpired] = useState(false);
+  const [refreshingImageUrl, setRefreshingImageUrl] = useState(false);
 
   // Reset form when user changes
   useEffect(() => {
@@ -255,6 +258,75 @@ const [showPasswords, setShowPasswords] = useState({
       setIsSaving(false);
     }
   };
+
+  const refreshImageUrl = async () => {
+  setRefreshingImageUrl(true);
+  try {
+    const token = auth.getToken();
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/profile/refresh-image-url`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      // Update the profile data with new signed URL
+      setProfileData(prev => ({
+        ...prev,
+        profileImage: data.data.imageUrl
+      }));
+      
+      // Also update the parent component
+      onUserUpdate({
+        ...user,
+        profileImage: data.data.imageUrl
+      });
+      
+      setImageUrlExpired(false);
+    } else {
+      throw new Error(data.error.message);
+    }
+  } catch (error) {
+    console.error('Failed to refresh image URL:', error);
+    setError('Failed to refresh image URL');
+  } finally {
+    setRefreshingImageUrl(false);
+  }
+};
+
+const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = e.currentTarget;
+  const imgSrc = img.src;
+  
+  console.error('❌ Image failed to load:', imgSrc);
+  
+  // Check if it's a signed URL that might have expired
+  if (imgSrc.includes('X-Amz-') && imgSrc.includes('s3')) {
+    console.log('🔄 Signed URL detected, checking if expired...');
+    
+    try {
+      // Try to fetch the URL to get the actual error
+      const testResponse = await fetch(imgSrc, { method: 'HEAD' });
+      if (testResponse.status === 403) {
+        console.log('🔒 Got 403 Forbidden - likely expired signed URL');
+        setImageUrlExpired(true);
+        return; // Don't hide the image yet, show refresh option
+      }
+    } catch (fetchError) {
+      console.log('🔒 Network error - likely expired or invalid signed URL');
+      setImageUrlExpired(true);
+      return;
+    }
+  }
+    img.style.display = 'none';
+  const fallback = document.createElement('div');
+  fallback.className = 'w-full h-full flex items-center justify-center bg-gradient-to-br from-skribble-azure to-skribble-purple';
+  fallback.innerHTML = `
+    <span class="text-white font-medium text-lg">
+      ${profileData.username.charAt(0).toUpperCase()}
+    </span>
+  `;
+  img.parentElement?.appendChild(fallback);
+};
 
 
   const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -550,31 +622,66 @@ const [showPasswords, setShowPasswords] = useState({
                 {/* Profile Image */}
                 <div className="flex items-center gap-6">
                   <div className="relative">
-                    <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden">
+                    <div className="w-20 h-20 rounded-full bg-skribble-plum/30 overflow-hidden border-2 border-skribble-azure/20">
                       {previewImage ? (
-                        <div className="w-20 h-20 rounded-full overflow-hidden">
-                          <Image
-                            src={previewImage}
-                            alt="Profile Preview"
-                            width={80}
-                            height={80}
-                            className="w-full h-full object-cover"
-                          />
+                        // Show preview while uploading
+                        <Image
+                          src={previewImage}
+                          alt="Profile Preview"
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : profileData.profileImage && !imageUrlExpired ? (
+                        // Show actual profile image
+                        <Image
+                          src={profileData.profileImage}
+                          alt="Profile"
+                          width={80}
+                          height={80}
+                          className="w-full h-full object-cover"
+                          onError={handleImageError}
+                          onLoad={() => {
+                            console.log('✅ Profile image loaded successfully');
+                            setImageUrlExpired(false); // Reset expired state on successful load
+                          }}
+                        />
+                      ) : imageUrlExpired ? (
+                        // Show refresh option for expired signed URLs
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-skribble-plum/50 p-2">
+                          <div className="text-center">
+                            <AlertCircle className="w-6 h-6 text-yellow-400 mx-auto mb-1" />
+                            <p className="text-xs text-skribble-azure">Image expired</p>
+                            <button
+                              onClick={refreshImageUrl}
+                              disabled={refreshingImageUrl}
+                              className="mt-1 px-2 py-1 bg-skribble-azure text-white rounded text-xs hover:bg-skribble-azure/80 disabled:opacity-50"
+                            >
+                              {refreshingImageUrl ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                'Refresh'
+                              )}
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <UserAvatar 
-                          user={{ username: profileData.username, profileImage: profileData.profileImage }}
-                          size="xl"
-                          showFallbackIcon={false} // Show initials instead of icon
-                        />
+                        // Show default avatar with initials
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-skribble-azure to-skribble-purple">
+                          <span className="text-white font-medium text-lg">
+                            {profileData.username.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
                       )}
                     </div>
+                    
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       className="absolute bottom-0 right-0 p-2 bg-skribble-azure rounded-full text-white hover:bg-skribble-azure/80 transition-colors"
                     >
                       <Camera className="w-4 h-4" />
                     </button>
+                    
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -583,11 +690,27 @@ const [showPasswords, setShowPasswords] = useState({
                       className="hidden"
                     />
                   </div>
+                  
                   <div>
                     <h4 className="text-skribble-sky font-medium">Profile Photo</h4>
                     <p className="text-skribble-azure/70 text-sm">
                       Upload a photo to personalize your profile
                     </p>
+                    
+                    {/* Debug info for development */}
+                    {process.env.NODE_ENV === 'development' && profileData.profileImage && (
+                      <div className="mt-2 text-xs">
+                        <p className="text-skribble-azure/50">
+                          URL Type: {profileData.profileImage.includes('X-Amz-') ? 'Signed' : 'Raw'}
+                        </p>
+                        <p className="text-skribble-azure/50 font-mono">
+                          {profileData.profileImage.substring(0, 50)}...
+                        </p>
+                        {imageUrlExpired && (
+                          <p className="text-yellow-400">⚠️ Signed URL has expired</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 

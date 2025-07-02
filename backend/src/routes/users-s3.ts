@@ -47,22 +47,33 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
     const user = result.rows[0];
     logWithTimestamp('✅ User profile found:', user.username);
 
-    // If user has S3 profile image, generate signed URL for security
+    // ALWAYS generate signed URL for S3 images
     if (user.profile_image && user.profile_image.includes('s3')) {
       try {
         const url = new URL(user.profile_image);
         const s3Key = url.pathname.substring(1);
         
+        logWithTimestamp('🔗 Generating signed URL for key:', s3Key);
+        
         if (s3Key && !s3Key.includes('undefined') && s3Key.includes('users/')) {
-          const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
+          const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600); // 1 hour expiry
+          
           if (signedUrl && signedUrl.includes('X-Amz-')) {
             user.profile_image = signedUrl;
-            logWithTimestamp('🔗 Generated signed URL for profile image');
+            logWithTimestamp('✅ Signed URL generated successfully');
+            logWithTimestamp('🔍 Signed URL preview:', signedUrl.substring(0, 100) + '...');
+          } else {
+            logWithTimestamp('⚠️ Invalid signed URL generated');
           }
+        } else {
+          logWithTimestamp('⚠️ Invalid S3 key format:', s3Key);
         }
       } catch (error) {
-        logWithTimestamp('⚠️ Failed to generate signed URL for profile image:', error);
+        logWithTimestamp('❌ Failed to generate signed URL:', error);
+        // Don't fail the request, just use original URL
       }
+    } else if (user.profile_image) {
+      logWithTimestamp('ℹ️ Profile image is not an S3 URL:', user.profile_image);
     }
 
     res.json({
@@ -74,7 +85,7 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
         role: user.role,
         subscriptionTier: user.subscription_tier,
         subscriptionStatus: user.subscription_status || 'active',
-        profileImage: user.profile_image,
+        profileImage: user.profile_image, // This will now always be a signed URL for S3 images
         stripeCustomerId: user.stripe_customer_id,
         referralCode: user.referral_code,
         referredBy: user.referred_by,
@@ -289,6 +300,72 @@ router.put('/profile',
     }
   }
 );
+
+router.get('/profile/refresh-image-url', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const user = await pool.query(
+      'SELECT profile_image FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!user.rows[0]?.profile_image) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'No profile image found' }
+      });
+    }
+
+    const profileImageUrl = user.rows[0].profile_image;
+
+    if (profileImageUrl.includes('s3')) {
+      try {
+        // Extract the original S3 key (might be from an expired signed URL)
+        let s3Key;
+        if (profileImageUrl.includes('X-Amz-')) {
+          // It's a signed URL, extract the key from the path
+          const url = new URL(profileImageUrl);
+          s3Key = url.pathname.substring(1);
+        } else {
+          // It's a raw S3 URL
+          const url = new URL(profileImageUrl);
+          s3Key = url.pathname.substring(1);
+        }
+        
+        logWithTimestamp('🔄 Refreshing signed URL for key:', s3Key);
+        const newSignedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
+        
+        res.json({
+          success: true,
+          data: {
+            imageUrl: newSignedUrl,
+            expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+          }
+        });
+      } catch (error) {
+        logWithTimestamp('❌ Failed to refresh signed URL:', error);
+        res.status(500).json({
+          success: false,
+          error: { message: 'Failed to refresh image URL' }
+        });
+      }
+    } else {
+      // Not an S3 URL, return as-is
+      res.json({
+        success: true,
+        data: { imageUrl: profileImageUrl }
+      });
+    }
+
+  } catch (error) {
+    logWithTimestamp('❌ Refresh image URL error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to refresh image URL' }
+    });
+  }
+});
 
 // Delete user profile image
 router.delete('/profile/image', authenticateToken, async (req: any, res: any) => {

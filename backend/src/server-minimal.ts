@@ -78,6 +78,24 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/api/test/s3', async (req, res) => {
+  try {
+    const { s3UploadService } = await import('./services/s3-upload');
+    const isConnected = await s3UploadService.testConnection();
+    res.json({
+      success: true,
+      s3Connected: isConnected,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'S3 test failed',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // API Routes - Order matters!
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes); // Stripe routes before subscription check

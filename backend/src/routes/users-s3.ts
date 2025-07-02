@@ -1,14 +1,14 @@
-// backend/src/routes/users-s3.ts - COMPLETE FIXED VERSION
+// backend/src/routes/users-s3.ts - COMPLETE VERSION with all endpoints
 import express from 'express';
-import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
-// REMOVED: import { UserModel } from '../models/User'; // This was causing 500 errors
-import { pool } from '../config/database';
-import { uploadImageS3, uploadImageToS3 } from '../middleware/upload-s3';
+import { uploadImageS3, uploadImageToS3 } from '../middleware/upload-s3'; 
 import { s3UploadService } from '../services/s3-upload';
+import { body, validationResult } from 'express-validator';
+import pool from '../config/database';
 
 const router = express.Router();
 
+// Logging helper
 const logWithTimestamp = (message: string, data?: any) => {
   console.log(`[${new Date().toISOString()}] ${message}`, data || '');
 };
@@ -22,13 +22,12 @@ router.get('/test', (req, res) => {
   });
 });
 
-// Get current user profile - FIXED: Use direct database query instead of UserModel
+// Get current user profile
 router.get('/profile', authenticateToken, async (req: any, res: any) => {
   try {
     const userId = req.user.userId;
     logWithTimestamp('🔍 Getting S3 profile for user:', userId);
     
-    // FIXED: Direct database query instead of UserModel.findById()
     const result = await pool.query(`
       SELECT id, email, username, role, subscription_tier, subscription_status,
              profile_image, stripe_customer_id, referral_code, referred_by,
@@ -50,17 +49,18 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
     // If user has S3 profile image, generate signed URL for security
     if (user.profile_image && user.profile_image.includes('s3')) {
       try {
-        // Extract S3 key from URL
         const url = new URL(user.profile_image);
-        const s3Key = url.pathname.substring(1); // Remove leading slash
+        const s3Key = url.pathname.substring(1);
         
-        // Generate signed URL (valid for 1 hour)
-        const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
-        user.profile_image = signedUrl;
-        logWithTimestamp('🔗 Generated signed URL for profile image');
+        if (s3Key && !s3Key.includes('undefined') && s3Key.includes('users/')) {
+          const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
+          if (signedUrl && signedUrl.includes('X-Amz-')) {
+            user.profile_image = signedUrl;
+            logWithTimestamp('🔗 Generated signed URL for profile image');
+          }
+        }
       } catch (error) {
         logWithTimestamp('⚠️ Failed to generate signed URL for profile image:', error);
-        // Keep original URL as fallback
       }
     }
 
@@ -93,7 +93,7 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
   }
 });
 
-// Update user profile with S3 image upload - FIXED SQL syntax errors
+// Update user profile with S3 image upload
 router.put('/profile', 
   authenticateToken,
   uploadImageS3.single('profileImage'),
@@ -155,14 +155,6 @@ router.put('/profile',
       // Handle image upload to S3
       if (req.file) {
         try {
-          logWithTimestamp('📸 Processing profile image upload to S3:', {
-            originalname: req.file.originalname,
-            size: req.file.size,
-            mimetype: req.file.mimetype,
-            userId
-          });
-
-          // Get user's current profile image to delete later
           const currentUser = await pool.query(
             'SELECT profile_image FROM users WHERE id = $1',
             [userId]
@@ -177,7 +169,6 @@ router.put('/profile',
             }
           }
 
-          // Upload new image to S3 (userId is required for image uploads)
           const s3Result = await uploadImageToS3(req.file, userId);
           profileImageUrl = s3Result.location;
           
@@ -213,7 +204,6 @@ router.put('/profile',
         updateValues.push(role);
       }
       if (profileImageUrl) {
-        // FIXED: Missing $ prefix in SQL parameter
         updateFields.push(`profile_image = $${paramIndex++}`);
         updateValues.push(profileImageUrl);
       }
@@ -225,11 +215,9 @@ router.put('/profile',
         });
       }
 
-      // Add updated timestamp and user ID
       updateFields.push(`updated_at = NOW()`);
       updateValues.push(userId);
 
-      // FIXED: Missing $ prefix in WHERE clause
       const query = `
         UPDATE users 
         SET ${updateFields.join(', ')}
@@ -238,7 +226,6 @@ router.put('/profile',
                   profile_image, created_at, updated_at
       `;
 
-      logWithTimestamp('📝 Executing update query:', { query, paramCount: updateValues.length });
       const result = await pool.query(query, updateValues);
       
       if (result.rows.length === 0) {
@@ -257,7 +244,6 @@ router.put('/profile',
           logWithTimestamp('🗑️ Deleted old profile image from S3:', oldProfileImageKey);
         } catch (deleteError) {
           logWithTimestamp('⚠️ Failed to delete old profile image:', deleteError);
-          // Don't fail the request for cleanup errors
         }
       }
 
@@ -308,7 +294,6 @@ router.delete('/profile/image', authenticateToken, async (req: any, res: any) =>
   try {
     const userId = req.user.userId;
 
-    // Get current profile image
     const user = await pool.query(
       'SELECT profile_image FROM users WHERE id = $1',
       [userId]
@@ -323,7 +308,6 @@ router.delete('/profile/image', authenticateToken, async (req: any, res: any) =>
 
     const profileImageUrl = user.rows[0].profile_image;
 
-    // Delete from S3 if it's an S3 URL
     if (profileImageUrl.includes('s3')) {
       try {
         const url = new URL(profileImageUrl);
@@ -332,11 +316,9 @@ router.delete('/profile/image', authenticateToken, async (req: any, res: any) =>
         logWithTimestamp('🗑️ Deleted profile image from S3:', s3Key);
       } catch (error) {
         logWithTimestamp('⚠️ Failed to delete from S3:', error);
-        // Continue with database update even if S3 delete fails
       }
     }
 
-    // Remove from database
     await pool.query(
       'UPDATE users SET profile_image = NULL, updated_at = NOW() WHERE id = $1',
       [userId]
@@ -356,66 +338,211 @@ router.delete('/profile/image', authenticateToken, async (req: any, res: any) =>
   }
 });
 
-// Get signed URL for profile image (if needed separately)
-router.get('/profile/image-url/:userId', authenticateToken, async (req: any, res: any) => {
+// === NOTIFICATION SETTINGS ENDPOINTS ===
+router.get('/notification-settings', authenticateToken, async (req: any, res: any) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user.userId;
     
-    // Check if requesting user has permission (self or admin)
-    if (req.user.userId !== userId && req.user.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Access denied' }
-      });
-    }
+    const result = await pool.query(`
+      SELECT notification_settings FROM users WHERE id = $1
+    `, [userId]);
 
-    const user = await pool.query(
-      'SELECT profile_image FROM users WHERE id = $1',
-      [userId]
-    );
+    const settings = result.rows[0]?.notification_settings || {
+      collaborations: true,
+      projects: true,
+      weekly: true,
+      marketing: false,
+      email: true,
+      push: true
+    };
 
-    if (!user.rows[0]?.profile_image) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'No profile image found' }
-      });
-    }
-
-    const profileImageUrl = user.rows[0].profile_image;
-
-    // Generate signed URL if it's an S3 image
-    if (profileImageUrl.includes('s3')) {
-      try {
-        const url = new URL(profileImageUrl);
-        const s3Key = url.pathname.substring(1);
-        const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
-        
-        res.json({
-          success: true,
-          data: {
-            imageUrl: signedUrl,
-            expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
-          }
-        });
-      } catch (error) {
-        logWithTimestamp('⚠️ Failed to generate signed URL:', error);
-        res.json({
-          success: true,
-          data: { imageUrl: profileImageUrl } // Fallback to original URL
-        });
-      }
-    } else {
-      res.json({
-        success: true,
-        data: { imageUrl: profileImageUrl }
-      });
-    }
-
+    res.json({
+      success: true,
+      data: settings
+    });
   } catch (error) {
-    logWithTimestamp('❌ Get image URL error:', error);
+    console.error('Get notification settings error:', error);
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to get image URL' }
+      error: { message: 'Failed to fetch notification settings' }
+    });
+  }
+});
+
+router.put('/notification-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    const settings = req.body;
+
+    await pool.query(`
+      UPDATE users 
+      SET notification_settings = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(settings), userId]);
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update notification settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update notification settings' }
+    });
+  }
+});
+
+// === PRIVACY SETTINGS ENDPOINTS ===
+router.get('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(`
+      SELECT privacy_settings FROM users WHERE id = $1
+    `, [userId]);
+
+    const settings = result.rows[0]?.privacy_settings || {
+      profileVisibility: 'public',
+      showEmail: false,
+      allowDirectMessages: true,
+      indexInSearch: true
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Get privacy settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch privacy settings' }
+    });
+  }
+});
+
+router.put('/privacy-settings', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    const settings = req.body;
+
+    await pool.query(`
+      UPDATE users 
+      SET privacy_settings = $1, updated_at = NOW()
+      WHERE id = $2
+    `, [JSON.stringify(settings), userId]);
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Update privacy settings error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to update privacy settings' }
+    });
+  }
+});
+
+// === DATA EXPORT ENDPOINT ===
+router.get('/export-data', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Gather all user data
+    const [userResult, projectsResult, collaborationsResult, annotationsResult] = await Promise.all([
+      pool.query('SELECT * FROM users WHERE id = $1', [userId]),
+      pool.query('SELECT * FROM projects WHERE creator_id = $1', [userId]),
+      pool.query(`
+        SELECT p.*, u.username as creator_name 
+        FROM project_collaborators pc
+        JOIN projects p ON pc.project_id = p.id
+        JOIN users u ON p.creator_id = u.id
+        WHERE pc.user_id = $1
+      `, [userId]),
+      pool.query(`
+        SELECT a.*, p.title as project_title
+        FROM annotations a
+        JOIN projects p ON a.project_id = p.id
+        WHERE a.user_id = $1
+      `, [userId])
+    ]);
+
+    const exportData = {
+      user: userResult.rows[0],
+      projects: projectsResult.rows,
+      collaborations: collaborationsResult.rows,
+      annotations: annotationsResult.rows,
+      exportDate: new Date().toISOString()
+    };
+
+    // Remove sensitive data
+    delete exportData.user.password;
+    delete exportData.user.stripe_customer_id;
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="skribble-data-${userId}.json"`);
+    res.json(exportData);
+
+  } catch (error) {
+    console.error('Export data error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to export data' }
+    });
+  }
+});
+
+// === DELETE ACCOUNT ENDPOINT ===
+router.delete('/delete-account', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+
+    // Delete user account and all associated data
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+
+    res.json({
+      success: true,
+      data: {
+        message: 'Account deleted successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to delete account',
+        code: 'DELETE_ACCOUNT_ERROR'
+      }
+    });
+  }
+});
+
+// === REFERRAL CODE GENERATION ===
+router.post('/generate-referral-code', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Generate a unique referral code
+    const referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    
+    await pool.query(
+      'UPDATE users SET referral_code = $1 WHERE id = $2',
+      [referralCode, userId]
+    );
+
+    res.json({
+      success: true,
+      data: { referralCode }
+    });
+  } catch (error) {
+    console.error('Generate referral code error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to generate referral code' }
     });
   }
 });

@@ -566,4 +566,106 @@ router.get('/checkout-session/:sessionId', async (req: Request, res: Response) =
   }
 });
 
+router.get('/subscription-info', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Get user info
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    let subscriptionInfo = {
+      tier: user.subscriptionTier || 'free',
+      status: 'active',
+      currentPeriodEnd: null,
+      cancelAtPeriodEnd: false,
+      trialEnd: user.trial_end_date,
+      paymentMethod: null
+    };
+
+    // If user has Stripe customer ID, get actual subscription info
+    if (user.stripe_customer_id) {
+      try {
+        const subscriptions = await stripe.subscriptions.list({
+          customer: user.stripe_customer_id,
+          status: 'all',
+          limit: 1
+        });
+
+        if (subscriptions.data.length > 0) {
+          const subscription = subscriptions.data[0];
+          
+          subscriptionInfo = {
+            tier: user.subscriptionTier || 'free',
+            status: subscription.status as any,
+            currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+            cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+            trialEnd: subscription.trial_end ? new Date(subscription.trial_end * 1000) : null,
+            paymentMethod: subscription.default_payment_method ? {
+              type: 'card',
+              last4: '****', // You'd need to fetch actual payment method details
+              expiryMonth: 12,
+              expiryYear: 2025
+            } : null
+          };
+        }
+      } catch (stripeError) {
+        console.error('Failed to fetch Stripe subscription:', stripeError);
+        // Continue with user database info as fallback
+      }
+    }
+
+    res.json({
+      success: true,
+      data: subscriptionInfo
+    });
+  } catch (error) {
+    console.error('Get subscription info error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to get subscription info' }
+    });
+  }
+});
+
+// Create billing portal session (ADD THIS)
+router.post('/create-portal-session', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    
+    // Get user info
+    const user = await UserModel.findById(userId);
+    if (!user || !user.stripe_customer_id) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'No billing account found. Please subscribe first.' }
+      });
+    }
+
+    // Create Stripe billing portal session
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripe_customer_id,
+      return_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/settings`,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        url: session.url
+      }
+    });
+  } catch (error) {
+    console.error('Create portal session error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to create billing portal session' }
+    });
+  }
+});
+
 export default router;

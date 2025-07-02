@@ -262,7 +262,7 @@ export default function WaveformDemo() {
           </div>
           
           <div className="font-madimi text-lg text-skribble-sky">
-            🎵 Summer Anthem v2.1
+            🎵 Lose Control v2.1
           </div>
           
           <div className="text-xs text-skribble-azure">
@@ -288,7 +288,7 @@ export default function WaveformDemo() {
             Priority: {hoveredAnnotation.priority} • @ {formatTime(hoveredAnnotation.timestamp)}
           </div>
           <div className="text-sm">
-            "{hoveredAnnotation.text}"
+            &quot;{hoveredAnnotation.text}&quot;
           </div>
         </div>
       )}

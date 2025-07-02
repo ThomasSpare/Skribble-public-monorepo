@@ -29,7 +29,7 @@ export default function PricingPage() {
     {
       name: 'Indie',
       tier: 'indie',
-      price: '$19',
+      price: '$7',
       description: 'For independent artists and producers',
       features: [
         '10 active projects',
@@ -45,7 +45,7 @@ export default function PricingPage() {
     {
       name: 'Producer',
       tier: 'producer',
-      price: '$39',
+      price: '$19',
       description: 'For professional producers',
       features: [
         'Unlimited projects',
@@ -62,7 +62,7 @@ export default function PricingPage() {
     {
       name: 'Studio',
       tier: 'studio',
-      price: '$99',
+      price: '$49',
       description: 'For recording studios and labels',
       features: [
         'Everything in Producer',

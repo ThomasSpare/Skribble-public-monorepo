@@ -1,6 +1,6 @@
 // frontend/src/app/page.tsx
 import Link from 'next/link';
-import { ArrowRight, Play, Users, Zap, Download, Star, Music, MessageCircle, Clock, Check } from 'lucide-react';
+import { ArrowRight, Play, Users, Zap, Download, Star, Rocket, Music, MessageCircle, Clock, Check } from 'lucide-react';
 import WaveformDemo from '@/components/WaveformDemo';
 
 export default function LandingPage() {
@@ -30,6 +30,9 @@ export default function LandingPage() {
             </Link>
             <Link href="#pricing" className="text-skribble-sky hover:text-skribble-azure transition-colors">
               Pricing
+            </Link>
+            <Link href="/quickstart" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Quickstart
             </Link>
             <Link href="#about" className="text-skribble-sky hover:text-skribble-azure transition-colors">
               About
@@ -88,9 +91,16 @@ export default function LandingPage() {
             </Link>
             <button className="group flex items-center gap-3 text-skribble-sky hover:text-skribble-azure transition-colors">
               <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                <Play className="w-6 h-6 ml-1" />
+              <Link 
+                href="/quickstart" 
+                className="group flex items-center gap-3 text-skribble-sky hover:text-skribble-azure transition-colors"
+              >
+                <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                  <Rocket className="w-6 h-6 ml-1" />
+                </div>
+                <span className="text-lg">View Quickstart Guide</span>
+              </Link>
               </div>
-              <span className="text-lg">Watch Demo</span>
             </button>
           </div>
 
@@ -307,7 +317,7 @@ export default function LandingPage() {
             <div>
               <h4 className="font-medium text-skribble-sky mb-4">Support</h4>
               <ul className="space-y-2">
-                <li><Link href="/help" className="text-skribble-azure hover:text-skribble-sky transition-colors">Help Center</Link></li>
+                <li><Link href="/quickstart" className="text-skribble-azure hover:text-skribble-sky transition-colors">Quickstart Guide</Link></li>
                 <li><Link href="/docs" className="text-skribble-azure hover:text-skribble-sky transition-colors">Documentation</Link></li>
                 <li><Link href="/contact" className="text-skribble-azure hover:text-skribble-sky transition-colors">Contact</Link></li>
                 <li><Link href="/status" className="text-skribble-azure hover:text-skribble-sky transition-colors">Status</Link></li>

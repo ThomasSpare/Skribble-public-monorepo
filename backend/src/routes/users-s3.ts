@@ -710,6 +710,7 @@ router.get('/referral-history', authenticateToken, async (req: any, res: any) =>
       error: { message: 'Failed to fetch referral history' }
     });
   }
+});
 
 // === REFERRAL CODE GENERATION ===
 router.post('/generate-referral-code', authenticateToken, async (req: any, res: any) => {
@@ -736,5 +737,6 @@ router.post('/generate-referral-code', authenticateToken, async (req: any, res: 
     });
   }
 });
+
 
 export default router;

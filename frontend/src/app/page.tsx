@@ -89,19 +89,15 @@ export default function LandingPage() {
               Start Collaborating Free
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
-            <button className="group flex items-center gap-3 text-skribble-sky hover:text-skribble-azure transition-colors">
+            <Link 
+              href="/quickstart" 
+              className="group flex items-center gap-3 text-skribble-sky hover:text-skribble-azure transition-colors"
+            >
               <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
-              <Link 
-                href="/quickstart" 
-                className="group flex items-center gap-3 text-skribble-sky hover:text-skribble-azure transition-colors"
-              >
-                <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                  <Rocket className="w-6 h-6 ml-1" />
-                </div>
-                <span className="text-lg">View Quickstart Guide</span>
-              </Link>
+                <Rocket className="w-6 h-6 ml-1" />
               </div>
-            </button>
+              <span className="text-lg">View Quickstart Guide</span>
+            </Link>
           </div>
 
           {/* Demo Waveform */}

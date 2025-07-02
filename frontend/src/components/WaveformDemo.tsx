@@ -20,47 +20,47 @@ export default function WaveformDemo() {
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
   
-  const duration = 204; // 3:24 in seconds
+  const duration = 60; // Shorter demo - 1 minute for better visibility
   
   // Demo annotation data that appears during playback
   const annotations: Annotation[] = [
     {
-      timestamp: 25,
+      timestamp: 8,
       type: 'comment',
       user: 'Artist_Sarah',
       text: 'Love this intro! The synth pad is perfect 🔥',
       priority: 'low'
     },
     {
-      timestamp: 48,
+      timestamp: 16,
       type: 'issue',
       user: 'Artist_Sarah', 
       text: 'The kick feels a bit muddy here. Maybe high-pass the sub?',
       priority: 'high'
     },
     {
-      timestamp: 85,
+      timestamp: 28,
       type: 'marker',
       user: 'Producer_Mike',
       text: 'Verse 1 start - ready for vocals',
       priority: 'medium'
     },
     {
-      timestamp: 120,
+      timestamp: 38,
       type: 'comment',
       user: 'Artist_Sarah',
       text: 'This breakdown hits different! 🎯',
       priority: 'low'
     },
     {
-      timestamp: 156,
+      timestamp: 48,
       type: 'issue',
       user: 'Artist_Sarah',
       text: 'Bridge feels too empty. Maybe add some percussion fills?',
       priority: 'critical'
     },
     {
-      timestamp: 180,
+      timestamp: 55,
       type: 'approval',
       user: 'Artist_Sarah',
       text: 'Final section approved! Ready to record vocals 🎤',
@@ -132,12 +132,12 @@ export default function WaveformDemo() {
     }
   };
 
-  // Animation loop
+  // Animation loop - slower for better visibility
   useEffect(() => {
     if (isPlaying) {
       const animate = () => {
         setCurrentTime(prev => {
-          const next = prev + 0.1;
+          const next = prev + 0.05; // Slower animation speed
           return next >= duration ? 0 : next;
         });
         animationRef.current = requestAnimationFrame(animate);
@@ -156,17 +156,20 @@ export default function WaveformDemo() {
     };
   }, [isPlaying, duration]);
 
-  // Auto-start demo after 3 seconds
+  // Auto-start demo after 2 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsPlaying(true);
-    }, 3000);
+    }, 2000);
 
     return () => clearTimeout(timer);
   }, []);
 
   const progress = (currentTime / duration) * 100;
-  const visibleAnnotations = annotations.filter(ann => currentTime >= ann.timestamp - 5);
+  // Show annotations when we're within 2 seconds of them OR have passed them
+  const visibleAnnotations = annotations.filter(ann => 
+    currentTime >= ann.timestamp - 2 && currentTime <= ann.timestamp + 10
+  );
 
   return (
     <div className="relative max-w-4xl mx-auto">
@@ -187,7 +190,14 @@ export default function WaveformDemo() {
         {/* Waveform */}
         <div 
           ref={containerRef}
-          className="relative h-32 bg-skribble-dark/50 rounded-lg overflow-hidden cursor-pointer group"
+          className="relative h-32 bg-skribble-dark/50 rounded-lg cursor-pointer group"
+          onClick={handleWaveformClick}
+          onMouseMove={handleMouseMove}
+        >
+        {/* Waveform */}
+        <div 
+          ref={containerRef}
+          className="relative h-32 bg-skribble-dark/50 rounded-lg cursor-pointer group"
           onClick={handleWaveformClick}
           onMouseMove={handleMouseMove}
         >
@@ -200,7 +210,7 @@ export default function WaveformDemo() {
               return (
                 <div
                   key={i}
-                  className={`rounded-sm transition-all duration-75 flex-1 min-w-[2px] ${
+                  className={`rounded-sm transition-all duration-75 flex-1 min-w-[1px] ${
                     isActive 
                       ? 'bg-gradient-to-t from-blue-400 to-blue-300 shadow-sm shadow-blue-400/30' 
                       : 'bg-gradient-to-t from-skribble-azure/60 to-skribble-sky/60'
@@ -216,35 +226,68 @@ export default function WaveformDemo() {
 
           {/* Progress cursor */}
           <div 
-            className="absolute top-0 bottom-0 w-0.5 bg-red-400 shadow-lg shadow-red-400/50 z-10 transition-all duration-75"
-            style={{ left: `${progress}%` }}
+            className="absolute top-0 bottom-0 w-0.5 shadow-lg z-10 transition-all duration-75"
+            style={{ 
+              left: `${progress}%`,
+              backgroundColor: 'skyblue',
+              boxShadow: '0 0 10px rgba(198, 216, 255, 0.5)'
+            }}
           />
+        </div>
 
-          {/* Annotations */}
+        {/* Annotations - completely separate from waveform */}
+        <div className="absolute left-0 right-0" style={{ top: '60px' }}>
           {visibleAnnotations.map((annotation, index) => {
             const annotationProgress = (annotation.timestamp / duration) * 100;
+            const hasPassedTimestamp = currentTime >= annotation.timestamp;
             
             return (
               <div
-                key={index}
-                className="absolute top-0 transform -translate-x-1/2 z-20"
-                style={{ left: `${annotationProgress}%` }}
+                key={`${annotation.timestamp}-${index}`}
+                className="absolute transform -translate-x-1/2 z-30"
+                style={{ 
+                  left: `${annotationProgress}%`,
+                  top: '-45px' // Position above the waveform
+                }}
                 onMouseEnter={(e) => handleAnnotationHover(annotation, e)}
                 onMouseLeave={handleAnnotationLeave}
               >
-                {/* Annotation line */}
-                <div className={`w-0.5 h-full ${getAnnotationColor(annotation.type).replace('bg-', 'bg-')} opacity-70 hover:opacity-100 transition-opacity`} />
-                
-                {/* Annotation bubble */}
-                <div className={`absolute -top-16 left-1/2 transform -translate-x-1/2 ${getAnnotationColor(annotation.type)} text-white px-3 py-2 rounded-lg rounded-bl-sm text-xs shadow-lg border border-white/20 hover:scale-110 transition-transform cursor-pointer animate-fadeIn min-w-max`}>
-                  <div className="flex items-center gap-1">
-                    <span>{getAnnotationIcon(annotation.type)}</span>
-                    <span className="font-medium">{annotation.user.split('_')[1]}</span>
+                {/* Annotation bubble - small chat bubble style */}
+                <div className={`relative text-white px-3 py-2 rounded-lg text-xs shadow-lg border border-white/20 hover:scale-110 transition-all duration-300 cursor-pointer ${
+                  annotation.type === 'comment' ? 'bg-blue-500' :
+                  annotation.type === 'issue' ? 'bg-red-500' :
+                  annotation.type === 'approval' ? 'bg-green-500' :
+                  'bg-purple-500'
+                } ${hasPassedTimestamp ? 'scale-105 shadow-xl' : 'scale-90 opacity-80'}`}
+                style={{ minWidth: '80px', maxWidth: '120px' }}>
+                  
+                  {/* Icon and user */}
+                  <div className="flex items-center gap-1 justify-center">
+                    <span className="text-sm">{getAnnotationIcon(annotation.type)}</span>
+                    <span className="font-medium text-xs">{annotation.user.split('_')[1]}</span>
                   </div>
+                  
+                  {/* Tail pointing down */}
+                  <div className={`absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-transparent ${
+                    annotation.type === 'comment' ? 'border-t-blue-500' :
+                    annotation.type === 'issue' ? 'border-t-red-500' :
+                    annotation.type === 'approval' ? 'border-t-green-500' :
+                    'border-t-purple-500'
+                  } border-t-4`}></div>
                 </div>
+
+                {/* Annotation line - only from bubble to waveform top */}
+                <div className={`absolute left-1/2 transform -translate-x-1/2 w-0.5 opacity-60 transition-all duration-300 ${
+                  annotation.type === 'comment' ? 'bg-blue-500' :
+                  annotation.type === 'issue' ? 'bg-red-500' :
+                  annotation.type === 'approval' ? 'bg-green-500' :
+                  'bg-purple-500'
+                } ${hasPassedTimestamp ? 'opacity-100' : ''}`} 
+                style={{ top: '30px', height: '15px' }} />
               </div>
             );
           })}
+        </div>
         </div>
 
         {/* Controls */}
@@ -266,7 +309,10 @@ export default function WaveformDemo() {
           </div>
           
           <div className="text-xs text-skribble-azure">
-            Hover annotations to see comments
+            {visibleAnnotations.length > 0 
+              ? `${visibleAnnotations.length} active annotations • Hover to see details`
+              : 'Annotations will appear as the track plays'
+            }
           </div>
         </div>
       </div>
@@ -288,7 +334,7 @@ export default function WaveformDemo() {
             Priority: {hoveredAnnotation.priority} • @ {formatTime(hoveredAnnotation.timestamp)}
           </div>
           <div className="text-sm">
-            &quot;{hoveredAnnotation.text}&quot;
+            "{hoveredAnnotation.text}"
           </div>
         </div>
       )}

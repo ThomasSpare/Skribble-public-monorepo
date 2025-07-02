@@ -145,7 +145,14 @@ router.post('/generate-referral-code', authenticateToken, async (req: Request, r
     
     // Generate new referral code if user doesn't have one
     if (!user.referral_code) {
-      referralCode = await UserModel.generateReferralCode(userId);
+      // Generate the code directly instead of calling UserModel.generateReferralCode(userId)
+      referralCode = `REF_${userId.slice(0, 8)}_${Date.now().toString(36).toUpperCase()}`;
+      
+      // Update the user in the database
+      await pool.query(
+        'UPDATE users SET referral_code = $1, updated_at = NOW() WHERE id = $2',
+        [referralCode, userId]
+      );
     } else {
       // Return existing referral code
       referralCode = user.referral_code;

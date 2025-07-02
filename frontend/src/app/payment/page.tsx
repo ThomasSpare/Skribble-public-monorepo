@@ -26,7 +26,7 @@ interface PlanDetails {
 const planDetails: Record<string, PlanDetails> = {
   indie: {
     name: 'Indie',
-    price: '$19',
+    price: '$7',
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_INDIE_MONTHLY || 'price_1RX81LP1MO6JhWIjvS8HlwHR',
     tier: 'indie',
     features: [
@@ -40,7 +40,7 @@ const planDetails: Record<string, PlanDetails> = {
   },
   producer: {
     name: 'Producer',
-    price: '$39',
+    price: '$19',
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRODUCER_MONTHLY || 'price_1RX829P1MO6JhWIjrqgwrWDr',
     tier: 'producer',
     features: [
@@ -55,7 +55,7 @@ const planDetails: Record<string, PlanDetails> = {
   },
   studio: {
     name: 'Studio',
-    price: '$99',
+    price: '$49',
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDIO_MONTHLY || 'price_1RX82xP1MO6JhWIj1En2CPda',
     tier: 'studio',
     features: [

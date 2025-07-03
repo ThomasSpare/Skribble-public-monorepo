@@ -9,6 +9,8 @@ const nextConfig = {
       "localhost",
       "skribble-public-monorepo-backend-production.up.railway.app", // Update this!
       "api.dicebear.com",
+      // Add your S3 bucket domain
+      "skribble-files-2.s3.eu-north-1.amazonaws.com",
     ],
     remotePatterns: [
       // Local development
@@ -30,7 +32,27 @@ const nextConfig = {
         hostname: "api.dicebear.com",
         pathname: "/**",
       },
+      // S3 bucket for user profile images and audio files
+      {
+        protocol: "https",
+        hostname: "skribble-files-2.s3.eu-north-1.amazonaws.com",
+        pathname: "/**",
+      },
+      // Generic pattern for any S3 bucket (for flexibility)
+      {
+        protocol: "https",
+        hostname: "*.s3.*.amazonaws.com",
+        pathname: "/**",
+      },
+      // CloudFront distributions (if you add CDN later)
+      {
+        protocol: "https",
+        hostname: "*.cloudfront.net",
+        pathname: "/**",
+      },
     ],
+    // Optimize external images but with shorter cache for signed URLs
+    minimumCacheTTL: 60, // Cache for 1 minute (shorter than your signed URL expiry)
   },
   eslint: {
     dirs: ["src"],

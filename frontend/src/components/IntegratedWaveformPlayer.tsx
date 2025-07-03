@@ -1,14 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, ChevronUp, User } from 'lucide-react';
-import Image from 'next/image';
+import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, User } from 'lucide-react';
 import AnnotationSystem from './AnnotationSystem';
-import { exportForDAW, DAWExportFormat } from '@/lib/audioUtils';
 import TempoGridControls from './TempoGridControls';
-import { Music2, ChevronDown } from 'lucide-react';
 import VersionControl from './VersionControl';
-import { getImageUrl } from '@/utils/images';
-import { version } from 'os';
 import UserAvatar from './userAvatar';
+import { exportForDAW, DAWExportFormat } from '../lib/audioUtils';
 
 
 interface WaveformPlayerProps {
@@ -128,6 +124,9 @@ export default function IntegratedWaveformPlayer({
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
+  //Tiers
+  const [userTierInfo, setUserTierInfo] = useState<any>(null);
+
 // Grid and tap tempo state
   const [bpm, setBpm] = useState<number>(120);
   const [gridMode, setGridMode] = useState<'none' | 'beats' | 'bars'>('none');
@@ -141,10 +140,41 @@ export default function IntegratedWaveformPlayer({
 
 // DAW export options
   const DAW_EXPORT_OPTIONS = [
-  { value: 'wav-cues' as DAWExportFormat, label: 'WAV + Markers', description: 'Universal format', icon: '🎵' },
-  { value: 'reaper-rpp' as DAWExportFormat, label: 'Reaper Project', description: 'Complete project file', icon: '🎛️' },
-  { value: 'logic-markers' as DAWExportFormat, label: 'Logic Pro', description: 'Marker file', icon: '🍎' },
-  { value: 'pro-tools-ptxt' as DAWExportFormat, label: 'Pro Tools', description: 'Session markers', icon: '🔧' },
+  { 
+    value: 'wav-cues' as DAWExportFormat, 
+    label: 'WAV + Cue Points', 
+    description: 'Embeds annotations directly in audio file', 
+    icon: '🎵',
+    tierRequired: 'indie'
+  },
+  { 
+    value: 'reaper-rpp' as DAWExportFormat, 
+    label: 'Reaper Project', 
+    description: 'Complete RPP project file with markers', 
+    icon: '🎛️',
+    tierRequired: 'producer'
+  },
+  { 
+    value: 'logic-markers' as DAWExportFormat, 
+    label: 'Logic Pro Markers', 
+    description: 'Logic marker import file', 
+    icon: '🍎',
+    tierRequired: 'producer'
+  },
+  { 
+    value: 'pro-tools-ptxt' as DAWExportFormat, 
+    label: 'Pro Tools Session', 
+    description: 'Session markers (.ptxt)', 
+    icon: '🔧',
+    tierRequired: 'producer'
+  },
+  { 
+    value: 'ableton-als' as DAWExportFormat, 
+    label: 'Ableton Live', 
+    description: 'Live set with locators', 
+    icon: '🎚️',
+    tierRequired: 'producer'
+  }
 ];
 
   const getVisibleAnnotations = useCallback(() => {
@@ -232,6 +262,47 @@ export default function IntegratedWaveformPlayer({
       cleanup();
     };
   }, [audioUrl, userInteracted]);
+
+  useEffect(() => {
+  const fetchUserTierInfo = async () => {
+    try {
+      const token = localStorage.getItem('skribble_token');
+      if (!token) return;
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/subscription`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Create tier info based on subscription
+        setUserTierInfo({
+          tier: data.data.tier || 'free',
+          limits: {
+            allowedExportFormats: getExportFormatsForTier(data.data.tier || 'free')
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch tier info:', error);
+    }
+  };
+
+  fetchUserTierInfo();
+}, []);
+
+const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
+  const tierFormats: Record<string, DAWExportFormat[]> = {
+    free: [], // No exports for free
+    indie: ['wav-cues'], // Only WAV with cues for Indie
+    producer: ['wav-cues', 'reaper-rpp', 'logic-markers', 'pro-tools-ptxt', 'ableton-als'], // All formats
+    studio: ['wav-cues', 'reaper-rpp', 'logic-markers', 'pro-tools-ptxt', 'ableton-als'] // All formats
+  };
+  return tierFormats[tier] || [];
+};
 
 
   useEffect(() => {
@@ -1574,29 +1645,55 @@ useEffect(() => {
   }, [currentTime, isPlaying, duration, zoomLevel, scrollOffset]);
 
   const handleDAWExport = async (format: DAWExportFormat) => {
-    if (!annotations.length) {
-      alert('No annotations found to export!');
-      return;
-    }
-    setIsExporting(true);
-    setShowDAWExportMenu(false);
-    try {
-      const audioFileName = audioUrl.split('/').pop() || 'audio.wav';
-      const result = await exportForDAW(audioUrl, annotations, title, audioFileName, format);
-      const formatLabel = DAW_EXPORT_OPTIONS.find(opt => opt.value === format)?.label || format;
-      alert(`✅ Exported ${result.markerCount} annotations as ${formatLabel}!`);
-    } catch (error) {
-      alert(`❌ Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  if (!userTierInfo) {
+    alert('❌ Unable to determine your subscription tier. Please refresh and try again.');
+    return;
+  }
+
+  // Check if user's tier allows this export format
+  if (!isExportFormatAvailable(format)) {
+    const option = DAW_EXPORT_OPTIONS.find(opt => opt.value === format);
+    const currentTier = userTierInfo.tier;
+    const requiredTier = option?.tierRequired || 'producer';
+    
+    alert(`❌ ${option?.label} export requires ${requiredTier}+ plan. You're currently on ${currentTier}. Please upgrade to access this feature.`);
+    return;
+  }
+
+  if (!annotations.length) {
+    alert('❌ No annotations found to export!');
+    return;
+  }
+
+  setIsExporting(true);
+  setShowDAWExportMenu(false);
+
+  try {
+    // Use your existing exportForDAW function
+    const audioFileName = audioUrl.split('/').pop() || 'audio.wav';
+    const result = await exportForDAW(audioUrl, annotations, title, audioFileName, format);
+    
+    const formatLabel = DAW_EXPORT_OPTIONS.find(opt => opt.value === format)?.label || format;
+    alert(`✅ Successfully exported ${result.markerCount} annotations as ${formatLabel}!`);
+
+  } catch (error) {
+    console.error('Export error:', error);
+    alert(`❌ Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    setIsExporting(false);
+  }
+};
 
   useEffect(() => {
   if (isViewOnly) {
     setShowAnnotations(true);
   }
 }, [isViewOnly]);
+
+const isExportFormatAvailable = (format: string): boolean => {
+  if (!userTierInfo) return false;
+  return userTierInfo.limits.allowedExportFormats.includes(format);
+};
 
   return (
     <div className="space-y-6">
@@ -1638,6 +1735,127 @@ useEffect(() => {
                       <p className="text-sm text-red-800">{errorMessage}</p>
                     </div>
                   </div>
+                </div>
+              )}
+              {!isViewOnly && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDAWExportMenu(!showDAWExportMenu)}
+                    disabled={isExporting}
+                    className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                    title="Export to DAW"
+                  >
+                    {isExporting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Download className="w-5 h-5" />
+                    )}
+                  </button>
+                  
+                  {showDAWExportMenu && (
+                    <div ref={dawExportMenuRef} className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
+                      <div className="p-4">
+                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Export to DAW</h3>
+                        
+                        {/* Show tier info */}
+                        {userTierInfo && (
+                          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                            <div className="text-sm">
+                              <span className="font-medium">Current Plan: </span>
+                              <span className="capitalize text-blue-600 dark:text-blue-400">{userTierInfo.tier}</span>
+                            </div>
+                            {userTierInfo.limits.allowedExportFormats.length === 0 && (
+                              <div className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+                                Export features require Indie plan or higher
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          {DAW_EXPORT_OPTIONS.map((option) => {
+                            const isAvailable = isExportFormatAvailable(option.value);
+                            const isDisabled = !userTierInfo || !isAvailable;
+
+                            return (
+                              <button
+                                key={option.value}
+                                onClick={() => !isDisabled && handleDAWExport(option.value)}
+                                disabled={isDisabled || isExporting}
+                                className={`w-full text-left p-3 rounded-lg border transition-all ${
+                                  isDisabled
+                                    ? 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-not-allowed opacity-50'
+                                    : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3">
+                                    <span className="text-xl">{option.icon}</span>
+                                    <div>
+                                      <div className="font-medium text-gray-900 dark:text-white">
+                                        {option.label}
+                                        {!isAvailable && (
+                                          <span className="ml-2 px-2 py-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded">
+                                            {option.tierRequired}+
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                                        {option.description}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {isExporting && (
+                                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Upgrade prompts */}
+                        {userTierInfo?.tier === 'free' && (
+                          <div className="mt-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                            <div className="text-sm text-gray-700 dark:text-gray-300">
+                              <strong>🎵 Unlock Professional Export!</strong>
+                              <br />
+                              Upgrade to Indie ($7/month) to export with embedded annotations that appear automatically in your DAW.
+                            </div>
+                            <button 
+                              onClick={() => window.open('/pricing', '_blank')}
+                              className="mt-2 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded transition-colors"
+                            >
+                              View Plans
+                            </button>
+                          </div>
+                        )}
+
+                        {userTierInfo?.tier === 'indie' && (
+                          <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                            <div className="text-sm text-gray-700 dark:text-gray-300">
+                              <strong>🚀 Want All DAW Formats?</strong>
+                              <br />
+                              Upgrade to Producer ($19/month) for Reaper, Logic, Pro Tools, and Ableton export.
+                            </div>
+                            <button 
+                              onClick={() => window.open('/pricing', '_blank')}
+                              className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
+                            >
+                              Upgrade Plan
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Info about what the export does */}
+                        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            <strong>💡 How it works:</strong> Your annotations are embedded directly into the exported files. When you open them in your DAW, all markers appear automatically on the timeline!
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
            {!isViewOnly ? (

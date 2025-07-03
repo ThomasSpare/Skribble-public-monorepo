@@ -32,6 +32,7 @@ const planDetails: Record<string, PlanDetails> = {
     features: [
       '5 active projects',
       'Advanced collaboration tools',
+      'Up to 2 collaborators',
       'Priority support',
       'Export to DAW',
       'Voice notes'
@@ -45,7 +46,6 @@ const planDetails: Record<string, PlanDetails> = {
     features: [
       '20 projects',
       'Team collaboration',
-      'Unlimited audio uploads',
       '24/7 priority support',
       'Advanced export options',
     ]
@@ -56,7 +56,7 @@ const planDetails: Record<string, PlanDetails> = {
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDIO_MONTHLY || 'price_1RX82xP1MO6JhWIj1En2CPda',
     tier: 'studio',
     features: [
-      'Everything in Producer',
+      'Unlimited projects',
       'White-label solution',
       'API access',
       'Custom integrations',

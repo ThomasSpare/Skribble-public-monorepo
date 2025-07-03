@@ -118,8 +118,6 @@ const fetchCollaborators = async () => {
     const projectData = await projectResponse.json();
     const collaboratorsData = await collaboratorsResponse.json();
 
-    console.log('API Data:', { projectData, collaboratorsData }); // Debug log
-
     if (projectData.success && collaboratorsData.success) {
       setProjectCreator(projectData.data.creator);
       // Filter out creator from collaborators list if they appear there

@@ -434,7 +434,6 @@ export default function IntegratedWaveformPlayer({
       return;
     }
 
-    console.log('🎯 IntegratedWaveformPlayer: Initializing audio with URL:', newAudioUrl.substring(0, 100) + '...');
     
     setIsLoading(true);
     setIsGeneratingWaveform(true);
@@ -512,7 +511,6 @@ export default function IntegratedWaveformPlayer({
         (resolve as any).cleanup = cleanup;
         (reject as any).cleanup = cleanup;
       });
-      console.log('🔗 IntegratedWaveformPlayer: Setting audio src to:', newAudioUrl);
       audio.src = newAudioUrl;
       audio.load();
 
@@ -1407,13 +1405,11 @@ const drawWaveform = useCallback(() => {
   };
 
   const handleLoadedMetadata = () => {
-    console.log('✅ Audio metadata loaded, duration:', audio.duration);
     setDuration(audio.duration);
     setIsAudioReady(true);
   };
 
   const handleCanPlayThrough = () => {
-    console.log('✅ Audio can play through');
     setIsAudioReady(true);
   };
 
@@ -1440,30 +1436,22 @@ const drawWaveform = useCallback(() => {
 }, [onTimeUpdate]);
 
   useEffect(() => {
-  console.log('🔄 IntegratedWaveformPlayer: audioUrl prop changed:', audioUrl);
-  
   // Only update if we have a valid URL and it's different from current state
   if (audioUrl && audioUrl !== audioUrlState && audioUrl.startsWith('http')) {
-    console.log('✅ IntegratedWaveformPlayer: Updating audioUrlState with new URL');
     setAudioUrlState(audioUrl);
       
       // Re-initialize audio with the new URL
       if (userInteracted) {
-        console.log('🎯 IntegratedWaveformPlayer: Re-initializing audio with new URL');
         initializeAudio(audioUrl);
       }
     }
   }, [audioUrl, audioUrlState]);
 
-  useEffect(() => {
-    console.log('🎬 IntegratedWaveformPlayer: Component mounted, audioUrl:', audioUrl);
-    
+  useEffect(() => {    
     if (audioUrl && audioUrl.startsWith('http')) {
-      console.log('✅ IntegratedWaveformPlayer: Valid URL available, ready to initialize');
       setAudioUrlState(audioUrl);
       // Audio will be initialized on first user interaction
     } else {
-      console.log('⏳ IntegratedWaveformPlayer: Waiting for valid audio URL...');
     }
   }, []);
 
@@ -1509,7 +1497,6 @@ useEffect(() => {
       
       // Handle the toggle directly instead of calling the function
       if (!currentUserInteracted) {
-        console.log('🎯 First user interaction via spacebar');
         setUserInteracted(true);
         if (currentAudioUrl && currentAudioUrl.startsWith('http')) {
           initializeAudio(currentAudioUrl);

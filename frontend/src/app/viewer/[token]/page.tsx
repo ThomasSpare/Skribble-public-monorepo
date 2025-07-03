@@ -34,10 +34,7 @@ export default function ViewerPage() {
     setError(null);
     
     const token = localStorage.getItem('skribble_token');
-    if (!token) throw new Error('No auth token');
-    
-    console.log('🔍 Fetching signed URL for file:', audioFileId);
-    
+    if (!token) throw new Error('No auth token');    
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -45,26 +42,14 @@ export default function ViewerPage() {
       }
     });
     
-    const data = await response.json();
-    console.log('📋 Backend response:', data);
-    
+    const data = await response.json();    
     if (response.ok && data.success && data.data?.downloadUrl) {
-      const signedUrl = data.data.downloadUrl;
-      console.log('✅ Signed URL received:', signedUrl);
-      
-      // 🔍 CRITICAL DEBUG: Test the signed URL immediately
-      console.log('🧪 Testing signed URL accessibility...');
-      
+      const signedUrl = data.data.downloadUrl; 
       try {
         // Test with HEAD request first
         const headTest = await fetch(signedUrl, { 
           method: 'HEAD',
           mode: 'cors' // Explicitly set CORS mode
-        });
-        console.log('📡 HEAD test result:', {
-          status: headTest.status,
-          statusText: headTest.statusText,
-          headers: Object.fromEntries(headTest.headers.entries())
         });
         
         if (headTest.ok) {

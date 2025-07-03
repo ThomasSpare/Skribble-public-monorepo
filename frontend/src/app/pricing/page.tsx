@@ -32,9 +32,9 @@ export default function PricingPage() {
       price: '$7',
       description: 'For independent artists and producers',
       features: [
-        '10 active projects',
+        '5 active projects',
         'Advanced collaboration tools',
-        '1 hour audio uploads',
+        'Up to 2 collaborators',
         'Priority support',
         'Export to DAW',
         'Voice notes'
@@ -48,13 +48,11 @@ export default function PricingPage() {
       price: '$19',
       description: 'For professional producers',
       features: [
-        'Unlimited projects',
+        '20 projects',
         'Team collaboration',
         'Unlimited audio uploads',
         '24/7 priority support',
         'Advanced export options',
-        'Custom branding',
-        'Analytics dashboard'
       ],
       buttonText: 'Start Free Trial',
       popular: false

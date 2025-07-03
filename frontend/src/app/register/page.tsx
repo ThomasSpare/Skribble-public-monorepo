@@ -20,7 +20,7 @@ const plans = [
     tier: 'indie' as const,
     price: '$7',
     description: 'Perfect for independent creators',
-    features: ['10 active projects', 'Advanced collaboration', '1 hour uploads', 'Priority support'],
+    features: ['5 active projects', 'Advanced collaboration', 'Up to 2 collaborators', 'Priority support', 'voice notes'],
     popular: false
   },
   {
@@ -28,7 +28,7 @@ const plans = [
     tier: 'producer' as const,
     price: '$19',
     description: 'For professional producers',
-    features: ['Unlimited projects', 'Team collaboration', 'Unlimited uploads', '24/7 support'],
+    features: ['20 projects', 'Team collaboration', 'advanced export options', '24/7 support'],
     popular: true
   },
   {
@@ -36,7 +36,10 @@ const plans = [
     tier: 'studio' as const, 
     price: '$49',
     description: 'For studios and labels',
-    features: ['Everything in Producer', 'White-label', 'API access', 'Dedicated support'],
+    features: ['Unlimited projects', 'White-label', 'API access', 'Dedicated support',
+        'Custom integrations',
+        'Dedicated account manager',
+        'SLA guarantee'],
     popular: false
   }
 ];

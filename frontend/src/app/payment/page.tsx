@@ -30,9 +30,8 @@ const planDetails: Record<string, PlanDetails> = {
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_INDIE_MONTHLY || 'price_1RX81LP1MO6JhWIjvS8HlwHR',
     tier: 'indie',
     features: [
-      '10 active projects',
-      'Advanced collaboration tools', 
-      '1 hour audio uploads',
+      '5 active projects',
+      'Advanced collaboration tools',
       'Priority support',
       'Export to DAW',
       'Voice notes'
@@ -44,13 +43,11 @@ const planDetails: Record<string, PlanDetails> = {
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRODUCER_MONTHLY || 'price_1RX829P1MO6JhWIjrqgwrWDr',
     tier: 'producer',
     features: [
-      'Unlimited projects',
+      '20 projects',
       'Team collaboration',
       'Unlimited audio uploads',
       '24/7 priority support',
       'Advanced export options',
-      'Custom branding',
-      'Analytics dashboard'
     ]
   },
   studio: {

@@ -113,7 +113,6 @@ export default function ProjectPage() {
 
   const fetchSignedAudioUrl = async (audioFileId: string) => {
     try {
-      console.log('🔍 ProjectPage: Starting signed URL fetch for:', audioFileId);
       setAudioUrlLoading(true);
       setError(null);
       
@@ -123,7 +122,6 @@ export default function ProjectPage() {
         throw new Error('No auth token');
       }
       
-      console.log('📡 ProjectPage: Making request to download endpoint...');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/upload/download/${audioFileId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -131,7 +129,6 @@ export default function ProjectPage() {
         }
       });
       
-      console.log('📊 ProjectPage: Response status:', response.status);
       
       if (!response.ok) {
         const errorText = await response.text();
@@ -140,11 +137,9 @@ export default function ProjectPage() {
       }
       
       const data = await response.json();
-      console.log('📋 ProjectPage: Response data:', data);
       
       if (data.success && data.data?.downloadUrl) {
         const signedUrl = data.data.downloadUrl;
-        console.log('✅ ProjectPage: Full signed URL received:', signedUrl);
         
         // Validate the URL format
         try {
@@ -152,13 +147,11 @@ export default function ProjectPage() {
           if (!url.hostname.includes('s3') || !url.search.includes('X-Amz-')) {
             throw new Error('Invalid S3 signed URL format');
           }
-          console.log('✅ ProjectPage: URL validation passed');
         } catch (urlError) {
           console.error('❌ ProjectPage: Invalid URL format:', urlError);
           throw new Error('Received invalid download URL');
         }    
         setSignedAudioUrl(signedUrl);
-        console.log('🎯 ProjectPage: signedAudioUrl state updated successfully');
         
       } else {
         console.error('❌ ProjectPage: Invalid response structure:', data);
@@ -169,26 +162,8 @@ export default function ProjectPage() {
       setError('Failed to load audio file');
     } finally {
       setAudioUrlLoading(false);
-      console.log('🏁 ProjectPage: fetchSignedAudioUrl completed');
     }
   };
-
-const debugCurrentState = () => {
-    console.log('🔍 ProjectPage Current State:', {
-      currentAudioFile: currentAudioFile ? {
-        id: currentAudioFile.id,
-        filename: currentAudioFile.filename,
-        version: currentAudioFile.version
-      } : 'null',
-      signedAudioUrl: signedAudioUrl ? `${signedAudioUrl.substring(0, 50)}...` : 'null',
-      audioUrlLoading,
-      error
-    });
-  };
-
-  useEffect(() => {
-    (window as any).debugProjectPageState = debugCurrentState;
-  }, [currentAudioFile, signedAudioUrl, audioUrlLoading, error]);
 
   useEffect(() => {
     console.log('🔄 ProjectPage: currentAudioFile changed:', {
@@ -250,33 +225,21 @@ const debugCurrentState = () => {
       }
 
       const projectData = await projectResponse.json();
-        if (projectData.success) {
-          console.log('📋 ProjectPage: Project data received:', {
-            id: projectData.data.id,
-            title: projectData.data.title,
-            audioFilesCount: projectData.data.audioFiles?.length || 0,
-            audioFiles: projectData.data.audioFiles?.map((f: any) => ({ id: f.id, filename: f.filename, isActive: f.isActive }))
-          });
-          
+        if (projectData.success) {         
           setProject(projectData.data);
         
         // Set the active audio file
         const activeAudioFile = projectData.data.audioFiles.find((file: any) => file.isActive);
           if (activeAudioFile) {
-            console.log('✅ ProjectPage: Found active audio file:', activeAudioFile.id, activeAudioFile.filename);
             setCurrentAudioFile(activeAudioFile);
           } else if (projectData.data.audioFiles.length > 0) {
             // If no active file, use the most recent one
             const sortedFiles = projectData.data.audioFiles.sort(
               (a: any, b: any) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
             );
-            console.log('📁 ProjectPage: Using most recent audio file:', sortedFiles[0].id, sortedFiles[0].filename);
             setCurrentAudioFile(sortedFiles[0]);
-          } else {
-            console.log('⚠️ ProjectPage: No audio files found in project');
-          }
-        }
-      
+          } 
+        }   
     } catch (error) {
       console.error('Error initializing project page:', error);
       setError('Failed to load project data');
@@ -286,7 +249,6 @@ const debugCurrentState = () => {
   };
 
   const handleVersionSwitch = async (audioFile: any) => {
-  console.log('🔄 ProjectPage: Switching to version:', audioFile.version, 'ID:', audioFile.id);
   setIsSwitchingVersion(audioFile.id);
   
   try {
@@ -301,21 +263,13 @@ const debugCurrentState = () => {
         'Content-Type': 'application/json'
       }
     });
-    
-    console.log('📊 ProjectPage: Version switch response status:', response.status);
-    
+        
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ ProjectPage: Version switch failed:', errorText);
       throw new Error(`Failed to switch version: ${response.status}`);
     }
     
-    const data = await response.json();
-    console.log('📋 ProjectPage: Version switch data:', data);
-    
-    if (data.success) {
-      console.log('✅ ProjectPage: Version switched successfully');
-      
+    const data = await response.json();    
+    if (data.success) {      
       // Update the current audio file
       setCurrentAudioFile(audioFile);
       setSignedAudioUrl(null); // Clear old signed URL
@@ -328,7 +282,6 @@ const debugCurrentState = () => {
       throw new Error(data.error?.message || 'Failed to switch version');
     }
   } catch (error) {
-    console.error('❌ ProjectPage: Error switching version:', error);
     alert(`Failed to switch version: ${error instanceof Error ? error.message : 'Unknown error'}`);
   } finally {
     setIsSwitchingVersion(null);
@@ -479,7 +432,6 @@ const handleVersionChange = async (versionData: any) => {
       const viewerUrl = `${window.location.origin}/viewer/${data.data.viewerToken}`;
       await navigator.clipboard.writeText(viewerUrl);
       alert('View-only link copied to clipboard!');
-      console.log('Generated viewer URL:', viewerUrl); // For debugging
     }
   } catch (error) {
     console.error('Error generating viewer link:', error);

@@ -300,19 +300,15 @@ const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
   console.error('❌ Image failed to load:', imgSrc);
   
   // Check if it's a signed URL that might have expired
-  if (imgSrc.includes('X-Amz-') && imgSrc.includes('s3')) {
-    console.log('🔄 Signed URL detected, checking if expired...');
-    
+  if (imgSrc.includes('X-Amz-') && imgSrc.includes('s3')) {    
     try {
       // Try to fetch the URL to get the actual error
       const testResponse = await fetch(imgSrc, { method: 'HEAD' });
       if (testResponse.status === 403) {
-        console.log('🔒 Got 403 Forbidden - likely expired signed URL');
         setImageUrlExpired(true);
         return; // Don't hide the image yet, show refresh option
       }
     } catch (fetchError) {
-      console.log('🔒 Network error - likely expired or invalid signed URL');
       setImageUrlExpired(true);
       return;
     }
@@ -642,7 +638,6 @@ const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
                           className="w-full h-full object-cover"
                           onError={handleImageError}
                           onLoad={() => {
-                            console.log('✅ Profile image loaded successfully');
                             setImageUrlExpired(false); // Reset expired state on successful load
                           }}
                         />

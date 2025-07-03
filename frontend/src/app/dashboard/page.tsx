@@ -513,7 +513,6 @@ export default function DashboardPage() {
       const viewerUrl = `${window.location.origin}/viewer/${data.data.viewerToken}`;
       await navigator.clipboard.writeText(viewerUrl);
       alert('View-only link copied to clipboard!');
-      console.log('Generated viewer URL:', viewerUrl); // For debugging
     }
   } catch (error) {
     console.error('Error generating viewer link:', error);

@@ -56,14 +56,11 @@ export default function VersionControl({
     
     try {
       setIsLoading(true);
-      console.log('🔄 Fetching versions for project:', projectId);
       
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/versions`, {
         headers: getAuthHeaders()
       });
-      
-      console.log('📊 Versions fetch response status:', response.status);
-      
+            
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ Failed to fetch versions:', errorText);
@@ -71,13 +68,11 @@ export default function VersionControl({
       }
       
       const data = await response.json();
-      console.log('📋 Versions data received:', data);
       
       if (data.success) {
         // 🔑 CRITICAL FIX: Backend returns data.data directly as array
         const versionsArray = Array.isArray(data.data) ? data.data : [];
         setVersions(versionsArray);
-        console.log('✅ Loaded versions:', versionsArray.length);
       } else {
         throw new Error(data.error?.message || 'Failed to load versions');
       }
@@ -95,12 +90,6 @@ export default function VersionControl({
     if (!uploadFile || !projectId) return;
     
     setIsUploading(true);
-    console.log('🔄 Starting version upload:', {
-      projectId,
-      fileName: uploadFile.name,
-      fileSize: uploadFile.size,
-      fileType: uploadFile.type
-    });
     
     const formData = new FormData();
     formData.append('audioFile', uploadFile);
@@ -110,15 +99,12 @@ export default function VersionControl({
       const token = localStorage.getItem('skribble_token');
       if (!token) throw new Error('No authentication token found');
       
-      console.log('📤 Uploading to backend...');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/versions`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
-      
-      console.log('📊 Upload response status:', response.status);
-      
+            
       if (!response.ok) {
         const errorData = await response.text();
         console.error('❌ Upload failed:', errorData);
@@ -126,16 +112,13 @@ export default function VersionControl({
       }
       
       const data = await response.json();
-      console.log('📋 Upload response data:', data);
       
       if (data.success) {
-        console.log('✅ Version uploaded successfully');
         await fetchVersions(); // Refresh the versions list
         setShowUpload(false);
         setUploadFile(null);
         setVersionNotes('');
         
-        // 🔑 FIXED: Pass the audioFile object
         onVersionChange(data.data.audioFile);
       } else {
         throw new Error(data.error?.message || 'Upload failed - unknown error');
@@ -149,9 +132,7 @@ export default function VersionControl({
     }
   };
 
-  // 🔑 ADDED: Version switching functionality
   const handleVersionSwitch = async (audioFileId: string) => {
-    console.log('🔄 VersionControl: Switching to version with audioFileId:', audioFileId);
     setIsSwitching(audioFileId);
     
     try {
@@ -165,9 +146,7 @@ export default function VersionControl({
           'Content-Type': 'application/json'
         }
       });
-      
-      console.log('📊 VersionControl: Version switch response status:', response.status);
-      
+            
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ VersionControl: Version switch failed:', errorText);
@@ -175,10 +154,8 @@ export default function VersionControl({
       }
       
       const data = await response.json();
-      console.log('📋 VersionControl: Version switch data:', data);
       
       if (data.success) {
-        console.log('✅ VersionControl: Version switched successfully');
         await fetchVersions(); // Refresh to update active status
         onVersionChange(data.data.audioFile); // Pass the audioFile object
       } else {
@@ -198,12 +175,6 @@ export default function VersionControl({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
-    console.log('📁 File selected:', {
-      name: file.name,
-      size: file.size,
-      type: file.type
-    });
     
     // Validate file type
     const allowedTypes = [
@@ -232,7 +203,6 @@ export default function VersionControl({
     }
     
     setUploadFile(file);
-    console.log('✅ File validation passed');
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {

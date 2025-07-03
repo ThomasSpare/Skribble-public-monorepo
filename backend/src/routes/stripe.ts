@@ -447,7 +447,7 @@ router.post('/create-checkout-session', [
           tier: tier,
           referralCode: referralCode || '',
         },
-        trial_period_days: referralCode ? 0 : 14, // No trial if referral gives free month
+        ...(referralCode ? {} : { trial_period_days: 14 }),
       },
     });
 

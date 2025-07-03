@@ -433,7 +433,6 @@ router.post('/create-checkout-session', [
         },
       ],
       mode: 'subscription',
-      allow_promotion_codes: true,
       discounts: couponId ? [{ coupon: couponId }] : undefined,
       success_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/dashboard?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment?plan=${tier}&ref=${referralCode || ''}`,

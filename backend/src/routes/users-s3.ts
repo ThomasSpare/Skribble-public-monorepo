@@ -831,5 +831,41 @@ router.post('/generate-referral-code', authenticateToken, async (req: any, res: 
   }
 });
 
+router.get('/subscription', authenticateToken, async (req: any, res: any) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(`
+      SELECT subscription_tier, subscription_status, trial_end_date
+      FROM users WHERE id = $1
+    `, [userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    const user = result.rows[0];
+    const subscriptionInfo = {
+      tier: user.subscription_tier || 'free',
+      status: user.subscription_status || 'active',
+      trialEnd: user.trial_end_date
+    };
+
+    res.json({
+      success: true,
+      data: subscriptionInfo
+    });
+  } catch (error) {
+    console.error('Get subscription info error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to fetch subscription info' }
+    });
+  }
+});
+
 
 export default router;

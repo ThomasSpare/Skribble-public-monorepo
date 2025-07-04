@@ -350,7 +350,7 @@ export default function TempoGridControls({
               </div>
 
               {/* BPM Input Section */}
-              <div className="space-y-3">
+              <div className="space-y-3 ">
                 <div className="flex items-center gap-3">
                   <label className="text-sm text-skribble-azure min-w-[3rem]">BPM:</label>
                   <input

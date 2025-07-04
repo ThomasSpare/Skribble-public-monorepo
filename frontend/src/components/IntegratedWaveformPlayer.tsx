@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, VolumeX, Loader2, Download, ZoomIn, ZoomOut, Home, Grid, User } from 'lucide-react';
+import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, X, Info, VolumeX, Loader2, AlertCircle, Zap, Sparkles, Check, ZoomIn, ZoomOut, Home, Grid, User } from 'lucide-react';
 import AnnotationSystem from './AnnotationSystem';
 import TempoGridControls from './TempoGridControls';
 import VersionControl from './VersionControl';
 import UserAvatar from './userAvatar';
 import { exportForDAW, DAWExportFormat } from '../lib/audioUtils';
+import CollaboratorsMenuPortal from './Portal';
 
 
 interface WaveformPlayerProps {
@@ -1703,7 +1704,7 @@ const isExportFormatAvailable = (format: string): boolean => {
         
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-madimi text-lg text-skribble-sky">{title}</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-skribble-dark/20 rounded-lg">
             {!userInteracted && (
               <div className="flex items-center gap-2 text-sm text-orange-400">
                 <span>🎵 Click anywhere to enable audio</span>
@@ -1721,7 +1722,7 @@ const isExportFormatAvailable = (format: string): boolean => {
               className="p-2 text-gray-400 hover:text-white transition-colors"
               title="Version History"
             >
-              <History className="w-5 h-5" />
+              <History className="w-5 h-5 text-skribble-azure hover:text-skribble-sky bg-skribble-dark/20 rounded-lg " />
             </button>
               {errorMessage && (
                 <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -1742,120 +1743,164 @@ const isExportFormatAvailable = (format: string): boolean => {
                   <button
                     onClick={() => setShowDAWExportMenu(!showDAWExportMenu)}
                     disabled={isExporting}
-                    className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                    className="p-2 font-medium text-skribble-azure hover:text-skribble-sky transition-colors disabled:opacity-50"
                     title="Export to DAW"
                   >
-                    {isExporting ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Download className="w-5 h-5" />
-                    )}
+                    Export to DAW
                   </button>
+                  <CollaboratorsMenuPortal>
                   
                   {showDAWExportMenu && (
-                    <div ref={dawExportMenuRef} className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
-                      <div className="p-4">
-                        <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Export to DAW</h3>
-                        
-                        {/* Show tier info */}
-                        {userTierInfo && (
-                          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                            <div className="text-sm">
-                              <span className="font-medium">Current Plan: </span>
-                              <span className="capitalize text-blue-600 dark:text-blue-400">{userTierInfo.tier}</span>
+                        <div 
+                          ref={dawExportMenuRef} 
+                          className="absolute top-full right-0 mt-2 w-96 bg-skribble-plum/90 backdrop-blur-md rounded-xl shadow-xl border border-skribble-azure/20 z-50 overflow-hidden"
+                        style={{
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        top: '14vh',
+                        minWidth: '18rem',
+                      }}
+                        >
+                          <div className="p-6">
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
+                              <h3 className="font-madimi text-lg text-skribble-sky">Export to DAW</h3>
+                              <button
+                                onClick={() => setShowDAWExportMenu(false)}
+                                className="p-1 text-skribble-azure/60 hover:text-skribble-azure transition-colors"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </div>
-                            {userTierInfo.limits.allowedExportFormats.length === 0 && (
-                              <div className="text-sm text-amber-600 dark:text-amber-400 mt-1">
-                                Export features require Indie plan or higher
+                            
+                            {/* Tier Status Card */}
+                            {userTierInfo && (
+                              <div className="mb-6 p-4 bg-skribble-dark/20 rounded-lg border border-skribble-azure/10">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm text-skribble-azure">Current Plan</span>
+                                  <span className="px-3 py-1 bg-gradient-to-r from-skribble-azure to-skribble-purple text-white text-sm rounded-full font-medium capitalize">
+                                    {userTierInfo.tier}
+                                  </span>
+                                </div>
+                                {userTierInfo.limits.allowedExportFormats.length === 0 ? (
+                                  <p className="text-sm text-amber-400">
+                                    <AlertCircle className="w-4 h-4 inline mr-1" />
+                                    Export features require Indie plan or higher
+                                  </p>
+                                ) : (
+                                  <p className="text-sm text-green-400">
+                                    <Check className="w-4 h-4 inline mr-1" />
+                                    {userTierInfo.limits.allowedExportFormats.length} export format{userTierInfo.limits.allowedExportFormats.length !== 1 ? 's' : ''} available
+                                  </p>
+                                )}
                               </div>
                             )}
-                          </div>
-                        )}
 
-                        <div className="space-y-2">
-                          {DAW_EXPORT_OPTIONS.map((option) => {
-                            const isAvailable = isExportFormatAvailable(option.value);
-                            const isDisabled = !userTierInfo || !isAvailable;
+                            {/* Export Options */}
+                            <div className="space-y-3 mb-6">
+                              {DAW_EXPORT_OPTIONS.map((option) => {
+                                const isAvailable = isExportFormatAvailable(option.value);
+                                const isDisabled = !userTierInfo || !isAvailable;
 
-                            return (
-                              <button
-                                key={option.value}
-                                onClick={() => !isDisabled && handleDAWExport(option.value)}
-                                disabled={isDisabled || isExporting}
-                                className={`w-full text-left p-3 rounded-lg border transition-all ${
-                                  isDisabled
-                                    ? 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-not-allowed opacity-50'
-                                    : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center space-x-3">
-                                    <span className="text-xl">{option.icon}</span>
-                                    <div>
-                                      <div className="font-medium text-gray-900 dark:text-white">
-                                        {option.label}
-                                        {!isAvailable && (
-                                          <span className="ml-2 px-2 py-1 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded">
-                                            {option.tierRequired}+
-                                          </span>
-                                        )}
+                                return (
+                                  <button
+                                    key={option.value}
+                                    onClick={() => !isDisabled && handleDAWExport(option.value)}
+                                    disabled={isDisabled || isExporting}
+                                    className={`w-full text-left p-4 rounded-lg border transition-all duration-200 group ${
+                                      isDisabled
+                                        ? 'bg-skribble-dark/10 border-skribble-purple/20 cursor-not-allowed opacity-50'
+                                        : 'bg-skribble-dark/20 border-skribble-azure/20 hover:border-skribble-azure/40 hover:bg-skribble-azure/10 cursor-pointer hover:shadow-md hover:shadow-skribble-azure/10'
+                                    }`}
+                                  >
+                                    <div className="flex items-start justify-between">
+                                      <div className="flex items-start space-x-3 flex-1">
+                                        <span className="text-2xl mt-1">{option.icon}</span>
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-medium text-skribble-sky group-hover:text-skribble-azure transition-colors">
+                                              {option.label}
+                                            </span>
+                                            {!isAvailable && (
+                                              <span className="px-2 py-1 text-xs bg-amber-500/20 text-amber-300 rounded border border-amber-500/30">
+                                                {option.tierRequired}+
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="text-sm text-skribble-azure/80 mb-1">
+                                            {option.description}
+                                          </p>
+                                        <p className="text-xs text-skribble-purple">
+                                            {option.icon}
+                                          </p>
+                                        </div>
                                       </div>
-                                      <div className="text-sm text-gray-500 dark:text-gray-400">
-                                        {option.description}
-                                      </div>
+                                      {isExporting && (
+                                        <Loader2 className="w-5 h-5 animate-spin text-skribble-azure mt-2" />
+                                      )}
                                     </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Upgrade Prompts */}
+                            {userTierInfo?.tier === 'free' && (
+                              <div className="p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 rounded-lg border border-purple-500/20 mb-4">
+                                <div className="flex items-start gap-3">
+                                  <Sparkles className="w-5 h-5 text-purple-400 mt-0.5" />
+                                  <div>
+                                    <h4 className="font-medium text-skribble-sky mb-1">🎵 Unlock Professional Export!</h4>
+                                    <p className="text-sm text-skribble-azure mb-3">
+                                      Upgrade to Indie ($7/month) to export with embedded annotations that appear automatically in your DAW.
+                                    </p>
+                                    <button 
+                                      onClick={() => window.open('/pricing', '_blank')}
+                                      className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white text-sm rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/25"
+                                    >
+                                      View Plans
+                                    </button>
                                   </div>
-                                  {isExporting && (
-                                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                                  )}
                                 </div>
-                              </button>
-                            );
-                          })}
-                        </div>
+                              </div>
+                            )}
 
-                        {/* Upgrade prompts */}
-                        {userTierInfo?.tier === 'free' && (
-                          <div className="mt-4 p-3 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
-                            <div className="text-sm text-gray-700 dark:text-gray-300">
-                              <strong>🎵 Unlock Professional Export!</strong>
-                              <br />
-                              Upgrade to Indie ($7/month) to export with embedded annotations that appear automatically in your DAW.
+                            {userTierInfo?.tier === 'indie' && (
+                              <div className="p-4 bg-gradient-to-r from-green-500/10 to-blue-500/10 rounded-lg border border-green-500/20 mb-4">
+                                <div className="flex items-start gap-3">
+                                  <Zap className="w-5 h-5 text-green-400 mt-0.5" />
+                                  <div>
+                                    <h4 className="font-medium text-skribble-sky mb-1">🚀 Want All DAW Formats?</h4>
+                                    <p className="text-sm text-skribble-azure mb-3">
+                                      Upgrade to Producer ($19/month) for Reaper, Logic, Pro Tools, and Ableton export.
+                                    </p>
+                                    <button 
+                                      onClick={() => window.open('/pricing', '_blank')}
+                                      className="px-4 py-2 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white text-sm rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-green-500/25"
+                                    >
+                                      Upgrade Plan
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Info Card */}
+                            <div className="p-4 bg-skribble-azure/10 rounded-lg border border-skribble-azure/20">
+                              <div className="flex items-start gap-3">
+                                <Info className="w-5 h-5 text-skribble-azure mt-0.5" />
+                                <div>
+                                  <h4 className="font-medium text-skribble-sky mb-1">💡 How it works</h4>
+                                  <p className="text-xs text-skribble-azure">
+                                    Your annotations are embedded directly into the exported files. When you open them in your DAW, all markers appear automatically on the timeline!
+                                  </p>
+                                </div>
+                              </div>
                             </div>
-                            <button 
-                              onClick={() => window.open('/pricing', '_blank')}
-                              className="mt-2 px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded transition-colors"
-                            >
-                              View Plans
-                            </button>
-                          </div>
-                        )}
-
-                        {userTierInfo?.tier === 'indie' && (
-                          <div className="mt-4 p-3 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-lg border border-green-200 dark:border-green-700">
-                            <div className="text-sm text-gray-700 dark:text-gray-300">
-                              <strong>🚀 Want All DAW Formats?</strong>
-                              <br />
-                              Upgrade to Producer ($19/month) for Reaper, Logic, Pro Tools, and Ableton export.
-                            </div>
-                            <button 
-                              onClick={() => window.open('/pricing', '_blank')}
-                              className="mt-2 px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
-                            >
-                              Upgrade Plan
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Info about what the export does */}
-                        <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            <strong>💡 How it works:</strong> Your annotations are embedded directly into the exported files. When you open them in your DAW, all markers appear automatically on the timeline!
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  )}
+                      )}
+                  </CollaboratorsMenuPortal>
                 </div>
               )}
            {!isViewOnly ? (
@@ -2066,15 +2111,20 @@ const isExportFormatAvailable = (format: string): boolean => {
 
           {/* Cursor Position Indicator */}
           {!isLoading && !error && (
-            <div className="absolute bottom-2 right-2 text-xs text-skribble-azure/70 font-mono bg-skribble-dark/50 px-2 py-1 rounded">
-              {formatRulerTime(currentTime)}
+            <div className="absolute bottom-2 right-2 text-xl text-skribble-azure font-mono bg-skribble-dark/20 rounded-lg px-2 py-1 rounded">
+              {(() => {
+              const ms = Math.floor((currentTime % 1) * 1000)
+                .toString()
+                .padStart(3, '0');
+              return `${formatRulerTime(currentTime)}.${ms}`;
+              })()}
             </div>
           )}
         </div>
 
         {/* Time Ruler */}
         <div className="relative h-8 mb-4">
-          <div className="absolute inset-0 bg-skribble-dark/20 rounded border-t border-skribble-azure/10">
+          <div className="absolute inset-0 bg-skribble-dark/20 rounded-lg border-t border-skribble-azure/10">
             {getTimeMarkers().map((marker, index) => (
               <div
                 key={index}
@@ -2099,6 +2149,7 @@ const isExportFormatAvailable = (format: string): boolean => {
               </div>
             ))}
             
+          </div>
             {duration > 0 && (
               <div
                 className="absolute top-0 bottom-0 w-px bg-skribble-sky shadow-lg z-10"
@@ -2114,23 +2165,27 @@ const isExportFormatAvailable = (format: string): boolean => {
                 </div>
               </div>
             )}
-          </div>
         </div>
 
         {/* Controls */}
         <div className="flex mt-10 items-center justify-between">
+
+          <div className="text-sm text-skribble-azure font-mono">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               onClick={skipBackward}
-              className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors"
+              className="w-12 h-12 bg-gradient-to-r bg-skribble-dark/20 rounded-lg from-skribble-azure to-skribble-purple rounded-full flex items-center justify-center hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:transform-none"
               disabled={isLoading || !isAudioReady}
             >
-              <SkipBack className="w-5 h-5" />
+              <SkipBack className="w-5 h-5 text-white" />
             </button>
             
             <button
               onClick={togglePlayPause}
-              className="w-12 h-12 bg-gradient-to-r from-skribble-azure to-skribble-purple rounded-full flex items-center justify-center hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:transform-none"
+              className="w-12 h-12 bg-gradient-to-r bg-skribble-dark/20 rounded-lg from-skribble-azure to-skribble-purple rounded-full flex items-center justify-center hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:transform-none"
               disabled={isLoading || !isAudioReady || !userInteracted}
             >
               {isPlaying ? (
@@ -2142,26 +2197,18 @@ const isExportFormatAvailable = (format: string): boolean => {
             
             <button
               onClick={skipForward}
-              className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors"
+              className="w-12 h-12 bg-gradient-to-r bg-skribble-dark/20 rounded-lg from-skribble-azure to-skribble-purple rounded-full flex items-center justify-center hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:transform-none"
               disabled={isLoading || !isAudioReady}
             >
-              <SkipForward className="w-5 h-5" />
+              <SkipForward className="w-5 h-5 text-white" />
             </button>
           </div>
-
-          <div className="text-sm text-skribble-azure font-mono">
-            {formatTime(currentTime)} / {formatTime(duration)}
-            <span className="text-xs text-skribble-purple/70 ml-2">
-            Press <kbd className="px-1 py-0.5 bg-skribble-dark/50 rounded text-xs">Space</kbd> to play/pause
-          </span>
-          </div>
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-skribble-dark/20 rounded-lg">
             <button
               onClick={toggleMute}
               className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors"
             >
-              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              {isMuted ? <VolumeX className="w-4 h-4 bg-skribble-dark/20 rounded-lg" /> : <Volume2 className="w-4 h-4" />}
             </button>
             
             <input
@@ -2187,7 +2234,7 @@ const isExportFormatAvailable = (format: string): boolean => {
               onGridOffsetChange={setGridOffset}
               onGridOffsetMsChange={setGridOffsetMs}
               onDetectedBeatsChange={setDetectedBeats}
-              className="ml-4 border-l border-skribble-azure/20 pl-4"
+              className="ml-4 border-l border-skribble-azure/20 pl-4 bg-skribble-dark/20 rounded-lg text-skribble-sky hover:text-skribble-sky"
             />
         <audio
           ref={audioRef}

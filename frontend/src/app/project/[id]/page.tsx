@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import IntegratedWaveformPlayer from '@/components/IntegratedWaveformPlayer';
 import CollaboratorsMenu from '@/components/CollaboratorsMenu';
-import CollaboratorsMenuPortal from '@/components/CollaboratorsMenuPortal';
+import CollaboratorsMenuPortal from '@/components/Portal';
 import Image from 'next/image';
 import ProjectMenu from '@/components/ProjectMenu';
 import ProjectMenuPortal from '@/components/ProjectMenuPortal';

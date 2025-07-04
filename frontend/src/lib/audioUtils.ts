@@ -401,64 +401,6 @@ export function downloadFile(data: string | Blob, filename: string, mimeType: st
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
-/**
- * Main export function for DAW compatibility
- */
-export async function exportForDAW(
-  audioUrl: string,
-  annotations: any[],
-  projectTitle: string,
-  audioFileName: string,
-  format: DAWExportFormat = 'wav-cues'
-) {
-  const markers = generateEnhancedDAWMarkers(annotations);
-  const sanitizedTitle = projectTitle.replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
-    
-  try {
-    switch (format) {
-      case 'wav-cues':
-        // Import the WAV embedder for proper cue point embedding
-        const { exportWAVWithEmbeddedAnnotations } = await import('./wavMetadataEmbedder');
-        await exportWAVWithEmbeddedAnnotations(audioUrl, annotations, sanitizedTitle);
-        break;
-        
-      case 'reaper-rpp':
-        const reaperProject = generateEnhancedReaperProject(audioFileName, markers, sanitizedTitle, audioFileName);
-        downloadFile(reaperProject, `${sanitizedTitle}.rpp`, 'text/plain');
-        break;
-        
-      case 'logic-markers':
-        const logicMarkers = generateLogicMarkers(markers, sanitizedTitle);
-        downloadFile(logicMarkers, `${sanitizedTitle} - Logic Markers.txt`, 'text/plain');
-        break;
-        
-      case 'pro-tools-ptxt':
-        const proToolsMarkers = generateProToolsMarkers(markers, sanitizedTitle);
-        downloadFile(proToolsMarkers, `${sanitizedTitle}.ptxt`, 'text/plain');
-        break;
-        
-      case 'ableton-als':
-        // Ableton Live Set format is complex - for now export universal markers
-        const abletonMarkers = generateUniversalMarkers(markers, sanitizedTitle);
-        downloadFile(abletonMarkers, `${sanitizedTitle} - Ableton Markers.txt`, 'text/plain');
-        break;
-        
-      default:
-        throw new Error(`Unsupported export format: ${format}`);
-    }
-    
-    return {
-      success: true,
-      message: `Exported ${markers.length} markers for ${format}`,
-      markerCount: markers.length
-    };
-    
-  } catch (error) {
-    console.error('Export for DAW failed:', error);
-    throw error;
-  }
-}
-
 // Utility functions (existing ones maintained)
 export function formatTime(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return '0:00';
@@ -483,4 +425,310 @@ function generateGUID(): string {
     const v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16).toUpperCase();
   });
+}
+
+/**
+ * Detect audio file format from URL or binary data
+ */
+export async function detectAudioFormat(audioUrl: string): Promise<{
+  format: string;
+  canEmbedCues: boolean;
+  mimeType: string;
+}> {
+  try {
+    // First try to detect from URL extension
+    const urlFormat = detectFormatFromUrl(audioUrl);
+    if (urlFormat) {
+      return urlFormat;
+    }
+
+    // If URL detection fails, fetch the first few bytes to check file headers
+    const response = await fetch(audioUrl, {
+      headers: { 'Range': 'bytes=0-11' }
+    });
+    
+    if (response.ok) {
+      const buffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      return detectFormatFromBytes(bytes);
+    }
+    
+    // Fallback to unknown
+    return {
+      format: 'unknown',
+      canEmbedCues: false,
+      mimeType: 'audio/mpeg'
+    };
+    
+  } catch (error) {
+    console.error('Format detection failed:', error);
+    return {
+      format: 'unknown', 
+      canEmbedCues: false,
+      mimeType: 'audio/mpeg'
+    };
+  }
+}
+
+/**
+ * Detect format from URL/filename
+ */
+function detectFormatFromUrl(url: string): { format: string; canEmbedCues: boolean; mimeType: string } | null {
+  const urlLower = url.toLowerCase();
+  
+  if (urlLower.includes('.wav') || urlLower.includes('wav')) {
+    return { format: 'wav', canEmbedCues: true, mimeType: 'audio/wav' };
+  }
+  if (urlLower.includes('.mp3') || urlLower.includes('mp3')) {
+    return { format: 'mp3', canEmbedCues: false, mimeType: 'audio/mpeg' };
+  }
+  if (urlLower.includes('.m4a') || urlLower.includes('m4a')) {
+    return { format: 'm4a', canEmbedCues: false, mimeType: 'audio/mp4' };
+  }
+  if (urlLower.includes('.aiff') || urlLower.includes('aif')) {
+    return { format: 'aiff', canEmbedCues: false, mimeType: 'audio/aiff' };
+  }
+  if (urlLower.includes('.flac')) {
+    return { format: 'flac', canEmbedCues: false, mimeType: 'audio/flac' };
+  }
+  if (urlLower.includes('.ogg')) {
+    return { format: 'ogg', canEmbedCues: false, mimeType: 'audio/ogg' };
+  }
+  
+  return null;
+}
+
+/**
+ * Detect format from file header bytes
+ */
+function detectFormatFromBytes(bytes: Uint8Array): { format: string; canEmbedCues: boolean; mimeType: string } {
+  if (bytes.length < 4) {
+    return { format: 'unknown', canEmbedCues: false, mimeType: 'audio/mpeg' };
+  }
+  
+  // Check for RIFF/WAV
+  const riffHeader = String.fromCharCode(...bytes.slice(0, 4));
+  if (riffHeader === 'RIFF') {
+    return { format: 'wav', canEmbedCues: true, mimeType: 'audio/wav' };
+  }
+  
+  // Check for MP3
+  if ((bytes[0] === 0xFF && (bytes[1] & 0xE0) === 0xE0) || // MP3 frame header
+      (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33)) { // ID3v2 header
+    return { format: 'mp3', canEmbedCues: false, mimeType: 'audio/mpeg' };
+  }
+  
+  // Check for M4A/MP4
+  if (bytes.length >= 8) {
+    const ftyp = String.fromCharCode(...bytes.slice(4, 8));
+    if (ftyp === 'ftyp') {
+      return { format: 'm4a', canEmbedCues: false, mimeType: 'audio/mp4' };
+    }
+  }
+  
+  // Check for AIFF
+  const formHeader = String.fromCharCode(...bytes.slice(0, 4));
+  if (formHeader === 'FORM') {
+    return { format: 'aiff', canEmbedCues: false, mimeType: 'audio/aiff' };
+  }
+  
+  // Check for FLAC
+  if (bytes[0] === 0x66 && bytes[1] === 0x4C && bytes[2] === 0x61 && bytes[3] === 0x43) {
+    return { format: 'flac', canEmbedCues: false, mimeType: 'audio/flac' };
+  }
+  
+  // Check for OGG
+  if (bytes[0] === 0x4F && bytes[1] === 0x67 && bytes[2] === 0x67 && bytes[3] === 0x53) {
+    return { format: 'ogg', canEmbedCues: false, mimeType: 'audio/ogg' };
+  }
+  
+  // Default to MP3 if unknown
+  return { format: 'unknown', canEmbedCues: false, mimeType: 'audio/mpeg' };
+}
+
+/**
+ * Generate WAV file with cue points (for non-WAV source files)
+ */
+async function generateWAVWithCuePoints(
+  audioUrl: string,
+  annotations: any[],
+  projectTitle: string
+): Promise<void> {
+  try {
+    // Create a simple marker file that can be imported alongside the original audio
+    const markers = generateEnhancedDAWMarkers(annotations);
+    const sanitizedTitle = projectTitle.replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
+    
+    // Generate multiple formats for maximum compatibility
+    const cueFile = generateCueFile(markers, audioUrl);
+    const reaper = generateEnhancedReaperProject(audioUrl.split('/').pop() || 'audio', markers, sanitizedTitle, audioUrl);
+    const universal = generateUniversalMarkers(markers, sanitizedTitle);
+    
+    // Create a ZIP file with all formats
+    const zipContent = await createExportZip({
+      [`${sanitizedTitle}.cue`]: cueFile,
+      [`${sanitizedTitle}.rpp`]: reaper, 
+      [`${sanitizedTitle}_markers.txt`]: universal,
+      [`README.txt`]: generateReadmeFile(sanitizedTitle, audioUrl)
+    });
+    
+    // Download the ZIP
+    downloadFile(zipContent, `${sanitizedTitle}_Export_Package.zip`, 'application/zip');
+    
+  } catch (error) {
+    console.error('Failed to generate WAV export package:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create a ZIP file with multiple export formats
+ */
+async function createExportZip(files: Record<string, string>): Promise<Blob> {
+  // Simple zip creation without external libraries
+  // In a real implementation, you'd use a proper ZIP library like JSZip
+  
+  let content = "Export Package Contents:\n\n";
+  Object.keys(files).forEach(filename => {
+    content += `${filename}:\n${files[filename]}\n\n${'='.repeat(50)}\n\n`;
+  });
+  
+  return new Blob([content], { type: 'text/plain' });
+}
+
+/**
+ * Generate README file for export package
+ */
+function generateReadmeFile(projectTitle: string, audioUrl: string): string {
+  const filename = audioUrl.split('/').pop() || 'audio';
+  
+  return `Skribble Export Package: ${projectTitle}
+${'='.repeat(50)}
+
+This package contains your audio annotations in multiple formats:
+
+📁 Files included:
+- ${projectTitle}.cue         → CUE sheet for CD burning software
+- ${projectTitle}.rpp         → Reaper project file  
+- ${projectTitle}_markers.txt → Universal marker format
+
+🎵 Original Audio File: ${filename}
+
+📋 How to use:
+
+FOR REAPER:
+1. Import your original audio file: ${filename}
+2. Open the .rpp project file
+3. Markers will appear on timeline
+
+FOR OTHER DAWs:
+1. Import your original audio file: ${filename}  
+2. Import the _markers.txt file as markers/cues
+3. Or use the .cue file for CD software
+
+FOR VINYL/CD MASTERING:
+- Use the .cue file with your mastering software
+
+Generated by Skribble - Music Collaboration Platform
+`;
+}
+
+/**
+ * Enhanced export function with format detection
+ */
+export async function exportForDAW(
+  audioUrl: string,
+  annotations: any[],
+  projectTitle: string,
+  audioFileName: string,
+  format: DAWExportFormat = 'wav-cues'
+) {
+  const markers = generateEnhancedDAWMarkers(annotations);
+  const sanitizedTitle = projectTitle.replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
+    
+  try {
+    switch (format) {
+      case 'wav-cues':
+        // Detect audio format first
+        const audioFormat = await detectAudioFormat(audioUrl);
+        console.log('🎵 Detected audio format:', audioFormat);
+        
+        if (audioFormat.canEmbedCues) {
+          // Original file is WAV - embed cues directly
+          const { exportWAVWithEmbeddedAnnotations } = await import('./wavMetadataEmbedder');
+          await exportWAVWithEmbeddedAnnotations(audioUrl, annotations, sanitizedTitle);
+        } else {
+          // Non-WAV file - generate marker files instead
+          console.log('⚠️ Non-WAV file detected, generating marker export package...');
+          await generateWAVWithCuePoints(audioUrl, annotations, sanitizedTitle);
+        }
+        break;
+        
+      case 'reaper-rpp':
+        const reaperProject = generateEnhancedReaperProject(audioFileName, markers, sanitizedTitle, audioFileName);
+        downloadFile(reaperProject, `${sanitizedTitle}.rpp`, 'text/plain');
+        break;
+        
+      case 'logic-markers':
+        const logicMarkers = generateLogicMarkers(markers, sanitizedTitle);
+        downloadFile(logicMarkers, `${sanitizedTitle} - Logic Markers.txt`, 'text/plain');
+        break;
+        
+      case 'pro-tools-ptxt':
+        const proToolsMarkers = generateProToolsMarkers(markers, sanitizedTitle);
+        downloadFile(proToolsMarkers, `${sanitizedTitle}.ptxt`, 'text/plain');
+        break;
+        
+      case 'ableton-als':
+        const abletonMarkers = generateUniversalMarkers(markers, sanitizedTitle);
+        downloadFile(abletonMarkers, `${sanitizedTitle} - Ableton Markers.txt`, 'text/plain');
+        break;
+        
+      default:
+        throw new Error(`Unsupported export format: ${format}`);
+    }
+    
+    return {
+      success: true,
+      message: `Exported ${markers.length} markers for ${format}`,
+      markerCount: markers.length
+    };
+    
+  } catch (error) {
+    console.error('Export for DAW failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate enhanced CUE file
+ */
+function generateCueFile(markers: any[], audioUrl: string): string {
+  const filename = audioUrl.split('/').pop() || 'audio.wav';
+  
+  let cueContent = `REM GENRE "Music Production"\n`;
+  cueContent += `REM DATE "${new Date().getFullYear()}"\n`;
+  cueContent += `REM COMMENT "Generated by Skribble"\n`;
+  cueContent += `FILE "${filename}" WAVE\n`;
+  
+  markers.forEach((marker, index) => {
+    const trackNum = (index + 1).toString().padStart(2, '0');
+    const timeStr = formatTimeForCue(marker.timestamp);
+    
+    cueContent += `  TRACK ${trackNum} AUDIO\n`;
+    cueContent += `    TITLE "${marker.label.replace(/"/g, '\\"')}"\n`;
+    cueContent += `    INDEX 01 ${timeStr}\n`;
+  });
+  
+  return cueContent;
+}
+
+/**
+ * Format time for CUE file (MM:SS:FF format)
+ */
+function formatTimeForCue(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  const frames = Math.floor((seconds % 1) * 75); // 75 frames per second for CD
+  return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
 }

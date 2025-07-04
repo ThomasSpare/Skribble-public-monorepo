@@ -270,7 +270,7 @@ export default function IntegratedWaveformPlayer({
       const token = localStorage.getItem('skribble_token');
       if (!token) return;
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/subscription`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/users/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

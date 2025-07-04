@@ -17,6 +17,7 @@ export class WAVMetadataEmbedder {
     annotations: AudioAnnotation[],
     projectTitle: string
   ): Promise<Blob> {
+    console.log(`Embedding ${annotations.length} annotations into WAV file...`);
     
     try {
       // Fetch the original audio file
@@ -33,7 +34,9 @@ export class WAVMetadataEmbedder {
       if (!wavData) {
         throw new Error('Invalid WAV file format');
       }
-            
+      
+      console.log('WAV file parsed:', wavData);
+      
       // Create cue chunk with annotation positions
       const cueChunk = this.createCueChunk(annotations, wavData.sampleRate);
       
@@ -48,6 +51,7 @@ export class WAVMetadataEmbedder {
         adtlChunk
       );
       
+      console.log(`WAV file rebuilt with ${annotations.length} cue points`);
       return new Blob([newWavBytes], { type: 'audio/wav' });
       
     } catch (error) {
@@ -350,7 +354,12 @@ export class WAVMetadataEmbedder {
     
     // Update file size in RIFF header (bytes 4-7)
     const totalFileSize = newFileSize - 8; // Exclude RIFF header itself
-    newView.setUint32(4, totalFileSize, true); 
+    newView.setUint32(4, totalFileSize, true);
+    
+    console.log(`WAV file rebuilt: ${originalBytes.length} -> ${newFileSize} bytes`);
+    console.log(`Added ${cueChunk.length > 0 ? 'cue chunk' : 'no cue chunk'}`);
+    console.log(`Added ${adtlChunk.length > 0 ? 'adtl chunk' : 'no adtl chunk'}`);
+    
     return newBytes;
   }
   
@@ -398,6 +407,8 @@ export async function exportWAVWithEmbeddedAnnotations(
   projectTitle: string
 ): Promise<void> {
   try {
+    console.log('Starting WAV annotation embedding...');
+    
     // Convert annotations to the expected format
     const formattedAnnotations: AudioAnnotation[] = annotations
       .filter(ann => !ann.parentId) // Only parent annotations
@@ -426,7 +437,9 @@ export async function exportWAVWithEmbeddedAnnotations(
     const filename = `${sanitizedTitle} - With Annotations.wav`;
     
     WAVMetadataEmbedder.downloadEmbeddedWAV(embeddedWAV, filename);
-        
+    
+    console.log(`Successfully embedded ${formattedAnnotations.length} annotations into WAV file`);
+    
   } catch (error) {
     console.error('Failed to embed annotations in WAV:', error);
     throw error;

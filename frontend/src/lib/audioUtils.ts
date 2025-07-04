@@ -26,7 +26,6 @@ export interface DAWMarker {
   username?: string;
 }
 
-
 // DAW Export formats
 export type DAWExportFormat = 'wav-cues' | 'reaper-rpp' | 'logic-markers' | 'ableton-als' | 'pro-tools-ptxt';
 
@@ -48,7 +47,6 @@ export function generateEnhancedDAWMarkers(annotations: any[]): DAWMarker[] {
     }))
     .sort((a, b) => a.timestamp - b.timestamp);
 }
-
 
 /**
  * Format marker label for DAW display
@@ -138,7 +136,9 @@ export async function generateWAVWithCues(
     // For now, we'll create a simple implementation that appends marker data
     // In a full implementation, you'd need to properly parse and modify the WAV file
     // This is a placeholder that demonstrates the concept
-        
+    
+    console.log(`Generating WAV with ${markers.length} cue points for ${filename}`);
+    
     // Return the original file for now - in production you'd embed the cue points
     return new Blob([arrayBuffer], { type: 'audio/wav' });
     
@@ -413,7 +413,9 @@ export async function exportForDAW(
 ) {
   const markers = generateEnhancedDAWMarkers(annotations);
   const sanitizedTitle = projectTitle.replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
-    
+  
+  console.log(`Exporting ${markers.length} markers for ${sanitizedTitle} in ${format} format`);
+  
   try {
     switch (format) {
       case 'wav-cues':

@@ -1,9 +1,14 @@
+"use client";
 // frontend/src/app/page.tsx
+import React, { useState } from 'react';
+
 import Link from 'next/link';
-import { ArrowRight, Play, Users, Zap, Download, Star, Rocket, Music, MessageCircle, Clock, Check } from 'lucide-react';
+import { ArrowRight, Users, Zap, Download, Rocket, Music, MessageCircle, Clock, Check } from 'lucide-react';
 import WaveformDemo from '@/components/WaveformDemo';
 
 export default function LandingPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark">
       {/* Header */}
@@ -21,9 +26,47 @@ export default function LandingPage() {
                 <div className="w-1 h-1 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
               </div>
             </div>
+      <div className="md:hidden relative">
+        <button
+          className="text-skribble-sky hover:text-skribble-azure transition-colors p-2"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          aria-label="Open mobile menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        {mobileMenuOpen && (
+          <div className="absolute right-0 mt-2 bg-skribble-dark rounded-lg shadow-lg flex flex-col gap-2 p-4 md:hidden z-50">
+            <Link href="#features" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Features
+            </Link>
+            <Link href="quickstart" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Quickstart
+            </Link>
+            
+            <Link href="#pricing" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Pricing
+            </Link>
+            <Link 
+            href="/login" 
+            className="text-skribble-sky hover:text-skribble-azure transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link
+            className="text-skribble-sky hover:text-skribble-azure transition-colors" 
+            href="/register" 
+          >Register</Link>
+            <Link href="#about" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              About
+            </Link>
           </div>
-
-          {/* Navigation */}
+        )}
+      </div>
+        </div>
+          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             <Link href="#features" className="text-skribble-sky hover:text-skribble-azure transition-colors">
               Features
@@ -40,68 +83,70 @@ export default function LandingPage() {
           </div>
 
           {/* Auth Buttons */}
-          <div className="flex items-center gap-4">
-            <Link 
-              href="/login" 
-              className="text-skribble-sky hover:text-skribble-azure transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link 
-              href="/register" 
-              className="bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-6 py-2 rounded-full hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105"
-            >
-              Get Started
-            </Link>
-          </div>
-        </nav>
+          <div className="hidden md:flex items-center gap-4">
+          <Link 
+            href="/login" 
+            className="text-skribble-sky hover:text-skribble-azure transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link 
+            href="/register" 
+            className="bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-4 sm:px-6 py-2 rounded-full hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105 text-sm sm:text-base"
+          >
+            Get Started
+          </Link>
+        </div>
+      </nav>
       </header>
 
       {/* Hero Section */}
-      <section className="relative px-6 py-20">
+      <section className="relative px-4 sm:px-6 py-14 sm:py-20">
         <div className="max-w-7xl mx-auto text-center">
-          <div className="relative inline-block mb-8">
-            <h1 className="font-madimi text-7xl md:text-8xl bg-gradient-to-r from-skribble-sky via-skribble-azure to-skribble-purple bg-clip-text text-transparent">
+          <div className="relative inline-block mb-6 sm:mb-8">
+            <h1 className="font-madimi text-5xl xs:text-6xl sm:text-7xl md:text-8xl bg-gradient-to-r from-skribble-sky via-skribble-azure to-skribble-purple bg-clip-text text-transparent">
               Skribble
             </h1>
-            <div className="absolute -top-8 -right-12 bg-skribble-azure rounded-2xl rounded-bl-md px-4 py-2 shadow-xl animate-float">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+            <div className="absolute -top-6 -right-6 sm:-top-8 sm:-right-12 bg-skribble-azure rounded-xl sm:rounded-2xl rounded-bl-md px-3 py-1.5 sm:px-4 sm:py-2 shadow-xl animate-float">
+              <div className="flex items-center gap-1 sm:gap-2">
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse"></div>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
               </div>
             </div>
           </div>
           
-          <h2 className="text-2xl md:text-3xl text-skribble-sky mb-6 max-w-4xl mx-auto leading-relaxed">
+          <h2 className="text-xl xs:text-2xl sm:text-3xl text-skribble-sky mb-4 sm:mb-6 max-w-4xl mx-auto leading-relaxed">
             Where Music Meets Collaboration
           </h2>
           
-          <p className="text-lg text-skribble-azure mb-12 max-w-3xl mx-auto leading-relaxed">
+          <p className="text-base xs:text-lg text-skribble-azure mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed">
             The professional platform for producers and artists to collaborate on music projects with precision timestamp annotations and seamless DAW integration.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mb-16">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-10 sm:mb-16">
             <Link 
               href="/register" 
-              className="group bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-8 py-4 rounded-full text-lg font-medium hover:shadow-2xl hover:shadow-skribble-azure/30 transition-all duration-300 hover:scale-105 flex items-center gap-2"
+              className="group bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full text-base sm:text-lg font-medium hover:shadow-2xl hover:shadow-skribble-azure/30 transition-all duration-300 hover:scale-105 flex items-center gap-2"
             >
               Start Collaborating Free
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
             </Link>
             <Link 
               href="/quickstart" 
-              className="group flex items-center gap-3 text-skribble-sky hover:text-skribble-azure transition-colors"
+              className="group flex items-center gap-2 sm:gap-3 text-skribble-sky hover:text-skribble-azure transition-colors"
             >
-              <div className="w-12 h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                <Rocket className="w-6 h-6 ml-1" />
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center group-hover:bg-white/20 transition-colors">
+                <Rocket className="w-5 h-5 sm:w-6 sm:h-6 ml-1" />
               </div>
-              <span className="text-lg">View Quickstart Guide</span>
+              <span className="text-base sm:text-lg">View Quickstart Guide</span>
             </Link>
           </div>
 
           {/* Demo Waveform */}
-          <WaveformDemo />
+          <div className="mx-auto max-w-full overflow-x-auto">
+            <WaveformDemo />
+          </div>
         </div>
       </section>
 

@@ -17,12 +17,20 @@ export default function WaveformDemo() {
   const [currentTime, setCurrentTime] = useState(0);
   const [hoveredAnnotation, setHoveredAnnotation] = useState<Annotation | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isMobile, setIsMobile] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
-  
-  const duration = 60; // Shorter demo - 1 minute for better visibility
-  
-  // Demo annotation data that appears during playback
+
+  const duration = 60;
+
+  // Responsive: detect mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   const annotations: Annotation[] = [
     {
       timestamp: 8,
@@ -68,13 +76,13 @@ export default function WaveformDemo() {
     }
   ];
 
-  // Generate waveform data
-  const waveformBars = Array.from({ length: 150 }, (_, i) => {
-    // Create more realistic waveform pattern
-    const position = i / 150;
-    let height = Math.sin(position * Math.PI * 8) * 0.3 + 0.7; // Base wave pattern
-    height += Math.random() * 0.4 - 0.2; // Add some randomness
-    height = Math.max(0.1, Math.min(1, height)); // Clamp between 0.1 and 1
+  // Fewer bars on mobile for performance and clarity
+  const barCount = isMobile ? 60 : 150;
+  const waveformBars = Array.from({ length: barCount }, (_, i) => {
+    const position = i / barCount;
+    let height = Math.sin(position * Math.PI * 8) * 0.3 + 0.7;
+    height += Math.random() * 0.4 - 0.2;
+    height = Math.max(0.1, Math.min(1, height));
     return height;
   });
 
@@ -82,18 +90,32 @@ export default function WaveformDemo() {
     setIsPlaying(!isPlaying);
   };
 
-  const handleWaveformClick = (e: React.MouseEvent) => {
+  // Touch support for waveform seeking
+  const handleSeek = (clientX: number) => {
     if (!containerRef.current) return;
-    
     const rect = containerRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
+    const clickX = clientX - rect.left;
     const progress = clickX / rect.width;
     setCurrentTime(progress * duration);
   };
 
-  const handleAnnotationHover = (annotation: Annotation, e: React.MouseEvent) => {
+  const handleWaveformClick = (e: React.MouseEvent) => {
+    handleSeek(e.clientX);
+  };
+
+  const handleWaveformTouch = (e: React.TouchEvent) => {
+    if (e.touches.length > 0) {
+      handleSeek(e.touches[0].clientX);
+    }
+  };
+
+  const handleAnnotationHover = (annotation: Annotation, e: React.MouseEvent | React.TouchEvent) => {
     setHoveredAnnotation(annotation);
-    setMousePosition({ x: e.clientX, y: e.clientY });
+    if ('clientX' in e) {
+      setMousePosition({ x: e.clientX, y: e.clientY });
+    } else if ('touches' in e && e.touches.length > 0) {
+      setMousePosition({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    }
   };
 
   const handleAnnotationLeave = () => {
@@ -112,16 +134,6 @@ export default function WaveformDemo() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getAnnotationColor = (type: string): string => {
-    switch (type) {
-      case 'comment': return 'bg-skribble-azure';
-      case 'issue': return 'bg-red-500';
-      case 'approval': return 'bg-green-500';
-      case 'marker': return 'bg-skribble-purple';
-      default: return 'bg-skribble-azure';
-    }
-  };
-
   const getAnnotationIcon = (type: string): string => {
     switch (type) {
       case 'comment': return '💬';
@@ -132,12 +144,11 @@ export default function WaveformDemo() {
     }
   };
 
-  // Animation loop - slower for better visibility
   useEffect(() => {
     if (isPlaying) {
       const animate = () => {
         setCurrentTime(prev => {
-          const next = prev + 0.05; // Slower animation speed
+          const next = prev + 0.05;
           return next >= duration ? 0 : next;
         });
         animationRef.current = requestAnimationFrame(animate);
@@ -148,7 +159,6 @@ export default function WaveformDemo() {
         cancelAnimationFrame(animationRef.current);
       }
     }
-
     return () => {
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
@@ -156,26 +166,26 @@ export default function WaveformDemo() {
     };
   }, [isPlaying, duration]);
 
-  // Auto-start demo after 2 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsPlaying(true);
     }, 2000);
-
     return () => clearTimeout(timer);
   }, []);
 
   const progress = (currentTime / duration) * 100;
-  // Show annotations when we're within 2 seconds of them OR have passed them
   const visibleAnnotations = annotations.filter(ann => 
     currentTime >= ann.timestamp - 2 && currentTime <= ann.timestamp + 10
   );
 
+  // On mobile, show annotation details in a modal at the bottom
+  const showMobileAnnotationModal = isMobile && hoveredAnnotation;
+
   return (
-    <div className="relative max-w-4xl mx-auto">
-      <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl p-8 border border-skribble-azure/20">
-        {/* Header with user info */}
-        <div className="flex items-center justify-between mb-6">
+    <div className="relative max-w-4xl mx-auto px-2 sm:px-4">
+      <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl p-4 sm:p-8 border border-skribble-azure/20">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-2">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-gradient-to-r from-skribble-azure to-skribble-purple flex items-center justify-center text-white text-sm font-medium">
               P
@@ -188,25 +198,18 @@ export default function WaveformDemo() {
         </div>
 
         {/* Waveform */}
-        <div 
+        <div
           ref={containerRef}
-          className="relative h-32 bg-skribble-dark/50 rounded-lg cursor-pointer group"
+          className="relative h-20 sm:h-32 bg-skribble-dark/50 rounded-lg cursor-pointer group select-none"
           onClick={handleWaveformClick}
           onMouseMove={handleMouseMove}
-        >
-        {/* Waveform */}
-        <div 
-          ref={containerRef}
-          className="relative h-32 bg-skribble-dark/50 rounded-lg cursor-pointer group"
-          onClick={handleWaveformClick}
-          onMouseMove={handleMouseMove}
+          onTouchStart={handleWaveformTouch}
         >
           {/* Waveform bars */}
-          <div className="absolute inset-0 flex items-center justify-center gap-1 p-4">
+          <div className="absolute inset-0 flex items-center justify-center gap-[1px] sm:gap-1 p-2 sm:p-4">
             {waveformBars.map((height, i) => {
               const barProgress = (i / waveformBars.length) * 100;
               const isActive = barProgress <= progress;
-              
               return (
                 <div
                   key={i}
@@ -216,14 +219,13 @@ export default function WaveformDemo() {
                       : 'bg-gradient-to-t from-skribble-azure/60 to-skribble-sky/60'
                   }`}
                   style={{
-                    height: `${height * 80}%`,
+                    height: `${height * (isMobile ? 60 : 80)}%`,
                     opacity: isActive ? 1 : 0.6
                   }}
                 />
               );
             })}
           </div>
-
           {/* Progress cursor */}
           <div 
             className="absolute top-0 bottom-0 w-0.5 shadow-lg z-10 transition-all duration-75"
@@ -235,39 +237,37 @@ export default function WaveformDemo() {
           />
         </div>
 
-        {/* Annotations - completely separate from waveform */}
-        <div className="absolute left-0 right-0" style={{ top: '60px' }}>
+        {/* Annotations */}
+        <div className="absolute left-0 right-0 pointer-events-none sm:pointer-events-auto" style={{ top: isMobile ? '38px' : '60px' }}>
           {visibleAnnotations.map((annotation, index) => {
             const annotationProgress = (annotation.timestamp / duration) * 100;
             const hasPassedTimestamp = currentTime >= annotation.timestamp;
-            
             return (
               <div
                 key={`${annotation.timestamp}-${index}`}
                 className="absolute transform -translate-x-1/2 z-30"
                 style={{ 
                   left: `${annotationProgress}%`,
-                  top: '-45px' // Position above the waveform
+                  top: isMobile ? '-30px' : '-45px'
                 }}
-                onMouseEnter={(e) => handleAnnotationHover(annotation, e)}
-                onMouseLeave={handleAnnotationLeave}
+                onMouseEnter={isMobile ? undefined : (e) => handleAnnotationHover(annotation, e)}
+                onMouseLeave={isMobile ? undefined : handleAnnotationLeave}
+                onTouchStart={isMobile ? (e) => { e.stopPropagation(); handleAnnotationHover(annotation, e); } : undefined}
+                onTouchEnd={isMobile ? handleAnnotationLeave : undefined}
+                tabIndex={0}
+                aria-label={`Annotation by ${annotation.user}: ${annotation.text}`}
               >
-                {/* Annotation bubble - small chat bubble style */}
-                <div className={`relative text-white px-3 py-2 rounded-lg text-xs shadow-lg border border-white/20 hover:scale-110 transition-all duration-300 cursor-pointer ${
+                <div className={`relative text-white px-2 py-1 sm:px-3 sm:py-2 rounded-lg text-xs shadow-lg border border-white/20 hover:scale-110 transition-all duration-300 cursor-pointer pointer-events-auto ${
                   annotation.type === 'comment' ? 'bg-blue-500' :
                   annotation.type === 'issue' ? 'bg-red-500' :
                   annotation.type === 'approval' ? 'bg-green-500' :
                   'bg-purple-500'
                 } ${hasPassedTimestamp ? 'scale-105 shadow-xl' : 'scale-90 opacity-80'}`}
-                style={{ minWidth: '80px', maxWidth: '120px' }}>
-                  
-                  {/* Icon and user */}
+                style={{ minWidth: isMobile ? '48px' : '80px', maxWidth: isMobile ? '80px' : '120px' }}>
                   <div className="flex items-center gap-1 justify-center">
                     <span className="text-sm">{getAnnotationIcon(annotation.type)}</span>
                     <span className="font-medium text-xs">{annotation.user.split('_')[1]}</span>
                   </div>
-                  
-                  {/* Tail pointing down */}
                   <div className={`absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-transparent ${
                     annotation.type === 'comment' ? 'border-t-blue-500' :
                     annotation.type === 'issue' ? 'border-t-red-500' :
@@ -275,50 +275,46 @@ export default function WaveformDemo() {
                     'border-t-purple-500'
                   } border-t-4`}></div>
                 </div>
-
-                {/* Annotation line - only from bubble to waveform top */}
                 <div className={`absolute left-1/2 transform -translate-x-1/2 w-0.5 opacity-60 transition-all duration-300 ${
                   annotation.type === 'comment' ? 'bg-blue-500' :
                   annotation.type === 'issue' ? 'bg-red-500' :
                   annotation.type === 'approval' ? 'bg-green-500' :
                   'bg-purple-500'
                 } ${hasPassedTimestamp ? 'opacity-100' : ''}`} 
-                style={{ top: '30px', height: '15px' }} />
+                style={{ top: isMobile ? '18px' : '30px', height: isMobile ? '10px' : '15px' }} />
               </div>
             );
           })}
         </div>
-        </div>
 
         {/* Controls */}
-        <div className="flex items-center justify-between mt-6">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between mt-4 sm:mt-6 gap-3">
+          <div className="flex items-center gap-3 sm:gap-4">
             <button
               onClick={togglePlayback}
-              className="w-12 h-12 rounded-full bg-gradient-to-r from-skribble-azure to-skribble-purple text-white flex items-center justify-center hover:scale-105 transition-transform shadow-lg hover:shadow-skribble-azure/25"
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-r from-skribble-azure to-skribble-purple text-white flex items-center justify-center hover:scale-105 transition-transform shadow-lg hover:shadow-skribble-azure/25"
+              aria-label={isPlaying ? 'Pause' : 'Play'}
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
             </button>
-            <div className="text-sm text-skribble-sky font-mono">
+            <div className="text-xs sm:text-sm text-skribble-sky font-mono">
               {formatTime(currentTime)} / {formatTime(duration)}
             </div>
           </div>
-          
-          <div className="font-madimi text-lg text-skribble-sky">
+          <div className="font-madimi text-base sm:text-lg text-skribble-sky text-center">
             🎵 Lose Control v2.1
           </div>
-          
-          <div className="text-xs text-skribble-azure">
+          <div className="text-xs text-skribble-azure text-center">
             {visibleAnnotations.length > 0 
-              ? `${visibleAnnotations.length} active annotations • Hover to see details`
+              ? `${visibleAnnotations.length} active annotations${isMobile ? '' : ' • Hover to see details'}`
               : 'Annotations will appear as the track plays'
             }
           </div>
         </div>
       </div>
 
-      {/* Tooltip */}
-      {hoveredAnnotation && (
+      {/* Tooltip (desktop) */}
+      {!isMobile && hoveredAnnotation && (
         <div 
           className="fixed z-50 bg-black/90 text-white p-4 rounded-lg shadow-2xl border border-white/20 max-w-xs pointer-events-none transition-opacity duration-200"
           style={{ 
@@ -334,13 +330,39 @@ export default function WaveformDemo() {
             Priority: {hoveredAnnotation.priority} • @ {formatTime(hoveredAnnotation.timestamp)}
           </div>
           <div className="text-sm">
-            "{hoveredAnnotation.text}"
+            {hoveredAnnotation ? `"${hoveredAnnotation.text}"` : ""}
           </div>
         </div>
       )}
 
-      {/* Famous quote */}
-      <div className="text-center mt-6 text-xs text-skribble-azure/70 italic">
+      {/* Mobile annotation modal */}
+      {showMobileAnnotationModal && (
+        <div
+          className="fixed left-0 right-0 bottom-0 z-50 bg-black/95 text-white p-4 rounded-t-2xl shadow-2xl border-t border-white/20 max-w-full mx-auto transition-all duration-200"
+          style={{ maxWidth: 400 }}
+          onClick={handleAnnotationLeave}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">{getAnnotationIcon(hoveredAnnotation.type)}</span>
+            <span className="font-medium text-skribble-azure">{hoveredAnnotation.user}</span>
+            <span className="text-xs bg-skribble-dark/60 px-2 py-0.5 rounded-full">{hoveredAnnotation.type}</span>
+          </div>
+          <div className="text-xs text-white/70 mb-2">
+            Priority: {hoveredAnnotation.priority} • @ {formatTime(hoveredAnnotation.timestamp)}
+          </div>
+          <div className="text-base">
+            "{hoveredAnnotation.text}"
+          </div>
+          <button
+            className="mt-4 w-full py-2 rounded-lg bg-skribble-azure text-white font-semibold"
+            onClick={handleAnnotationLeave}
+          >
+            Close
+          </button>
+        </div>
+      )}
+
+      <div className="text-center mt-4 sm:mt-6 text-xs text-skribble-azure/70 italic">
         "The whole is greater than the sum of its parts." - Aristotle
       </div>
     </div>

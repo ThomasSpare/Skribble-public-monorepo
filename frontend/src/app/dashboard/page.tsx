@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { auth } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { 
-  Plus, 
+  Plus,
   Music, 
   Users, 
   Clock, 
@@ -100,6 +101,7 @@ interface UploadCompleteData {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showUpload, setShowUpload] = useState(false);
@@ -577,6 +579,45 @@ export default function DashboardPage() {
             </div>
 
             {/* Navigation */}
+            <div className="md:hidden relative">
+        <button
+          className="text-skribble-sky hover:text-skribble-azure transition-colors p-2"
+          onClick={() => setMobileMenuOpen((open) => !open)}
+          aria-label="Open mobile menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        {mobileMenuOpen && (
+          <div className="absolute right-0 mt-2 bg-skribble-dark rounded-lg shadow-lg flex flex-col gap-2 p-4 md:hidden z-50">
+            <Link href="#features" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Features
+            </Link>
+            <Link href="quickstart" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Quickstart
+            </Link>
+            
+            <Link href="#pricing" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              Pricing
+            </Link>
+            <Link 
+            href="/login" 
+            className="text-skribble-sky hover:text-skribble-azure transition-colors"
+          >
+            Sign In
+          </Link>
+          <Link
+            className="text-skribble-sky hover:text-skribble-azure transition-colors" 
+            href="/register" 
+          >Register</Link>
+            <Link href="#about" className="text-skribble-sky hover:text-skribble-azure transition-colors">
+              About
+            </Link>
+          </div>
+        )}
+      </div>
 
             {/* Search */}
             <div className="flex-1 max-w-lg mx-8">

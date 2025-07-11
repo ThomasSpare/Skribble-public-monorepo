@@ -2677,7 +2677,7 @@ return (
           analyser={analyserRef.current}
           isPlaying={isPlaying}
           audioBuffer={null}
-          className="mobile-optimized"
+          // className="mobile-optimized"
         />
       </div>
     )} 
@@ -2690,7 +2690,7 @@ return (
           currentUser={currentUser}
           onVersionChange={onVersionChange || (() => {})}
           onError={handleVersionError}
-          className="mobile-optimized"
+          // className="mobile-optimized"
         />
       </div>
     )}

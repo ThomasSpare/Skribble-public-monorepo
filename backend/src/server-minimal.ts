@@ -16,6 +16,7 @@ import userRoutes from './routes/users-s3';
 import collaborationRoutes from './routes/collaboration';
 import stripeRoutes from './routes/stripe';
 import versionRoutes from './routes/versions';
+import voiceNotesRoutes from './routes/voiceNotes';
 
 const app = express();
 const server = createServer(app);
@@ -107,6 +108,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/annotations', annotationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/collaboration', collaborationRoutes);
+app.use('/api/voice-notes', voiceNotesRoutes);
 
 // Static file serving for uploads
 app.use('/uploads', express.static('./uploads'));
@@ -203,8 +205,8 @@ const startServer = async () => {
       console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`💳 Stripe integration: ${process.env.STRIPE_SECRET_KEY ? 'Enabled' : 'Disabled'}`);
       console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-      console.log(`📊 Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);
-      
+      console.log(`📊 Database: ${process.env.DATABASE_URL ? 'Connected' : 'Not configured'}`);    
+        
       // Validate environment variables
       const requiredEnvVars = [
         'DATABASE_URL',

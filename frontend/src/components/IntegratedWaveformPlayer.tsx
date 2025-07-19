@@ -1906,7 +1906,10 @@ const handleDoubleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => 
 }, [zoomLevel, scrollOffset, duration, resetZoom]);
 
 const handleTimeUpdate = () => {
-  const newTime = audio.currentTime;
+  // ✅ FIXED: Use audioRef.current instead of undefined 'audio'
+  if (!audioRef.current) return;
+  
+  const newTime = audioRef.current.currentTime;
   setCurrentTime(newTime);
   
   // 🎯 KEY FEATURE: Update cursor position only if we're playing (not seeking)

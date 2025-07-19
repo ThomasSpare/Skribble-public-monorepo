@@ -27,48 +27,69 @@ interface UpdateAnnotationData {
 
 export class AnnotationModel {
   // Create a new annotation
-  static async create(annotationData: CreateAnnotationData): Promise<Annotation> {
-  const id = uuidv4();
-  const now = new Date();
+    static async create(annotationData: CreateAnnotationData): Promise<Annotation> {
+      const id = uuidv4();
+      const now = new Date();
 
-  const fields = [
-    'id', 'audio_file_id', 'user_id', 'timestamp', 'text', 'annotation_type', 'priority', 'status', 'mentions', 'created_at', 'updated_at'
-  ];
-  const values = [
-    id, annotationData.audioFileId, annotationData.userId, annotationData.timestamp, annotationData.text,
-    annotationData.annotationType || 'comment', annotationData.priority || 'medium', annotationData.status || 'pending',
-    annotationData.mentions || [], now, now
-  ];
-  const valuePlaceholders = ['$1', '$2', '$3', '$4', '$5', '$6', '$7', '$8', '$9', '$10', '$11'];
+      // Start with base fields and values
+      const fields = [
+        'id', 'audio_file_id', 'user_id', 'timestamp', 'text', 'annotation_type', 'priority', 'status', 'mentions', 'created_at', 'updated_at'
+      ];
+      
+      const values = [
+        id, 
+        annotationData.audioFileId, 
+        annotationData.userId, 
+        annotationData.timestamp, 
+        annotationData.text,
+        annotationData.annotationType || 'comment', 
+        annotationData.priority || 'medium', 
+        annotationData.status || 'pending',
+        annotationData.mentions || [], 
+        now, 
+        now
+      ];
 
-  let parentIdPlaceholder = '$12'; // Initialize parentIdPlaceholder
+      let placeholderCount = values.length;
+      const valuePlaceholders = Array.from({ length: placeholderCount }, (_, i) => `$${i + 1}`);
 
-  if (annotationData.voiceNoteUrl) {
-    fields.splice(5, 0, 'voice_note_url');
-    values.splice(5, 0, annotationData.voiceNoteUrl);
-    valuePlaceholders.splice(5, 0, '$6');
-    parentIdPlaceholder = '$7'; // Adjust parentIdPlaceholder if voiceNoteUrl is present
-  }
+      // Add voiceNoteUrl if provided
+      if (annotationData.voiceNoteUrl) {
+        fields.push('voice_note_url');
+        values.push(annotationData.voiceNoteUrl);
+        placeholderCount++;
+        valuePlaceholders.push(`$${placeholderCount}`);
+      }
 
-  if (annotationData.parentId) {
-    fields.push('parent_id');
-    values.push(annotationData.parentId);
-    valuePlaceholders.push(parentIdPlaceholder);
-  }
+      // Add parentId if provided
+      if (annotationData.parentId) {
+        fields.push('parent_id');
+        values.push(annotationData.parentId);
+        placeholderCount++;
+        valuePlaceholders.push(`$${placeholderCount}`);
+      }
 
-  const query = `
-    INSERT INTO annotations (${fields.join(', ')})
-    VALUES (${valuePlaceholders.join(', ')})
-    RETURNING *
-  `;
+      const query = `
+        INSERT INTO annotations (${fields.join(', ')})
+        VALUES (${valuePlaceholders.join(', ')})
+        RETURNING *
+      `;
 
-  try {
-    const result = await pool.query(query, values);
-    return this.getAnnotationWithUser(id);
-  } catch (error) {
-    throw error;
-  }
-}
+      console.log('🔍 SQL Debug Info:');
+      console.log('Fields:', fields);
+      console.log('Values count:', values.length);
+      console.log('Placeholders:', valuePlaceholders);
+      console.log('Query:', query);
+
+      try {
+        const result = await pool.query(query, values);
+        return this.getAnnotationWithUser(id);
+      } catch (error) {
+        console.error('❌ SQL Error:', error);
+        console.error('Values being passed:', values);
+        throw error;
+      }
+    }
 
   // Find annotation by ID
   static async findById(id: string): Promise<Annotation | null> {

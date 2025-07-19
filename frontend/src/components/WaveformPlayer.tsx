@@ -35,6 +35,10 @@ export default function EnhancedWaveformPlayer({
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
 
+  const [lastCursorPosition, setLastCursorPosition] = useState(0);
+  const [pausedByUser, setPausedByUser] = useState(false);
+  const [shouldResumeFromCursor, setShouldResumeFromCursor] = useState(false);
+
   // Zoom and scroll state
   const [zoomLevel, setZoomLevel] = useState(1);
   const [scrollOffset, setScrollOffset] = useState(0);

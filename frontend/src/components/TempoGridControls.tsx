@@ -296,7 +296,7 @@ export default function TempoGridControls({
   };
 
   const nudgeGrid = (direction: 'left' | 'right') => {
-    const nudgeAmount = (60 / bpm) * 0.01;
+    const nudgeAmount = (60 / bpm) * 0.03;
     const newOffsetMs = gridOffsetMs + (direction === 'right' ? nudgeAmount * 1000 : -nudgeAmount * 1000);
     setGridOffsetMs(newOffsetMs);
     onGridOffsetMsChange(newOffsetMs);

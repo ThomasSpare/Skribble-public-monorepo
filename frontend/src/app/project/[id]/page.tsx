@@ -714,31 +714,42 @@ const handleDelete = async (project: Project): Promise<void> => {
                 <div className="relative">
                   {/* Show loading state while fetching signed URL */}
                   {audioUrlLoading || !signedAudioUrl ? (
-                    <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 flex items-center justify-center">
-                      <div className="text-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-skribble-azure mx-auto mb-4" />
-                        <p className="text-skribble-azure text-lg mb-2">Loading audio...</p>
-                        <p className="text-skribble-purple text-sm">
-                          {audioUrlLoading ? 'Fetching signed URL...' : 'Preparing audio player...'}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    // Only render the player when we have a valid signed URL
-                    <IntegratedWaveformPlayer
-                      key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
-                      audioUrl={signedAudioUrl}
-                      audioFileId={currentAudioFile.id}
-                      projectId={project.id}
-                      title={`${project.title} - ${currentAudioFile.version}`}
-                      currentUser={user}
-                      onVersionChange={handleVersionChange}
-                      onLoadComplete={(duration) => {
-                        console.log('🎵 ProjectPage: Audio loaded successfully, duration:', duration);
-                        setAudioUrlLoading(false);
-                      }}
-                    />
-                  )}
+  <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 flex items-center justify-center">
+    <div className="text-center">
+      <Loader2 className="w-8 h-8 animate-spin text-skribble-azure mx-auto mb-4" />
+      <p className="text-skribble-azure text-lg mb-2">Loading audio...</p>
+      <p className="text-skribble-purple text-sm">
+        {audioUrlLoading ? 'Fetching signed URL...' : 'Preparing audio player...'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          // ✅ FIXED: Added all critical props for annotations and voice notes
+          <IntegratedWaveformPlayer
+            key={`audio-${currentAudioFile.id}-${currentAudioFile.version}`}
+            audioUrl={signedAudioUrl}
+            audioFileId={currentAudioFile.id}
+            projectId={project.id}
+            title={`${project.title} - ${currentAudioFile.version}`}
+            currentUser={{
+              id: user.id,
+              username: user.username,
+              email: user.email
+            }}
+            isViewOnly={false}  // ✅ Enable annotations
+            disableAnnotationFetching={false}  // ✅ Enable annotation fetching
+            initialAnnotations={[]}  // ✅ Start with empty array
+            onVersionChange={handleVersionChange}
+            onTimeUpdate={(currentTime) => {
+              // Optional: Track playback time
+              console.log('Current time:', currentTime);
+            }}
+            onLoadComplete={(duration) => {
+              console.log('🎵 ProjectPage: Audio loaded successfully, duration:', duration);
+              setAudioUrlLoading(false);
+            }}
+          />
+        )}
                 </div>
               ) : (
                 <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-12 border border-skribble-azure/20 text-center">

@@ -101,6 +101,11 @@ export default function IntegratedWaveformPlayer({
   const [audioUrlState, setAudioUrlState] = useState<string>(audioUrl);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Cursor and playback state
+  const [lastCursorPosition, setLastCursorPosition] = useState(0);
+  const [pausedByUser, setPausedByUser] = useState(false);
+  const [shouldResumeFromCursor, setShouldResumeFromCursor] = useState(false);
+
 
 
   // Annotation state
@@ -1283,26 +1288,37 @@ const drawWaveform = useCallback(() => {
   };
 
   // Enhanced seek function with visual feedback
-  const seekTo = (time: number) => {
-    if (!audioRef.current || !isAudioReady) return;
-    
-    const audio = audioRef.current;
-    const clampedTime = Math.max(0, Math.min(time, duration));
-        
-    // Add visual feedback
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const rect = canvas.getBoundingClientRect();
-      const visibleDuration = duration / zoomLevel;
-      const relativeTime = clampedTime - scrollOffset;
-      const x = (relativeTime / visibleDuration) * rect.width;
-      
-      setClickFeedback({ x, timestamp: clampedTime });
-      setTimeout(() => setClickFeedback(null), 800);
-    }
-    
-    audio.currentTime = clampedTime;
-  };
+const seekTo = useCallback((time: number) => {
+  if (!audioRef.current || !isAudioReady) return;
+
+  const audio = audioRef.current;
+  const clampedTime = Math.max(0, Math.min(time, duration));
+
+  // 🎯 KEY FEATURE: Update last cursor position when seeking manually
+  setLastCursorPosition(clampedTime);
+  setShouldResumeFromCursor(true);
+
+  // Keep your existing visual feedback code
+  const canvas = canvasRef.current;
+  if (canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const visibleDuration = duration / zoomLevel;
+    const relativeTime = clampedTime - scrollOffset;
+    const x = (relativeTime / visibleDuration) * rect.width;
+
+    setClickFeedback({ x, timestamp: clampedTime });
+    setTimeout(() => setClickFeedback(null), 800);
+  }
+
+  audio.currentTime = clampedTime;
+
+  // If not playing, update currentTime immediately for visual feedback
+  if (!isPlaying) {
+    setCurrentTime(clampedTime);
+  }
+
+  console.log(`🎯 Cursor positioned at: ${formatTime(clampedTime)}`);
+}, [audioRef, isAudioReady, duration, zoomLevel, scrollOffset, isPlaying, formatTime]);
 
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
@@ -1340,37 +1356,57 @@ const drawWaveform = useCallback(() => {
 
   // Playback controls
   const togglePlayPause = async () => {
-    if (!audioRef.current || !isAudioReady) {
-      console.warn('Audio not ready for playback');
-      return;
+  if (!audioRef.current || !isAudioReady) {
+    console.warn('Audio not ready for playback');
+    return;
+  }
+
+  const audio = audioRef.current;
+
+  try {
+    // Ensure audio context is running
+    if (audioContextRef.current?.state === 'suspended') {
+      await audioContextRef.current.resume();
+      console.log('Audio context resumed for playback');
     }
 
-    const audio = audioRef.current;
-
-    try {
-      if (audioContextRef.current?.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
-      if (isPlaying) {
-        audio.pause();
+    if (isPlaying) {
+      // PAUSE: Remember we paused by user action
+      audio.pause();
+      setPausedByUser(true);
+      console.log('⏸️ Audio paused by user');
+    } else {
+      // PLAY: Check if we should resume from cursor position
+      if (shouldResumeFromCursor && Math.abs(lastCursorPosition - audio.currentTime) > 0.1) {
+        console.log(`▶️ Resuming from cursor position: ${formatTime(lastCursorPosition)}`);
+        audio.currentTime = lastCursorPosition;
+        setShouldResumeFromCursor(false);
+      } else if (pausedByUser) {
+        console.log(`▶️ Resuming from pause position: ${formatTime(audio.currentTime)}`);
+        // Resume from current pause position
       } else {
-        if (audio.readyState >= 2) {
-          await audio.play();
-        } else {
-          console.warn('Audio not ready, loading...');
-          audio.load();
-          await new Promise((resolve) => {
-            audio.addEventListener('canplay', resolve, { once: true });
-          });
-          await audio.play();
-        }
+        console.log(`▶️ Starting playback from: ${formatTime(audio.currentTime)}`);
       }
-    } catch (error) {
-      console.error('Error toggling playback:', error);
-      setError(`Playback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+      // Ensure audio is loaded and ready
+      if (audio.readyState >= 2) {
+        await audio.play();
+        setPausedByUser(false);
+      } else {
+        console.warn('Audio not ready, loading...');
+        audio.load();
+        await new Promise((resolve) => {
+          audio.addEventListener('canplay', resolve, { once: true });
+        });
+        await audio.play();
+        setPausedByUser(false);
+      }
     }
-  };
+  } catch (error) {
+    console.error('Error toggling playback:', error);
+    setError(`Playback failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
 
   const skipBackward = () => seekTo(currentTime - 10);
   const skipForward = () => seekTo(currentTime + 10);
@@ -1450,16 +1486,12 @@ const drawWaveform = useCallback(() => {
     setScrollOffset(0);
   };
 
-  // Set up persistent audio event listeners
-  useEffect(() => {
+// Set up persistent audio event listeners
+useEffect(() => {
   const audio = audioRef.current;
   if (!audio) return;
+  
 
-  const handleTimeUpdate = () => {
-    const currentTime = audio.currentTime;
-    setCurrentTime(currentTime);
-    onTimeUpdate?.(currentTime);
-  };
 
   const handleDurationChange = () => {
     setDuration(audio.duration);
@@ -1769,6 +1801,7 @@ const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) =>
   }
 }, [isAudioReady, scrollOffset]);
 
+
 const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
   e.preventDefault();
   
@@ -1795,10 +1828,10 @@ const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => 
 
 const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
   e.preventDefault();
-  
+
   const canvas = canvasRef.current;
   if (!canvas || !isAudioReady) return;
-  
+
   // If it was a tap (not a drag), seek to that position
   if (isDragging && dragStart && Math.abs(e.changedTouches[0].clientX - dragStart.x) < 10) {
     const rect = canvas.getBoundingClientRect();
@@ -1811,13 +1844,13 @@ const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     for (const annotation of visibleAnnotations) {
       const annotationX = annotation.screenX * rect.width;
       const bubbleX = annotationX - ANNOTATION_BUBBLE_WIDTH / 2;
-      
+
       if (touchX >= bubbleX && touchX <= bubbleX + ANNOTATION_BUBBLE_WIDTH) {
         tappedAnnotation = annotation;
         break;
       }
     }
-    
+
     if (tappedAnnotation) {
       seekTo(tappedAnnotation.timestamp);
     } else {
@@ -1833,54 +1866,11 @@ const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
       navigator.vibrate(20);
     }
   }
-  
+
   setIsDragging(false);
   setDragStart({ x: 0, offset: 0 });
 }, [isDragging, dragStart, isAudioReady, duration, zoomLevel, scrollOffset, getVisibleAnnotations, seekTo]);
-
-// Enhanced pinch-to-zoom handler for mobile
-const handleTouchGesture = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    
-    const touch1 = e.touches[0];
-    const touch2 = e.touches[1];
-    
-    const distance = Math.sqrt(
-      Math.pow(touch2.clientX - touch1.clientX, 2) + 
-      Math.pow(touch2.clientY - touch1.clientY, 2)
-    );
-    
-    const centerX = (touch1.clientX + touch2.clientX) / 2;
-    const rect = canvasRef.current?.getBoundingClientRect();
-    
-    if (rect) {
-      const centerProgress = (centerX - rect.left) / rect.width;
-      const visibleDuration = duration / zoomLevel;
-      const timeUnderCenter = scrollOffset + (centerProgress * visibleDuration);
-      
-      // Simple pinch zoom implementation
-      if (!dragStart.x) {
-        setDragStart({ x: distance, offset: zoomLevel });
-      } else {
-        const zoomFactor = distance / dragStart.x;
-        const newZoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, dragStart.offset * zoomFactor));
-        
-        if (newZoomLevel !== zoomLevel) {
-          const newVisibleDuration = duration / newZoomLevel;
-          const newScrollOffset = Math.max(0, Math.min(
-            duration - newVisibleDuration,
-            timeUnderCenter - (centerProgress * newVisibleDuration)
-          ));
-          
-          setZoomLevel(newZoomLevel);
-          setScrollOffset(newScrollOffset);
-        }
-      }
-    }
-  }
-}, [dragStart, zoomLevel, scrollOffset, duration]);
-
+            
 // Mobile-optimized double-tap to zoom
 const handleDoubleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
   e.preventDefault();
@@ -1915,6 +1905,26 @@ const handleDoubleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => 
   }
 }, [zoomLevel, scrollOffset, duration, resetZoom]);
 
+const handleTimeUpdate = () => {
+  const newTime = audio.currentTime;
+  setCurrentTime(newTime);
+  
+  // 🎯 KEY FEATURE: Update cursor position only if we're playing (not seeking)
+  if (isPlaying && !shouldResumeFromCursor) {
+    setLastCursorPosition(newTime);
+  }
+  
+  onTimeUpdate?.(newTime);
+};
+
+const handleEnded = () => {
+  console.log('Audio ended');
+  setIsPlaying(false);
+  setCurrentTime(0);
+  setLastCursorPosition(0);
+  setPausedByUser(false);
+  setShouldResumeFromCursor(false);
+};
 
 return (
   <div className="space-y-4 sm:space-y-6">
@@ -2670,6 +2680,7 @@ return (
           audioFileId={audioFileId}
           currentTime={currentTime}
           onSeekTo={seekTo}
+
           currentUser={currentUser}
           onAnnotationCreated={handleAnnotationCreated}
           onAnnotationUpdated={handleAnnotationUpdated}

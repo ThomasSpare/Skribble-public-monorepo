@@ -17,6 +17,7 @@ import collaborationRoutes from './routes/collaboration';
 import stripeRoutes from './routes/stripe';
 import versionRoutes from './routes/versions';
 import voiceNotesRoutes from './routes/voiceNotes';
+import contactRoutes from './routes/contact';
 
 const app = express();
 const server = createServer(app);
@@ -109,6 +110,7 @@ app.use('/api/annotations', annotationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/collaboration', collaborationRoutes);
 app.use('/api/voice-notes', voiceNotesRoutes);
+app.use('/api/contact', contactRoutes);
 
 // Static file serving for uploads
 app.use('/uploads', express.static('./uploads'));

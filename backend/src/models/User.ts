@@ -13,17 +13,26 @@ interface CreateUserData {
   username: string;
   password: string;
   role: 'producer' | 'artist' | 'both';
-  subscriptionTier: 'free' | 'indie' | 'producer' | 'studio';
+  subscriptionTier: 'free' | 'indie' | 'producer' | 'studio' | 'artist_guest'; // Updated
   profileImage?: string;
   stripeCustomerId?: string;
+  // New guest account fields
+  guestExpiresAt?: Date;
+  guestInvitedBy?: string;
+  guestProjectId?: string;
 }
 
 interface UpdateUserData {
   username?: string;
   role?: 'producer' | 'artist' | 'both';
-  subscriptionTier?: 'free' | 'indie' | 'producer' | 'studio';
+  subscriptionTier?: 'free' | 'indie' | 'producer' | 'studio' | 'artist_guest'; // Updated
   profileImage?: string;
   stripeCustomerId?: string;
+  subscriptionStatus?: 'active' | 'pending' | 'expired' | 'cancelled';
+  // New guest account fields
+  guestExpiresAt?: Date;
+  guestInvitedBy?: string;
+  guestProjectId?: string;
 }
 
 export class UserModel {
@@ -74,12 +83,75 @@ export class UserModel {
     }
   }
 
+  static async createGuestUser(
+    email: string, 
+    username: string, 
+    invitedBy: string, 
+    projectId: string
+  ): Promise<User> {
+    if (!pool) {
+      throw new Error('Database pool not initialized');
+    }
+
+    const id = uuidv4();
+    const now = new Date();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days from now
+
+    // Generate a temporary password (user can't use it to login directly)
+    const crypto = require('crypto');
+    const tempPassword = crypto.randomBytes(32).toString('hex');
+
+    const query = `
+      INSERT INTO users (
+        id, email, username, password, role, subscription_tier, subscription_status,
+        guest_expires_at, guest_invited_by, guest_project_id, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      RETURNING id, email, username, role, subscription_tier, subscription_status,
+                guest_expires_at, guest_invited_by, guest_project_id, created_at, updated_at
+    `;
+
+    const values = [
+      id,
+      email,
+      username,
+      tempPassword,
+      'artist',
+      'artist_guest',
+      'active',
+      expiresAt,
+      invitedBy,
+      projectId,
+      now,
+      now
+    ];
+
+    try {
+      const result = await pool.query(query, values);
+      return this.mapRowToUser(result.rows[0]);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        const pgError = error as PostgresError;
+        if (pgError.code === '23505') { // Unique violation
+          if (pgError.constraint === 'users_email_key') {
+            throw new Error('A user with this email already exists');
+          }
+          if (pgError.constraint === 'users_username_key') {
+            throw new Error('This username is already taken');
+          }
+        }
+      }
+      throw error;
+    }
+  }
+
   // Find user by ID
   static async findById(id: string): Promise<User | null> {
     const query = `
       SELECT id, email, username, role, subscription_tier, subscription_status,
-             profile_image, stripe_customer_id, referral_code, referred_by, 
-             created_at, updated_at
+            profile_image, stripe_customer_id, referral_code, referred_by,
+            guest_expires_at, guest_invited_by, guest_project_id,
+            created_at, updated_at
       FROM users WHERE id = $1
     `;
 
@@ -91,12 +163,14 @@ export class UserModel {
     }
   }
 
+
   // Find user by email
   static async findByEmail(email: string): Promise<User | null> {
     const query = `
       SELECT id, email, username, password, role, subscription_tier, subscription_status,
-             profile_image, stripe_customer_id, referral_code, referred_by,
-             created_at, updated_at
+            profile_image, stripe_customer_id, referral_code, referred_by,
+            guest_expires_at, guest_invited_by, guest_project_id,
+            created_at, updated_at
       FROM users WHERE email = $1
     `;
 
@@ -107,6 +181,128 @@ export class UserModel {
       throw error;
     }
   }
+
+  static async isGuestExpired(userId: string): Promise<boolean> {
+    const query = `
+      SELECT guest_expires_at 
+      FROM users 
+      WHERE id = $1 AND subscription_tier = 'artist_guest'
+    `;
+
+    try {
+      const result = await pool.query(query, [userId]);
+      if (result.rows.length === 0) return false;
+      
+      const expiresAt = new Date(result.rows[0].guest_expires_at);
+      return expiresAt < new Date();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getGuestInfo(userId: string) {
+    const query = `
+      SELECT 
+        guest_expires_at,
+        guest_invited_by,
+        guest_project_id,
+        created_at,
+        EXTRACT(DAY FROM (guest_expires_at - NOW())) as days_remaining,
+        inviter.username as invited_by_username,
+        p.title as project_title
+      FROM users u
+      LEFT JOIN users inviter ON u.guest_invited_by = inviter.id
+      LEFT JOIN projects p ON u.guest_project_id = p.id
+      WHERE u.id = $1 AND u.subscription_tier = 'artist_guest'
+    `;
+
+    try {
+      const result = await pool.query(query, [userId]);
+      if (result.rows.length === 0) return null;
+      
+      const row = result.rows[0];
+      return {
+        expiresAt: row.guest_expires_at,
+        guestInvitedBy: row.guest_invited_by,
+        guestProjectId: row.guest_project_id,
+        createdAt: row.created_at,
+        daysRemaining: Math.max(0, Math.ceil(row.days_remaining)),
+        invitedByUsername: row.invited_by_username,
+        projectTitle: row.project_title,
+        needsUpgrade: row.days_remaining <= 7
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async upgradeGuestAccount(
+    userId: string, 
+    newTier: 'indie' | 'producer' | 'studio',
+    stripeCustomerId: string
+  ): Promise<User | null> {
+    const query = `
+      UPDATE users 
+      SET 
+        subscription_tier = $1, 
+        subscription_status = 'active',
+        stripe_customer_id = $2,
+        guest_expires_at = NULL,
+        guest_invited_by = NULL,
+        guest_project_id = NULL,
+        updated_at = $3
+      WHERE id = $4 AND subscription_tier = 'artist_guest'
+      RETURNING id, email, username, role, subscription_tier, subscription_status,
+                profile_image, stripe_customer_id, referral_code, referred_by,
+                created_at, updated_at
+    `;
+
+    try {
+      const result = await pool.query(query, [newTier, stripeCustomerId, new Date(), userId]);
+      return result.rows.length > 0 ? this.mapRowToUser(result.rows[0]) : null;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  static async getActiveGuestAccounts() {
+    const query = `
+      SELECT 
+        u.id,
+        u.username,
+        u.email,
+        u.guest_expires_at,
+        u.created_at,
+        EXTRACT(DAY FROM (u.guest_expires_at - NOW())) as days_remaining,
+        inviter.username as invited_by_username,
+        p.title as project_title
+      FROM users u
+      LEFT JOIN users inviter ON u.guest_invited_by = inviter.id
+      LEFT JOIN projects p ON u.guest_project_id = p.id
+      WHERE u.subscription_tier = 'artist_guest'
+        AND u.subscription_status = 'active'
+        AND u.guest_expires_at > NOW()
+      ORDER BY u.guest_expires_at ASC
+    `;
+
+    try {
+      const result = await pool.query(query);
+      return result.rows.map(row => ({
+        id: row.id,
+        username: row.username,
+        email: row.email,
+        expiresAt: row.guest_expires_at,
+        createdAt: row.created_at,
+        daysRemaining: Math.max(0, Math.ceil(row.days_remaining)),
+        invitedByUsername: row.invited_by_username,
+        projectTitle: row.project_title
+      }));
+    } catch (error) {
+      throw error;
+    }
+  }
+
+
 
   // Find user by username
   static async findByUsername(username: string): Promise<User | null> {
@@ -324,7 +520,10 @@ export class UserModel {
       referralCode: row.referral_code,
       referredBy: row.referred_by,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      guestExpiresAt: row.guest_expires_at ? new Date(row.guest_expires_at) : undefined,
+      guestInvitedBy: row.guest_invited_by,
+      guestProjectId: row.guest_project_id,
     };
   }
 
@@ -333,6 +532,21 @@ export class UserModel {
     return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
   }
 }
+
+export const createGuestUser = (email: string, username: string, invitedBy: string, projectId: string) => 
+  UserModel.createGuestUser(email, username, invitedBy, projectId);
+
+export const isGuestExpired = (userId: string) => 
+  UserModel.isGuestExpired(userId);
+
+export const getGuestInfo = (userId: string) => 
+  UserModel.getGuestInfo(userId);
+
+export const upgradeGuestAccount = (userId: string, newTier: 'indie' | 'producer' | 'studio', stripeCustomerId: string) => 
+  UserModel.upgradeGuestAccount(userId, newTier, stripeCustomerId);
+
+export const getActiveGuestAccounts = () => 
+  UserModel.getActiveGuestAccounts();
 
 // Convenience functions for backward compatibility with your existing auth routes
 export const createUser = (userData: CreateUserData) => UserModel.create(userData);

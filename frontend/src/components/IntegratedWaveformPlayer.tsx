@@ -2371,7 +2371,7 @@ return (
       </div>
 
       {/* Mobile-First Controls */}
-      <div className="p-3 sm:p-6 pt-0 sm:pt-0">
+      <div className="p-3 sm:p-6 pt-1 sm:pt-5">
         {/* Mobile: Stack controls vertically */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center sm:justify-between">
           

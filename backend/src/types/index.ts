@@ -6,7 +6,7 @@ export interface User {
   email: string;
   username: string;
   role: 'producer' | 'artist' | 'both';
-  subscriptionTier: 'free' | 'indie' | 'producer' | 'studio';
+  subscriptionTier: 'free' | 'indie' | 'producer' | 'studio' | 'artist_guest';
   subscriptionStatus?: string;
   profileImage?: string;
   createdAt: Date;
@@ -23,6 +23,9 @@ export interface User {
   stripe_subscription_id?: string;
   notification_settings?: any;
   privacy_settings?: any;
+  guestExpiresAt?: Date;
+  guestInvitedBy?: string;
+  guestProjectId?: string;
 }
 
 export interface Project {
@@ -48,6 +51,7 @@ export interface ProjectSettings {
   expirationDate?: Date;
   maxCollaborators: number;
   requireApproval: boolean;
+  allowGuestAccess?: boolean;
 }
 
 export interface ProjectCollaborator {
@@ -69,6 +73,7 @@ export interface CollaboratorPermissions {
   canExport: boolean;
   canInvite: boolean;
   canManageProject: boolean;
+  canVoiceNote?: boolean; 
 }
 
 export interface AudioFile {
@@ -105,6 +110,20 @@ export interface Annotation {
   updatedAt: Date;
 }
 
+export interface ProjectInvite {
+  id: string;
+  projectId: string;
+  invitedBy: string;
+  inviteToken: string;
+  role: 'producer' | 'artist' | 'viewer' | 'admin';
+  permissions: CollaboratorPermissions;
+  expiresAt: Date;
+  usedAt?: Date;
+  createsGuestAccount: boolean;
+  guestUserId?: string;
+  createdAt: Date;
+}
+
 export interface Notification {
   id: string;
   userId: string;
@@ -115,6 +134,31 @@ export interface Notification {
   data?: Record<string, any>; // Additional notification data
   read: boolean;
   createdAt: Date;
+}
+
+// Guest account specific types
+export interface GuestAccountInfo {
+  isGuest: boolean;
+  expiresAt?: Date;
+  daysRemaining?: number;
+  invitedBy?: string;
+  originalProject?: string;
+  needsUpgrade?: boolean;
+}
+
+export interface GuestJoinRequest {
+  createGuestAccount: boolean;
+  guestName?: string;
+  guestEmail?: string;
+}
+
+export interface GuestJoinResponse {
+  isGuestAccount: boolean;
+  token?: string;
+  user?: User;
+  projectId: string;
+  expiresIn?: number;
+  message: string;
 }
 
 // Real-time events for Socket.IO
@@ -147,6 +191,8 @@ export interface ApiResponse<T = any> {
     message: string;
     code?: string;
     details?: any;
+    needsUpgrade?: boolean;
+    requiresSignIn?: boolean;
   };
 }
 
@@ -170,6 +216,7 @@ export interface RegisterData {
   username: string;
   password: string;
   role: 'producer' | 'artist' | 'both';
+  tier: 'indie' | 'producer' | 'studio';
 }
 
 export interface AuthResponse {
@@ -210,7 +257,7 @@ export interface ExportResult {
 export interface SubscriptionPlan {
   id: string;
   name: string;
-  tier: 'free' | 'indie' | 'producer' | 'studio';
+  tier: 'indie' | 'producer' | 'studio';
   priceMonthly: number;
   priceYearly: number;
   features: PlanFeature[];
@@ -229,9 +276,13 @@ export interface PlanLimits {
   maxFileSize: number; // in MB
   maxStorageTotal: number; // in GB
   maxAnnotationsPerProject: number;
+  maxVoiceNotesPerDay?: number; // New: Daily limit for voice notes (guests)
+  maxCommentsPerDay?: number; // New: Daily limit for comments (guests)
   realtimeCollaboration: boolean;
   advancedExports: boolean;
   prioritySupport: boolean;
+  canCreateProjects: boolean;
+  canInviteOthers: boolean;
 }
 
 // Waveform visualization types
@@ -264,6 +315,7 @@ export interface ProjectAnalytics {
   averageResponseTime: number; // in hours
   collaborationEfficiency: number; // 0-100 score
   lastActivity: Date;
+  guestCollaborators?: number;
 }
 
 export interface UserAnalytics {
@@ -274,6 +326,7 @@ export interface UserAnalytics {
   averageProjectDuration: number; // in days
   collaborationRating: number; // 1-5 stars
   preferredRole: 'producer' | 'artist';
+  isGuest?: boolean;
 }
 
 // Error types
@@ -281,6 +334,7 @@ export interface AppError extends Error {
   statusCode: number;
   code: string;
   isOperational: boolean;
+  needsUpgrade?: boolean;
 }
 
 // Utility types
@@ -294,3 +348,37 @@ export interface BaseComponentProps {
   className?: string;
   children?: any; // Changed from React.ReactNode to any
 }
+
+// Subscription tier helpers
+export const SUBSCRIPTION_TIERS = {
+  FREE: 'free' as const,
+  INDIE: 'indie' as const,
+  PRODUCER: 'producer' as const,
+  STUDIO: 'studio' as const,
+  ARTIST_GUEST: 'artist_guest' as const,
+} as const;
+
+export const PAID_TIERS = [
+  SUBSCRIPTION_TIERS.INDIE,
+  SUBSCRIPTION_TIERS.PRODUCER,
+  SUBSCRIPTION_TIERS.STUDIO,
+] as const;
+
+export const isPaidTier = (tier: User['subscriptionTier']): boolean => {
+  return PAID_TIERS.includes(tier as any);
+};
+
+export const isGuestAccount = (user: User): boolean => {
+  return user.subscriptionTier === SUBSCRIPTION_TIERS.ARTIST_GUEST;
+};
+
+export const getGuestDaysRemaining = (user: User): number | null => {
+  if (!isGuestAccount(user) || !user.guestExpiresAt) return null;
+  
+  const expiresAt = new Date(user.guestExpiresAt);
+  const now = new Date();
+  const diffTime = expiresAt.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  return Math.max(0, diffDays);
+};

@@ -1,28 +1,22 @@
-// backend/src/routes/collaboration.ts
+// backend/src/routes/collaboration.ts - Updated with Guest Account Support
 import express, { Request, Response } from 'express';
 import { body, validationResult, param } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { pool } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 const router = express.Router();
 
-router.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Collaboration routes are working!',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Generate invite link for project
+// Generate invite link with guest account option
 router.post('/projects/:projectId/invite-link', [
   authenticateToken,
   param('projectId').isUUID(),
   body('role').isIn(['producer', 'artist', 'viewer', 'admin']),
   body('permissions').isObject(),
-  body('expiresIn').optional().isInt({ min: 1, max: 30 }) // days
+  body('allowGuestAccess').optional().isBoolean(),
+  body('expiresIn').optional().isInt({ min: 1, max: 30 })
 ], async (req: Request, res: Response) => {
   try {
     const errors = validationResult(req);
@@ -34,12 +28,12 @@ router.post('/projects/:projectId/invite-link', [
     }
 
     const { projectId } = req.params;
-    const { role, permissions, expiresIn = 7 } = req.body;
+    const { role, permissions, allowGuestAccess = true, expiresIn = 7 } = req.body;
     const userId = req.user!.userId;
 
     // Verify user owns the project or is admin
     const projectCheck = await pool.query(`
-      SELECT p.creator_id, pc.role as collaborator_role
+      SELECT p.creator_id, pc.role as collaborator_role, p.title
       FROM projects p
       LEFT JOIN project_collaborators pc ON p.id = pc.project_id AND pc.user_id = $2
       WHERE p.id = $1
@@ -72,9 +66,10 @@ router.post('/projects/:projectId/invite-link', [
     const inviteId = uuidv4();
     await pool.query(`
       INSERT INTO project_invites (
-        id, project_id, invited_by, invite_token, role, permissions, expires_at, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-    `, [inviteId, projectId, userId, inviteToken, role, JSON.stringify(permissions), expiresAt]);
+        id, project_id, invited_by, invite_token, role, permissions, 
+        expires_at, creates_guest_account, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+    `, [inviteId, projectId, userId, inviteToken, role, JSON.stringify(permissions), expiresAt, allowGuestAccess]);
 
     const inviteLink = `${process.env.FRONTEND_URL}/join/${inviteToken}`;
 
@@ -85,7 +80,8 @@ router.post('/projects/:projectId/invite-link', [
         inviteToken,
         expiresAt,
         role,
-        permissions
+        permissions,
+        allowsGuestAccess: allowGuestAccess
       }
     });
 
@@ -98,137 +94,13 @@ router.post('/projects/:projectId/invite-link', [
   }
 });
 
-// Send email invitation
-router.post('/projects/:projectId/invite', [
-  authenticateToken,
-  param('projectId').isUUID(),
-  body('email').isEmail(),
-  body('role').isIn(['producer', 'artist', 'viewer', 'admin']),
-  body('permissions').isObject(),
-  body('message').optional().isLength({ max: 500 })
-], async (req: Request, res: Response) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'Validation failed', details: errors.array() }
-      });
-    }
-
-    const { projectId } = req.params;
-    const { email, role, permissions, message = '' } = req.body;
-    const userId = req.user!.userId;
-
-    // Verify permissions (same as above)
-    const projectCheck = await pool.query(`
-      SELECT p.creator_id, p.title, pc.role as collaborator_role,
-             u.username as creator_username
-      FROM projects p
-      JOIN users u ON p.creator_id = u.id
-      LEFT JOIN project_collaborators pc ON p.id = pc.project_id AND pc.user_id = $2
-      WHERE p.id = $1
-    `, [projectId, userId]);
-
-    if (projectCheck.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Project not found', code: 'PROJECT_NOT_FOUND' }
-      });
-    }
-
-    const { creator_id, title, collaborator_role, creator_username } = projectCheck.rows[0];
-    const isOwner = creator_id === userId;
-    const isAdmin = collaborator_role === 'admin';
-
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Permission denied', code: 'PERMISSION_DENIED' }
-      });
-    }
-
-    // Check if user already exists
-    const userCheck = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    
-    if (userCheck.rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'User not found. They need to register first.', code: 'USER_NOT_FOUND' }
-      });
-    }
-
-    const invitedUserId = userCheck.rows[0].id;
-
-    // Check if already collaborating
-    const existingCollab = await pool.query(`
-      SELECT id FROM project_collaborators 
-      WHERE project_id = $1 AND user_id = $2
-    `, [projectId, invitedUserId]);
-
-    if (existingCollab.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'User is already a collaborator', code: 'ALREADY_COLLABORATOR' }
-      });
-    }
-
-    // Create collaboration invitation
-    const collaborationId = uuidv4();
-    await pool.query(`
-      INSERT INTO project_collaborators (
-        id, project_id, user_id, role, permissions, invited_by, 
-        invited_at, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), 'pending')
-    `, [collaborationId, projectId, invitedUserId, role, JSON.stringify(permissions), userId]);
-
-    // Create notification
-    const notificationId = uuidv4();
-    await pool.query(`
-      INSERT INTO notifications (
-        id, user_id, project_id, type, title, message, data, created_at
-      ) VALUES ($1, $2, $3, 'project_shared', $4, $5, $6, NOW())
-    `, [
-      notificationId,
-      invitedUserId,
-      projectId,
-      `Invited to "${title}"`,
-      `${creator_username} invited you to collaborate on "${title}" as ${role}`,
-      JSON.stringify({ projectId, role, invitedBy: userId, customMessage: message })
-    ]);
-
-    // TODO: Send email notification here
-    // await sendEmailInvitation({ email, projectTitle: title, inviterName: creator_username, role, message });
-
-    res.json({
-      success: true,
-      data: {
-        message: 'Invitation sent successfully',
-        collaborationId,
-        role,
-        permissions
-      }
-    });
-
-  } catch (error) {
-    console.error('Send invite error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to send invitation', code: 'SEND_INVITE_ERROR' }
-    });
-  }
-});
-
-// Accept invite via token (public route)
-router.post('/join/:token', [
-  authenticateToken,
-  param('token').isLength({ min: 64, max: 64 })
-], async (req: Request, res: Response) => {
+// Join project via invite (supports guest account creation)
+router.post('/join/:token', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
-    const userId = req.user!.userId;
+    const { createGuestAccount, guestName, guestEmail } = req.body;
 
-    // Find valid invite
+    // Validate invite token
     const inviteQuery = await pool.query(`
       SELECT pi.*, p.title, p.creator_id, u.username as inviter_name
       FROM project_invites pi
@@ -246,6 +118,22 @@ router.post('/join/:token', [
 
     const invite = inviteQuery.rows[0];
 
+    // Handle guest account creation
+    if (createGuestAccount && invite.creates_guest_account) {
+      return await createGuestAccountAndJoin(invite, guestName, guestEmail, res);
+    }
+
+    // Handle existing user joining (requires authentication)
+    const authResult = authenticateToken(req, res, () => {});
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required for non-guest access', code: 'AUTH_REQUIRED' }
+      });
+    }
+
+    const userId = req.user.userId;
+
     // Check if already collaborating
     const existingCollab = await pool.query(`
       SELECT id FROM project_collaborators 
@@ -259,521 +147,225 @@ router.post('/join/:token', [
       });
     }
 
-    // Create collaboration and mark invite as used
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+    // Add user as collaborator
+    await addUserAsCollaborator(invite, userId);
 
-      // Add collaborator
-      const collaborationId = uuidv4();
-      await client.query(`
-        INSERT INTO project_collaborators (
-          id, project_id, user_id, role, permissions, invited_by, 
-          invited_at, accepted_at, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'accepted')
-      `, [
-        collaborationId, 
-        invite.project_id, 
-        userId, 
-        invite.role, 
-        invite.permissions, 
-        invite.invited_by,
-        invite.created_at
-      ]);
-
-      // Mark invite as used
-      await client.query(`
-        UPDATE project_invites SET used_at = NOW(), used_by = $1 WHERE id = $2
-      `, [userId, invite.id]);
-
-      await client.query('COMMIT');
-
-      res.json({
-        success: true,
-        data: {
-          message: `Successfully joined "${invite.title}" as ${invite.role}`,
-          projectId: invite.project_id,
-          role: invite.role,
-          permissions: JSON.parse(invite.permissions)
-        }
-      });
-
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
+    res.json({
+      success: true,
+      data: {
+        projectId: invite.project_id,
+        role: invite.role,
+        message: 'Successfully joined project'
+      }
+    });
 
   } catch (error) {
     console.error('Join project error:', error);
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to join project', code: 'JOIN_PROJECT_ERROR' }
+      error: { message: 'Failed to join project', code: 'JOIN_ERROR' }
     });
   }
 });
 
-// Share project link
-router.post('/:projectId/share', [
-  authenticateToken
-], async (req: Request, res: Response) => {
+// Helper function to create guest account and join project
+async function createGuestAccountAndJoin(invite: any, guestName: string, guestEmail: string, res: Response) {
+  const client = await pool.connect();
+  
   try {
-    const { projectId } = req.params;
-    const userId = req.user!.userId;
+    await client.query('BEGIN');
 
-    // Generate a unique share token
-    const shareToken = crypto.randomBytes(32).toString('hex');
+    // Check if email already exists
+    const existingUser = await client.query(
+      'SELECT id, subscription_tier FROM users WHERE email = $1',
+      [guestEmail]
+    );
 
-    // Store the share token with project reference
-    await pool.query(`
-      INSERT INTO project_shares (
-        project_id,
-        share_token,
-        created_by,
-        created_at,
-        expires_at
-      ) VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '30 days')
-    `, [projectId, shareToken, userId]);
-
-    res.json({
-      success: true,
-      data: {
-        shareToken,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      }
-    });
-
-  } catch (error) {
-    console.error('Generate share link error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to generate share link' }
-    });
-  }
-});
-
-// Generate a viewer link for a project
-router.post('/projects/:projectId/viewer-link', [
-  authenticateToken,
-  param('projectId').isUUID(),
-], async (req: Request, res: Response) => {
-  try {
-    const { projectId } = req.params;
-    const userId = req.user!.userId;
-
-    // Generate a viewer token
-    const viewerToken = crypto.randomBytes(32).toString('hex');
-    
-    // Store the viewer token with project reference
-    await pool.query(`
-      INSERT INTO project_viewer_links (
-        project_id,
-        viewer_token,
-        created_by,
-        created_at,
-        expires_at
-      ) VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '30 days')
-    `, [projectId, viewerToken, userId]);
-
-    res.json({
-      success: true,
-      data: {
-        viewerToken,
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-      }
-    });
-
-  } catch (error) {
-    console.error('Generate viewer link error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to generate viewer link' }
-    });
-  }
-});
-
-router.get('/projects/viewer/:token', async (req: Request, res: Response) => {
-  try {
-    const { token } = req.params;
-
-    const project = await pool.query(`
-      SELECT p.id, p.title, pv.viewer_token, 
-             af.id as file_id, af.filename, af.version, af.file_url, af.duration,
-             array_agg(DISTINCT jsonb_build_object(
-               'id', a.id,
-               'text', a.text,
-               'timestamp', a.timestamp,
-               'type', a.annotation_type,
-               'status', a.status,
-               'created_at', a.created_at,
-               'priority', a.priority,
-               'parent_id', a.parent_id,
-               'voice_note_url', a.voice_note_url,
-               'created_by', jsonb_build_object(
-                 'id', u.id,
-                 'username', u.username
-               )
-             )) FILTER (WHERE a.id IS NOT NULL) as annotations
-      FROM projects p
-      JOIN project_viewer_links pv ON p.id = pv.project_id
-      JOIN audio_files af ON p.id = af.project_id AND af.is_active = true
-      LEFT JOIN annotations a ON af.id = a.audio_file_id
-      LEFT JOIN users u ON a.user_id = u.id
-      WHERE pv.viewer_token = $1 AND pv.expires_at > NOW()
-      GROUP BY p.id, pv.viewer_token, af.id, af.filename, af.version, af.file_url, af.duration, p.title
-    `, [token]);
-
-    if (project.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Invalid or expired view link' }
-      });
-    }
-
-    // Update last accessed timestamp
-    await pool.query(`
-      UPDATE project_viewer_links 
-      SET last_accessed_at = NOW() 
-      WHERE viewer_token = $1
-    `, [token]);
-
-    const row = project.rows[0];
-    res.json({
-      success: true,
-      data: {
-        id: row.id,
-        title: row.title,
-        currentAudioFile: {
-          id: row.file_id,
-          filename: row.filename,
-          version: row.version,
-          fileUrl: row.file_url,
-          duration: row.duration
-        },
-        annotations: row.annotations || []
-      }
-    });
-
-  } catch (error) {
-    console.error('Get viewer project error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to get project data' }
-    });
-  }
-});
-
-
-// Get project collaborators
-router.get('/projects/:projectId/collaborators', [
-  authenticateToken,
-  param('projectId').isUUID()
-], async (req: Request, res: Response) => {
-  try {
-    const { projectId } = req.params;
-    const userId = req.user!.userId;
-
-    // Verify access
-    const accessCheck = await pool.query(`
-      SELECT 1 FROM projects p
-      LEFT JOIN project_collaborators pc ON p.id = pc.project_id
-      WHERE p.id = $1 AND (p.creator_id = $2 OR (pc.user_id = $2 AND pc.status = 'accepted'))
-    `, [projectId, userId]);
-
-    if (accessCheck.rows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Access denied', code: 'ACCESS_DENIED' }
-      });
-    }
-
-    // Get collaborators
-    const collaborators = await pool.query(`
-      SELECT pc.*, u.username, u.email, u.role as user_role, 
-             u.profile_image, u.created_at as user_created_at,
-             inviter.username as inviter_name
-      FROM project_collaborators pc
-      JOIN users u ON pc.user_id = u.id
-      LEFT JOIN users inviter ON pc.invited_by = inviter.id
-      WHERE pc.project_id = $1
-      ORDER BY pc.accepted_at DESC, pc.invited_at DESC
-    `, [projectId]);
-
-    res.json({
-      success: true,
-      data: collaborators.rows.map(row => ({
-        id: row.id,
-        projectId: row.project_id,
-        userId: row.user_id,
-        user: {
-          id: row.user_id,
-          username: row.username,
-          email: row.email,
-          role: row.user_role,
-          profileImage: row.profile_image,
-          createdAt: row.user_created_at
-        },
-        role: row.role,
-        invitedBy: row.invited_by,
-        inviterName: row.inviter_name,
-        invitedAt: row.invited_at,
-        acceptedAt: row.accepted_at,
-        status: row.status
-      }))
-    });
-
-  } catch (error) {
-    console.error('Get collaborators error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to get collaborators', code: 'GET_COLLABORATORS_ERROR' }
-    });
-  }
-});
-
-router.get('/projects/:projectId/collaborators/:collaboratorId', [
-  authenticateToken,
-  param('projectId').isUUID(),
-  param('collaboratorId').isUUID()
-], async (req: Request, res: Response) => {
-  try {
-    const { projectId, collaboratorId } = req.params;
-    const userId = req.user!.userId;
-
-    // Verify access
-    const accessCheck = await pool.query(`
-      SELECT 1 FROM projects p
-      LEFT JOIN project_collaborators pc ON p.id = pc.project_id
-      WHERE p.id = $1 AND (p.creator_id = $2 OR (pc.user_id = $2 AND pc.status = 'accepted'))
-    `, [projectId, userId]);
-
-    if (accessCheck.rows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Access denied', code: 'ACCESS_DENIED' }
-      });
-    }
-
-    // Get specific collaborator
-    const collaborator = await pool.query(`
-      SELECT pc.*, u.username, u.email, u.role as user_role, 
-             u.profile_image, u.created_at as user_created_at,
-             inviter.username as inviter_name
-      FROM project_collaborators pc
-      JOIN users u ON pc.user_id = u.id
-      LEFT JOIN users inviter ON pc.invited_by = inviter.id
-      WHERE pc.project_id = $1 AND pc.id = $2
-    `, [projectId, collaboratorId]);
-
-    if (collaborator.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Collaborator not found', code: 'COLLABORATOR_NOT_FOUND' }
-      });
-    }
-
-    const row = collaborator.rows[0];
-    res.json({
-      success: true,
-      data: {
-        id: row.id,
-        projectId: row.project_id,
-        userId: row.user_id,
-        user: {
-          id: row.user_id,
-          username: row.username,
-          email: row.email,
-          role: row.user_role,
-          profileImage: row.profile_image,
-          createdAt: row.user_created_at
-        },
-        role: row.role,
-        permissions: JSON.parse(row.permissions),
-        invitedBy: row.invited_by,
-        inviterName: row.inviter_name,
-        invitedAt: row.invited_at,
-        acceptedAt: row.accepted_at,
-        status: row.status
-      }
-    });
-
-  } catch (error) {
-    console.error('Get collaborator error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to get collaborator', code: 'GET_COLLABORATOR_ERROR' }
-    });
-  }
-});
-
-// Remove collaborator
-router.delete('/projects/:projectId/collaborators/:collaboratorId', [
-  authenticateToken,
-  param('projectId').isUUID(),
-  param('collaboratorId').isUUID()
-], async (req: Request, res: Response) => {
-  try {
-    const { projectId, collaboratorId } = req.params;
-    const userId = req.user!.userId;
-
-    // Verify user is owner or admin
-    const permissionCheck = await pool.query(`
-      SELECT p.creator_id, pc.role as user_role, target_pc.user_id as target_user_id
-      FROM projects p
-      LEFT JOIN project_collaborators pc ON p.id = pc.project_id AND pc.user_id = $2
-      LEFT JOIN project_collaborators target_pc ON target_pc.id = $3
-      WHERE p.id = $1
-    `, [projectId, userId, collaboratorId]);
-
-    if (permissionCheck.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Project or collaborator not found', code: 'NOT_FOUND' }
-      });
-    }
-
-    const { creator_id, user_role, target_user_id } = permissionCheck.rows[0];
-    const isOwner = creator_id === userId;
-    const isAdmin = user_role === 'admin';
-    const isRemovingSelf = target_user_id === userId;
-
-    if (!isOwner && !isAdmin && !isRemovingSelf) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Permission denied', code: 'PERMISSION_DENIED' }
-      });
-    }
-
-    // Remove collaborator
-    const result = await pool.query(`
-      DELETE FROM project_collaborators WHERE id = $1
-    `, [collaboratorId]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Collaborator not found', code: 'COLLABORATOR_NOT_FOUND' }
-      });
-    }
-
-    res.json({
-      success: true,
-      data: { message: 'Collaborator removed successfully' }
-    });
-
-  } catch (error) {
-    console.error('Remove collaborator error:', error);
-    res.status(500).json({
-      success: false,
-      error: { message: 'Failed to remove collaborator', code: 'REMOVE_COLLABORATOR_ERROR' }
-    });
-  }
-});
-
-// Update collaborator role/permissions
-router.put('/projects/:projectId/collaborators/:collaboratorId', [
-  authenticateToken,
-  param('projectId').isUUID(),
-  param('collaboratorId').isUUID(),
-  body('role').optional().isIn(['producer', 'artist', 'viewer', 'admin']),
-  body('permissions').optional().isObject()
-], async (req: Request, res: Response) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
+    if (existingUser.rows.length > 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
-        error: { message: 'Validation failed', details: errors.array() }
+        error: { 
+          message: 'An account with this email already exists. Please sign in instead.', 
+          code: 'EMAIL_EXISTS',
+          requiresSignIn: true
+        }
       });
     }
 
-    const { projectId, collaboratorId } = req.params;
-    const { role, permissions } = req.body;
-    const userId = req.user!.userId;
+    // Create guest user account
+    const guestUserId = uuidv4();
+    const tempPassword = crypto.randomBytes(16).toString('hex');
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    const guestExpiresAt = new Date();
+    guestExpiresAt.setDate(guestExpiresAt.getDate() + 30); // 30 days from now
 
-    // Verify user is owner or admin
-    const permissionCheck = await pool.query(`
-      SELECT p.creator_id, pc.role as user_role
-      FROM projects p
-      LEFT JOIN project_collaborators pc ON p.id = pc.project_id AND pc.user_id = $2
-      WHERE p.id = $1
-    `, [projectId, userId]);
+    await client.query(`
+      INSERT INTO users (
+        id, email, username, password, role, subscription_tier, 
+        subscription_status, guest_expires_at, guest_invited_by, 
+        guest_project_id, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+    `, [
+      guestUserId, 
+      guestEmail, 
+      guestName, 
+      hashedPassword, 
+      'artist', 
+      'artist_guest',
+      'active',
+      guestExpiresAt,
+      invite.invited_by,
+      invite.project_id
+    ]);
 
-    if (permissionCheck.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Project not found', code: 'PROJECT_NOT_FOUND' }
-      });
-    }
+    // Add as collaborator
+    const collaborationId = uuidv4();
+    await client.query(`
+      INSERT INTO project_collaborators (
+        id, project_id, user_id, role, permissions, invited_by, 
+        invited_at, accepted_at, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'accepted')
+    `, [
+      collaborationId, 
+      invite.project_id, 
+      guestUserId, 
+      invite.role, 
+      invite.permissions, 
+      invite.invited_by,
+      invite.created_at
+    ]);
 
-    const { creator_id, user_role } = permissionCheck.rows[0];
-    const isOwner = creator_id === userId;
-    const isAdmin = user_role === 'admin';
+    // Mark invite as used and link to guest user
+    await client.query(`
+      UPDATE project_invites 
+      SET used_at = NOW(), guest_user_id = $1 
+      WHERE id = $2
+    `, [guestUserId, invite.id]);
 
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'Permission denied', code: 'PERMISSION_DENIED' }
-      });
-    }
+    await client.query('COMMIT');
 
-    // Build update query
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
-
-    if (role) {
-      updates.push(`role = $${paramCount}`);
-      values.push(role);
-      paramCount++;
-    }
-
-    if (permissions) {
-      updates.push(`permissions = $${paramCount}`);
-      values.push(JSON.stringify(permissions));
-      paramCount++;
-    }
-
-    if (updates.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: { message: 'No updates provided', code: 'NO_UPDATES' }
-      });
-    }
-
-    updates.push(`updated_at = NOW()`);
-    values.push(collaboratorId);
-
-    const query = `
-      UPDATE project_collaborators 
-      SET ${updates.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, values);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: { message: 'Collaborator not found', code: 'COLLABORATOR_NOT_FOUND' }
-      });
-    }
+    // Generate temporary JWT for guest user
+    const jwt = require('jsonwebtoken');
+    const guestToken = jwt.sign(
+      { 
+        userId: guestUserId, 
+        email: guestEmail, 
+        role: 'artist',
+        subscriptionTier: 'artist_guest',
+        isGuest: true,
+        expiresAt: guestExpiresAt
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
 
     res.json({
       success: true,
       data: {
-        message: 'Collaborator updated successfully',
-        collaborator: result.rows[0]
+        isGuestAccount: true,
+        token: guestToken,
+        user: {
+          id: guestUserId,
+          email: guestEmail,
+          username: guestName,
+          role: 'artist',
+          subscriptionTier: 'artist_guest',
+          guestExpiresAt
+        },
+        projectId: invite.project_id,
+        expiresIn: 30,
+        message: 'Guest account created successfully'
       }
     });
 
   } catch (error) {
-    console.error('Update collaborator error:', error);
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Helper function to add user as collaborator
+async function addUserAsCollaborator(invite: any, userId: string) {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    const collaborationId = uuidv4();
+    await client.query(`
+      INSERT INTO project_collaborators (
+        id, project_id, user_id, role, permissions, invited_by, 
+        invited_at, accepted_at, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), 'accepted')
+    `, [
+      collaborationId, 
+      invite.project_id, 
+      userId, 
+      invite.role, 
+      invite.permissions, 
+      invite.invited_by,
+      invite.created_at
+    ]);
+
+    // Mark invite as used
+    await client.query(`
+      UPDATE project_invites 
+      SET used_at = NOW() 
+      WHERE id = $1
+    `, [invite.id]);
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Get guest account info (for upgrade prompts)
+router.get('/guest-info', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    const userQuery = await pool.query(`
+      SELECT 
+        subscription_tier, 
+        guest_expires_at,
+        created_at,
+        (guest_expires_at - NOW()) as time_remaining
+      FROM users 
+      WHERE id = $1 AND subscription_tier = 'artist_guest'
+    `, [userId]);
+
+    if (userQuery.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Guest account not found', code: 'NOT_GUEST' }
+      });
+    }
+
+    const user = userQuery.rows[0];
+    const daysRemaining = Math.ceil(user.time_remaining.days);
+
+    res.json({
+      success: true,
+      data: {
+        expiresAt: user.guest_expires_at,
+        daysRemaining,
+        createdAt: user.created_at,
+        needsUpgrade: daysRemaining <= 7 // Show upgrade prompt in last week
+      }
+    });
+
+  } catch (error) {
+    console.error('Guest info error:', error);
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to update collaborator', code: 'UPDATE_COLLABORATOR_ERROR' }
+      error: { message: 'Failed to get guest info', code: 'GUEST_INFO_ERROR' }
     });
   }
 });

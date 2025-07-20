@@ -1,20 +1,34 @@
-// backend/src/middleware/auth.ts - FIXED VERSION
+// backend/src/middleware/auth.ts - Updated with Guest Account Support
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 
-// Extend Request type to include user
+// Extended user interface that includes guest account info
+interface AuthUser {
+  userId: string;
+  email: string;
+  role?: string;
+  subscriptionTier?: string;
+  subscriptionStatus?: string;
+  isGuest?: boolean;
+  expiresAt?: Date;
+}
+
+// Extend Request type to include comprehensive user info
 declare global {
   namespace Express {
     interface Request {
-      user?: {
-        userId: string;
-        email: string;
-        role?: string;
-        subscriptionTier?: string;
-        subscriptionStatus?: string; // Add this property
+      user?: AuthUser;
+      guestCollaboration?: {
+        role: string;
+        permissions: any;
+        guest_project_id?: string;
       };
     }
   }
+}
+
+interface CustomError extends Error {
+  message: string;
 }
 
 export const authenticateToken = (req: Request, res: Response, next: NextFunction) => {
@@ -35,13 +49,15 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET || '') as any;
     
-    // Include ALL properties from JWT payload
+    // Create comprehensive user object with all possible fields
     req.user = {
       userId: decoded.userId,
       email: decoded.email,
       role: decoded.role,
       subscriptionTier: decoded.subscriptionTier,
-      subscriptionStatus: 'active' // Default to active if not in token
+      subscriptionStatus: decoded.subscriptionStatus,
+      isGuest: decoded.isGuest || false,
+      expiresAt: decoded.expiresAt ? new Date(decoded.expiresAt) : undefined
     };
     
     next();
@@ -77,4 +93,58 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
       }
     });
   }
+};
+
+// Optional middleware for routes that work with or without auth
+export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || '') as any;
+      
+      req.user = {
+        userId: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+        subscriptionTier: decoded.subscriptionTier,
+        subscriptionStatus: decoded.subscriptionStatus,
+        isGuest: decoded.isGuest || false,
+        expiresAt: decoded.expiresAt ? new Date(decoded.expiresAt) : undefined
+      };
+    } catch (error) {
+      // Don't fail for optional auth, just continue without user
+      console.log('Optional token verification failed:', error);
+    }
+  }
+  
+  next();
+};
+
+// Middleware specifically for checking if user is authenticated and not expired guest
+export const requireValidAuth = (req: Request, res: Response, next: NextFunction) => {
+  // First run normal auth
+  authenticateToken(req, res, () => {
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        error: { message: 'Authentication required', code: 'AUTH_REQUIRED' }
+      });
+    }
+
+    // Check if guest account has expired
+    if (req.user.isGuest && req.user.expiresAt && req.user.expiresAt < new Date()) {
+      return res.status(403).json({
+        success: false,
+        error: { 
+          message: 'Guest account has expired. Please upgrade to continue.', 
+          code: 'GUEST_EXPIRED',
+          needsUpgrade: true
+        }
+      });
+    }
+
+    next();
+  });
 };

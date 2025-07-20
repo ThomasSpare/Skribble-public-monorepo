@@ -2,20 +2,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { pool } from '../config/database';
 
-interface GuestUser {
-  userId: string;
-  subscriptionTier: string;
-  guestExpiresAt?: string;
-  isGuest?: boolean;
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: GuestUser;
-    }
-  }
-}
 
 // Check if guest account has expired
 export const checkGuestExpiry = async (req: Request, res: Response, next: NextFunction) => {

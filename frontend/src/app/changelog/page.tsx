@@ -3,6 +3,7 @@
 import React from 'react';
 import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, MessageCircle, Upload, Database, Smartphone, Brain, Globe, Plug } from 'lucide-react';
 
+
 const ChangelogPage = () => {
   const updates = [
     {
@@ -82,7 +83,7 @@ const ChangelogPage = () => {
     { icon: Plug, title: "Advanced DAW Integration", description: "Native DAW plugins for seamless integration" }
   ];
 
-  const getTypeColor = (type) => {
+  const getTypeColor = (type: string) => {
     switch (type) {
       case 'major': return 'from-green-500 to-emerald-600';
       case 'minor': return 'from-skribble-azure to-skribble-purple';
@@ -90,7 +91,7 @@ const ChangelogPage = () => {
     }
   };
 
-  const getTypeIcon = (type) => {
+  const getTypeIcon = (type: string) => {
     switch (type) {
       case 'major': return <Rocket className="w-5 h-5" />;
       case 'minor': return <Zap className="w-5 h-5" />;
@@ -197,7 +198,7 @@ const ChangelogPage = () => {
               <div className="bg-white/5 rounded-lg p-4">
                 <h4 className="font-medium text-white mb-3">Technical Implementation</h4>
                 <div className="grid md:grid-cols-2 gap-2">
-                  {updates[0].technical.map((tech, index) => (
+                  {updates[0].technical?.map((tech, index) => (
                     <div key={index} className="flex items-center gap-2 text-green-100 text-sm">
                       <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
                       {tech}

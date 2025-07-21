@@ -988,7 +988,6 @@ export default function AnnotationSystem({
                 analyser={analyser}
                 isPlaying={isPlaying}
                 audioBuffer={audioBuffer}
-                onTempoDetected={setDetectedTempo}
                 onKeyDetected={setDetectedKey}
               />
             )}

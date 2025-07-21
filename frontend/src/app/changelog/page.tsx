@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Link from 'next/link';
 import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, MessageCircle, Upload, Database, Smartphone, Brain, Globe, Plug } from 'lucide-react';
 
 
@@ -301,13 +302,13 @@ const ChangelogPage = () => {
           <div className="mt-16 pt-8 border-t border-skribble-azure/20 text-center">
             <p className="text-skribble-azure/60 mb-4">
               For technical support or feature requests, contact us at{' '}
-              <a href="mailto:support@skribble.io" className="text-skribble-azure hover:text-skribble-sky">
-                support@skribble.io
-              </a>
+              <Link href="/contact" className="text-skribble-azure hover:text-skribble-sky">  
+                Skribble Support
+              </Link>
             </p>
             <p className="text-skribble-azure/60">
               Follow our development:{' '}
-              <a href="https://twitter.com/SkribbleApp" className="text-skribble-azure hover:text-skribble-sky">
+              <a href="https://x.com/SkribbleApp" className="text-skribble-azure hover:text-skribble-sky">
                 @SkribbleApp
               </a>
             </p>

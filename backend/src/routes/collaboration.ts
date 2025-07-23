@@ -655,6 +655,378 @@ router.get('/guest-info', authenticateToken, async (req: Request, res: Response)
   }
 });
 
+// Generate a viewer link for a project
+router.post('/projects/:projectId/viewer-link', [
+  authenticateToken,
+  param('projectId').isUUID(),
+], async (req: Request, res: Response) => {
+  try {
+    const { projectId } = req.params;
+    const userId = req.user!.userId;
+
+    // Generate a viewer token
+    const viewerToken = crypto.randomBytes(32).toString('hex');
+    
+    // Store the viewer token with project reference
+    await pool.query(`
+      INSERT INTO project_viewer_links (
+        project_id,
+        viewer_token,
+        created_by,
+        created_at,
+        expires_at
+      ) VALUES ($1, $2, $3, NOW(), NOW() + INTERVAL '30 days')
+    `, [projectId, viewerToken, userId]);
+
+    res.json({
+      success: true,
+      data: {
+        viewerToken,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      }
+    });
+
+  } catch (error) {
+    console.error('Generate viewer link error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to generate viewer link' }
+    });
+  }
+});
+
+router.get('/projects/viewer/:token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+
+    console.log(`👁️ Viewer access for token: ${token}`);
+
+    // Get project data with annotations and user details
+    const projectQuery = `
+      SELECT 
+        p.id, 
+        p.title, 
+        pv.viewer_token,
+        af.id as file_id, 
+        af.filename, 
+        af.version, 
+        af.file_url, 
+        af.s3_key,
+        af.duration,
+        af.waveform_data
+      FROM projects p
+      JOIN project_viewer_links pv ON p.id = pv.project_id
+      JOIN audio_files af ON p.id = af.project_id AND af.is_active = true
+      WHERE pv.viewer_token = $1 AND pv.expires_at > NOW()
+      LIMIT 1
+    `;
+
+    const project = await pool.query(projectQuery, [token]);
+
+    if (project.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Invalid or expired view link' }
+      });
+    }
+
+    const projectData = project.rows[0];
+
+    // Generate signed URL for audio file
+    let signedAudioUrl = projectData.file_url;
+    
+    if (projectData.s3_key) {
+      try {
+        const { s3UploadService } = await import('../services/s3-upload');
+        signedAudioUrl = await s3UploadService.getSignedDownloadUrl(projectData.s3_key, 3600);
+        console.log('✅ Generated signed audio URL for viewer');
+      } catch (s3Error) {
+        console.error('❌ Failed to generate signed audio URL:', s3Error);
+        // Keep the original URL as fallback
+      }
+    }
+
+    // Get annotations with user details
+    const annotationsQuery = `
+      SELECT 
+        a.id,
+        a.text,
+        a.timestamp,
+        a.annotation_type,
+        a.status,
+        a.priority,
+        a.parent_id,
+        a.voice_note_url,
+        a.created_at,
+        a.updated_at,
+        u.id as user_id,
+        u.username,
+        u.profile_image,
+        u.role as user_role
+      FROM annotations a
+      JOIN users u ON a.user_id = u.id
+      WHERE a.audio_file_id = $1
+      ORDER BY a.timestamp ASC, a.created_at ASC
+    `;
+
+    const annotationsResult = await pool.query(annotationsQuery, [projectData.file_id]);
+
+    // Process annotations with profile images and voice notes
+    const annotations = await Promise.all(
+      annotationsResult.rows.map(async (annotation) => {
+        // Process profile image with S3ImageProcessor
+        const processedUser = await S3ImageProcessor.processUserWithProfileImage({
+          id: annotation.user_id,
+          username: annotation.username,
+          profileImage: annotation.profile_image,
+          role: annotation.user_role
+        });
+
+        // Process voice note URL if it exists
+        let processedVoiceNoteUrl = annotation.voice_note_url;
+        if (processedVoiceNoteUrl && processedVoiceNoteUrl.includes('s3')) {
+          try {
+            const url = new URL(processedVoiceNoteUrl);
+            const s3Key = url.pathname.substring(1);
+            
+            if (s3Key && s3Key.includes('voice-notes/')) {
+              const { s3UploadService } = await import('../services/s3-upload');
+              const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
+              
+              if (signedUrl && signedUrl.includes('X-Amz-')) {
+                processedVoiceNoteUrl = signedUrl;
+              }
+            }
+          } catch (error) {
+            console.error('Error processing voice note URL:', error);
+            processedVoiceNoteUrl = null;
+          }
+        }
+
+        return {
+          id: annotation.id,
+          text: annotation.text,
+          timestamp: annotation.timestamp,
+          type: annotation.annotation_type,
+          status: annotation.status,
+          priority: annotation.priority,
+          parentId: annotation.parent_id,
+          voiceNoteUrl: processedVoiceNoteUrl,
+          createdAt: annotation.created_at,
+          updatedAt: annotation.updated_at,
+          createdBy: {
+            id: processedUser.id,
+            username: processedUser.username,
+            profileImage: processedUser.profileImage,
+            role: processedUser.role
+          }
+        };
+      })
+    );
+
+    // Update last accessed timestamp (remove access_count reference)
+    await pool.query(`
+      UPDATE project_viewer_links 
+      SET last_accessed_at = NOW()
+      WHERE viewer_token = $1
+    `, [token]);
+
+    console.log(`✅ Viewer data served for project: ${projectData.title}, ${annotations.length} annotations`);
+
+    res.json({
+      success: true,
+      data: {
+        id: projectData.id,
+        title: projectData.title,
+        currentAudioFile: {
+          id: projectData.file_id,
+          filename: projectData.filename,
+          version: projectData.version,
+          fileUrl: signedAudioUrl, // Pre-signed URL included
+          duration: projectData.duration,
+          waveformData: projectData.waveform_data ? 
+            (typeof projectData.waveform_data === 'string' ? 
+              JSON.parse(projectData.waveform_data) : projectData.waveform_data) : null
+        },
+        annotations: annotations,
+        isViewerMode: true
+      }
+    });
+
+  } catch (error) {
+    console.error('Get viewer project error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to get project data' }
+    });
+  }
+});router.get('/projects/viewer/:token', async (req: Request, res: Response) => {
+  try {
+    const { token } = req.params;
+
+    console.log(`👁️ Viewer access for token: ${token}`);
+
+    // Get project data with annotations and user details
+    const projectQuery = `
+      SELECT 
+        p.id, 
+        p.title, 
+        pv.viewer_token,
+        af.id as file_id, 
+        af.filename, 
+        af.version, 
+        af.file_url, 
+        af.s3_key,
+        af.duration,
+        af.waveform_data
+      FROM projects p
+      JOIN project_viewer_links pv ON p.id = pv.project_id
+      JOIN audio_files af ON p.id = af.project_id AND af.is_active = true
+      WHERE pv.viewer_token = $1 AND pv.expires_at > NOW()
+      LIMIT 1
+    `;
+
+    const project = await pool.query(projectQuery, [token]);
+
+    if (project.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Invalid or expired view link' }
+      });
+    }
+
+    const projectData = project.rows[0];
+
+    // Generate signed URL for audio file
+    let signedAudioUrl = projectData.file_url;
+    
+    if (projectData.s3_key) {
+      try {
+        const { s3UploadService } = await import('../services/s3-upload');
+        signedAudioUrl = await s3UploadService.getSignedDownloadUrl(projectData.s3_key, 3600);
+        console.log('✅ Generated signed audio URL for viewer');
+      } catch (s3Error) {
+        console.error('❌ Failed to generate signed audio URL:', s3Error);
+        // Keep the original URL as fallback
+      }
+    }
+
+    // Get annotations with user details
+    const annotationsQuery = `
+      SELECT 
+        a.id,
+        a.text,
+        a.timestamp,
+        a.annotation_type,
+        a.status,
+        a.priority,
+        a.parent_id,
+        a.voice_note_url,
+        a.created_at,
+        a.updated_at,
+        u.id as user_id,
+        u.username,
+        u.profile_image,
+        u.role as user_role
+      FROM annotations a
+      JOIN users u ON a.user_id = u.id
+      WHERE a.audio_file_id = $1
+      ORDER BY a.timestamp ASC, a.created_at ASC
+    `;
+
+    const annotationsResult = await pool.query(annotationsQuery, [projectData.file_id]);
+
+    // Process annotations with profile images and voice notes
+    const annotations = await Promise.all(
+      annotationsResult.rows.map(async (annotation) => {
+        // Process profile image with S3ImageProcessor
+        const processedUser = await S3ImageProcessor.processUserWithProfileImage({
+          id: annotation.user_id,
+          username: annotation.username,
+          profileImage: annotation.profile_image,
+          role: annotation.user_role
+        });
+
+        // Process voice note URL if it exists
+        let processedVoiceNoteUrl = annotation.voice_note_url;
+        if (processedVoiceNoteUrl && processedVoiceNoteUrl.includes('s3')) {
+          try {
+            const url = new URL(processedVoiceNoteUrl);
+            const s3Key = url.pathname.substring(1);
+            
+            if (s3Key && s3Key.includes('voice-notes/')) {
+              const { s3UploadService } = await import('../services/s3-upload');
+              const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
+              
+              if (signedUrl && signedUrl.includes('X-Amz-')) {
+                processedVoiceNoteUrl = signedUrl;
+              }
+            }
+          } catch (error) {
+            console.error('Error processing voice note URL:', error);
+            processedVoiceNoteUrl = null;
+          }
+        }
+
+        return {
+          id: annotation.id,
+          text: annotation.text,
+          timestamp: annotation.timestamp,
+          type: annotation.annotation_type,
+          status: annotation.status,
+          priority: annotation.priority,
+          parentId: annotation.parent_id,
+          voiceNoteUrl: processedVoiceNoteUrl,
+          createdAt: annotation.created_at,
+          updatedAt: annotation.updated_at,
+          createdBy: {
+            id: processedUser.id,
+            username: processedUser.username,
+            profileImage: processedUser.profileImage,
+            role: processedUser.role
+          }
+        };
+      })
+    );
+
+    // Update last accessed timestamp (remove access_count reference)
+    await pool.query(`
+      UPDATE project_viewer_links 
+      SET last_accessed_at = NOW()
+      WHERE viewer_token = $1
+    `, [token]);
+
+    console.log(`✅ Viewer data served for project: ${projectData.title}, ${annotations.length} annotations`);
+
+    res.json({
+      success: true,
+      data: {
+        id: projectData.id,
+        title: projectData.title,
+        currentAudioFile: {
+          id: projectData.file_id,
+          filename: projectData.filename,
+          version: projectData.version,
+          fileUrl: signedAudioUrl, // Pre-signed URL included
+          duration: projectData.duration,
+          waveformData: projectData.waveform_data ? 
+            (typeof projectData.waveform_data === 'string' ? 
+              JSON.parse(projectData.waveform_data) : projectData.waveform_data) : null
+        },
+        annotations: annotations,
+        isViewerMode: true
+      }
+    });
+
+  } catch (error) {
+    console.error('Get viewer project error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to get project data' }
+    });
+  }
+});
+
 // Get project collaborators
 router.get('/projects/:projectId/collaborators', [
   authenticateToken,

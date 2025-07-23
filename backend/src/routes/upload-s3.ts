@@ -510,4 +510,97 @@ router.get('/debug-s3', authenticateToken, async (req: Request, res: Response) =
   }
 });
 
+// Public download endpoint for viewer access
+router.get('/viewer-download/:viewerToken/:audioFileId', async (req: Request, res: Response) => {
+  try {
+    const { viewerToken, audioFileId } = req.params;
+    
+    logWithTimestamp('🔓 Public viewer download requested:', { viewerToken: viewerToken.substring(0, 8) + '...', audioFileId });
+
+    // Validate viewer token and get project access
+    const viewerQuery = await pool.query(`
+      SELECT 
+        pv.project_id, 
+        pv.expires_at,
+        af.file_url,
+        af.s3_key,
+        af.filename,
+        af.original_filename
+      FROM project_viewer_links pv
+      JOIN projects p ON pv.project_id = p.id
+      JOIN audio_files af ON p.id = af.project_id
+      WHERE pv.viewer_token = $1 
+        AND af.id = $2 
+        AND pv.expires_at > NOW()
+        AND af.is_active = true
+    `, [viewerToken, audioFileId]);
+
+    if (viewerQuery.rows.length === 0) {
+      logWithTimestamp('❌ Invalid viewer token or audio file');
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Invalid viewer link or audio file not found', code: 'INVALID_VIEWER_ACCESS' }
+      });
+    }
+
+    const audioFile = viewerQuery.rows[0];
+    
+    // Update viewer link usage
+    await pool.query(`
+      UPDATE project_viewer_links 
+      SET last_accessed_at = NOW()
+      WHERE viewer_token = $1
+    `, [viewerToken]);
+
+    // Generate signed URL for S3 file
+    let downloadUrl;
+    
+    if (audioFile.s3_key) {
+      // S3 file - generate signed URL
+      try {
+        downloadUrl = await s3UploadService.getSignedDownloadUrl(audioFile.s3_key, 3600); // 1 hour expiry
+        logWithTimestamp('✅ Generated signed URL for viewer access');
+      } catch (s3Error) {
+        logWithTimestamp('❌ S3 signed URL generation failed:', s3Error);
+        return res.status(500).json({
+          success: false,
+          error: { message: 'Failed to generate download link', code: 'S3_ERROR' }
+        });
+      }
+    } else if (audioFile.file_url) {
+      // Local file or already processed URL
+      downloadUrl = audioFile.file_url.startsWith('http') 
+        ? audioFile.file_url 
+        : `${process.env.API_BASE_URL || 'http://localhost:5000'}${audioFile.file_url}`;
+      logWithTimestamp('✅ Using direct file URL for viewer access');
+    } else {
+      logWithTimestamp('❌ No file URL available');
+      return res.status(404).json({
+        success: false,
+        error: { message: 'Audio file not accessible', code: 'FILE_NOT_ACCESSIBLE' }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        downloadUrl,
+        filename: audioFile.original_filename || audioFile.filename,
+        expiresIn: 3600, // 1 hour
+        isViewerAccess: true
+      }
+    });
+
+  } catch (error) {
+    logWithTimestamp('❌ Viewer download error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to get download link',
+        code: 'VIEWER_DOWNLOAD_ERROR'
+      }
+    });
+  }
+});
+
 export default router;

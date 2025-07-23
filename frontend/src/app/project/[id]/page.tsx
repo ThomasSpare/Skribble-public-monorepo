@@ -18,6 +18,7 @@ import CollaboratorsMenuPortal from '@/components/Portal';
 import Image from 'next/image';
 import ProjectMenu from '@/components/ProjectMenu';
 import ProjectMenuPortal from '@/components/ProjectMenuPortal';
+import AuthDebug from '@/components/AuthDebug';
 
 
 export interface User {
@@ -879,6 +880,7 @@ const handleDelete = async (project: Project): Promise<void> => {
                 </div>
               </div>
             </div>
+            <AuthDebug/> {/* Debug component to show auth state */}
             {/* Current Audio File Info */}
             {currentAudioFile && (
               <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 w-full">

@@ -5,13 +5,11 @@ import { useRouter, useParams } from 'next/navigation';
 import { getCurrentUser, isAuthenticated } from '@/lib/auth-utils';
 import { 
   ArrowLeft, 
-  Settings, 
   Users, 
   Share2, 
   Download, 
   MoreVertical,
   Clock,
-  MessageCircle,
   Loader2
 } from 'lucide-react';
 import IntegratedWaveformPlayer from '@/components/IntegratedWaveformPlayer';
@@ -22,13 +20,17 @@ import ProjectMenu from '@/components/ProjectMenu';
 import ProjectMenuPortal from '@/components/ProjectMenuPortal';
 
 
-interface User {
+export interface User {
   id: string;
   email: string;
   username: string;
-  role: 'producer' | 'artist' | 'both';
+  role: string;
   subscriptionTier: string;
-  profileImage?: string | null;
+  subscriptionStatus?: string;
+  temporaryAccess?: boolean;
+  trialEndDate?: string;
+  isGuest?: boolean;
+  profileImage?: string; // Optional profile image URL
 }
 
 interface ProjectData {

@@ -11,6 +11,7 @@ export interface User {
   temporaryAccess?: boolean;
   trialEndDate?: string;
   isGuest?: boolean;
+  profileImage?: string;
 }
 
 export const getStoredUser = (): User | null => {

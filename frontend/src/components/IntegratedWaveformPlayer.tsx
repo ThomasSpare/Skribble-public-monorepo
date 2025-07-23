@@ -1129,6 +1129,7 @@ const cycleGridMode = () => {
   // Main waveform drawing function with click feedback
   // Replace or update the existing drawWaveform function:
 
+  
 const drawWaveform = useCallback(() => {
   const canvas = canvasRef.current;
   if (!canvas || waveformData.length === 0) return;

@@ -1,7 +1,7 @@
 // shared/types/index.ts
 // Shared TypeScript types for Skribble
 
-interface User {
+export interface User {
   id: string;
   email: string;
   username: string;
@@ -12,6 +12,10 @@ interface User {
   createdAt: string;
   updatedAt: string;
   trialStartDate?: string;
+  isguest?: boolean;
+  guestRole?: 'artist' | 'producer';
+  temporaryAccess?: boolean;
+  guestAccount?: boolean;
   trialEndDate?: string;
   guestExpiresAt?: Date;
   guestInvitedBy?: string;

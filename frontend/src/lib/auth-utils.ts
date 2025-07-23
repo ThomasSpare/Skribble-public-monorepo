@@ -12,6 +12,7 @@ export interface User {
   trialEndDate?: string;
   isGuest?: boolean;
   profileImage?: string;
+  guestExpiresAt?: string; // ISO date string for guest expiration
 }
 
 export const getStoredUser = (): User | null => {
@@ -31,11 +32,60 @@ export const getStoredUser = (): User | null => {
 export const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
   
-  return localStorage.getItem('skribble_token') || localStorage.getItem('token');
+  // Check both possible token keys (prioritize skribble_token)
+  const skribbleToken = localStorage.getItem('skribble_token');
+  const fallbackToken = localStorage.getItem('token');
+  
+  console.log('🔍 Auth Debug - Token check:', {
+    skribbleToken: skribbleToken ? 'present' : 'missing',
+    fallbackToken: fallbackToken ? 'present' : 'missing'
+  });
+  
+  return skribbleToken || fallbackToken;
 };
 
 export const isAuthenticated = (): boolean => {
   return !!getAuthToken();
+};
+
+
+//Enhanced voice note permission check for guests
+export const canCreateVoiceNotes = (user: User | null): boolean => {
+  if (!user) return false;
+  
+  console.log('🔍 Checking voice note permissions:', {
+    userEmail: user.email,
+    role: user.role,
+    subscriptionTier: user.subscriptionTier,
+    isGuest: user.isGuest,
+    guestExpiresAt: user.guestExpiresAt
+  });
+  
+  // Allow voice notes for authenticated users with proper roles
+  const allowedRoles = ['admin', 'producer', 'artist'];
+  const allowedTiers = ['indie', 'producer', 'studio', 'artist_guest'];
+  
+  const hasValidRole = allowedRoles.includes(user.role);
+  const hasValidTier = allowedTiers.includes(user.subscriptionTier);
+  
+  // Special handling for guest users
+  if (user.isGuest || user.subscriptionTier === 'artist_guest') {
+    // Check if guest account is still valid
+    if (user.guestExpiresAt) {
+      const now = new Date();
+      const expiresAt = new Date(user.guestExpiresAt);
+      
+      if (now > expiresAt) {
+        console.warn('🚫 Guest account expired, voice notes disabled');
+        return false;
+      }
+    }
+    
+    // Guest users need artist role AND artist_guest tier
+    return user.role === 'artist' && user.subscriptionTier === 'artist_guest';
+  }
+  
+  return hasValidRole && hasValidTier;
 };
 
 // Fetch user info from backend if not in localStorage

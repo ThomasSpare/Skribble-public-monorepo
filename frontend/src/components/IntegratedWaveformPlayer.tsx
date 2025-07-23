@@ -16,6 +16,7 @@ interface WaveformPlayerProps {
   title?: string;
   isViewOnly?: boolean;
   initialAnnotations?: any[];
+  waveformData?: number[];
   disableAnnotationFetching?: boolean;
   onTimeUpdate?: (currentTime: number) => void;
   onLoadComplete?: (duration: number) => void;

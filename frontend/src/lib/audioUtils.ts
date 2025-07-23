@@ -920,6 +920,16 @@ async function generateMarkerExportPackage(
   console.log('⚠️ Exported marker package as fallback - original audio conversion failed');
 }
 
+async function extractAudioFileId(): Promise<string> {
+  // This function should extract the audio file ID from the current context
+  // For example, it could be stored in localStorage or passed as a parameter
+  const audioFileId = localStorage.getItem('audio_file_id');
+  if (!audioFileId) {
+    throw new Error('Audio file ID not found in localStorage');
+  }
+  return audioFileId;
+}
+
 async function convertToWAVWithCuePoints(
   audioUrl: string, 
   annotations: any[], 

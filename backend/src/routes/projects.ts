@@ -3,11 +3,24 @@ import express, { Request, Response } from 'express';
 import { body, validationResult, param } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { pool } from '../config/database';
+import { S3ImageProcessor } from '../utils/s3ImageProcessor';
 
 const router = express.Router();
 interface CustomError extends Error {
   message: string;
 }
+
+const safeJSONParse = (data: any, defaultValue: any = {}) => {
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data);
+    } catch (error) {
+      console.error('JSON parse error:', error);
+      return defaultValue;
+    }
+  }
+  return data || defaultValue;
+};
 
 // Test route
 router.get('/test', (req, res) => {
@@ -77,6 +90,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const userId = req.user!.userId;
     const limit = parseInt(req.query.limit as string) || 20;
     const offset = parseInt(req.query.offset as string) || 0;
+    
     // Get projects where user is creator or collaborator
     const projectsQuery = `
       SELECT DISTINCT 
@@ -134,8 +148,46 @@ router.get('/', authenticateToken, async (req, res) => {
             WHERE pc.project_id = $1
             ORDER BY pc.invited_at DESC
           `;
-          
+
           const collaboratorsResult = await pool.query(collaboratorsQuery, [row.id]);
+
+          // Process collaborators with S3 signed URLs
+          const collaborators = await Promise.all(
+            collaboratorsResult.rows.map(async (collab) => ({
+              id: collab.id,
+              projectId: collab.project_id,
+              userId: collab.user_id,
+              user: await S3ImageProcessor.processUserWithProfileImage({
+                id: collab.user_id,
+                username: collab.username,
+                email: collab.email,
+                role: collab.user_role,
+                subscriptionTier: collab.subscription_tier,
+                profileImage: collab.profile_image,
+                createdAt: collab.user_created_at,
+                updatedAt: collab.user_updated_at
+              }),
+              role: collab.role,
+              permissions: typeof collab.permissions === 'string' ? 
+                safeJSONParse(collab.permissions, { canEdit: false, canComment: true }) : collab.permissions,
+              invitedBy: collab.invited_by,
+              invitedAt: collab.invited_at,
+              acceptedAt: collab.accepted_at,
+              status: collab.status
+            }))
+          );
+
+          // Process creator profile image
+          const processedCreator = await S3ImageProcessor.processUserWithProfileImage({
+            id: row.creator_id,
+            username: row.creator_username,
+            email: row.creator_email,
+            role: row.creator_role,
+            subscriptionTier: row.creator_subscription_tier,
+            profileImage: row.creator_profile_image,
+            createdAt: row.creator_created_at,
+            updatedAt: row.creator_updated_at
+          });
           
           // Get audio files
           const audioFilesQuery = `
@@ -149,7 +201,7 @@ router.get('/', authenticateToken, async (req, res) => {
           // Parse settings safely
           let settings;
           try {
-            settings = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings;
+            settings = typeof row.settings === 'string' ? safeJSONParse(row.settings, { allowDownload: true }) : row.settings;
           } catch (parseError) {
             console.warn(`Failed to parse settings for project ${row.id}:`, parseError);
             settings = {
@@ -165,41 +217,12 @@ router.get('/', authenticateToken, async (req, res) => {
             id: row.id,
             title: row.title,
             creatorId: row.creator_id,
-            creator: {
-              id: row.creator_id,
-              username: row.creator_username,
-              email: row.creator_email,
-              role: row.creator_role,
-              subscriptionTier: row.creator_subscription_tier,
-              profileImage: row.creator_profile_image,
-              createdAt: row.creator_created_at,
-              updatedAt: row.creator_updated_at
-            },
+            creator: processedCreator,
             status: row.status,
             deadline: row.deadline,
             shareLink: row.share_link,
             settings: settings,
-            collaborators: collaboratorsResult.rows.map(collab => ({
-              id: collab.id,
-              projectId: collab.project_id,
-              userId: collab.user_id,
-              user: {
-                id: collab.user_id,
-                username: collab.username,
-                email: collab.email,
-                role: collab.user_role,
-                subscriptionTier: collab.subscription_tier,
-                profileImage: collab.profile_image,
-                createdAt: collab.user_created_at,
-                updatedAt: collab.user_updated_at
-              },
-              role: collab.role,
-              permissions: typeof collab.permissions === 'string' ? JSON.parse(collab.permissions) : collab.permissions,
-              invitedBy: collab.invited_by,
-              invitedAt: collab.invited_at,
-              acceptedAt: collab.accepted_at,
-              status: collab.status
-            })),
+            collaborators: collaborators,
             audioFiles: audioFilesResult.rows.map(af => ({
               id: af.id,
               projectId: af.project_id,
@@ -211,7 +234,7 @@ router.get('/', authenticateToken, async (req, res) => {
               sampleRate: af.sample_rate,
               fileSize: af.file_size,
               mimeType: af.mime_type,
-              waveformData: af.waveform_data ? (typeof af.waveform_data === 'string' ? JSON.parse(af.waveform_data) : af.waveform_data) : undefined,
+              waveformData: af.waveform_data ? (typeof af.waveform_data === 'string' ? safeJSONParse(af.waveform_data, undefined) : af.waveform_data) : undefined,
               uploadedBy: af.uploaded_by,
               uploadedAt: af.uploaded_at,
               isActive: af.is_active
@@ -232,7 +255,7 @@ router.get('/', authenticateToken, async (req, res) => {
               email: row.creator_email || '',
               role: row.creator_role || 'producer',
               subscriptionTier: row.creator_subscription_tier || 'free',
-              profileImage: row.creator_profile_image,
+              profileImage: null,
               createdAt: row.creator_created_at,
               updatedAt: row.creator_updated_at
             },
@@ -367,6 +390,44 @@ router.get('/:id', [
 
     const collaboratorsResult = await pool.query(collaboratorsQuery, [projectId]);
 
+    // Process collaborators with S3 signed URLs
+    const collaborators = await Promise.all(
+      collaboratorsResult.rows.map(async (collab) => ({
+        id: collab.id,
+        projectId: collab.project_id,
+        userId: collab.user_id,
+        user: await S3ImageProcessor.processUserWithProfileImage({
+          id: collab.user_id,
+          username: collab.username,
+          email: collab.email,
+          role: collab.user_role,
+          subscriptionTier: collab.subscription_tier,
+          profileImage: collab.profile_image,
+          createdAt: collab.user_created_at,
+          updatedAt: collab.user_updated_at
+        }),
+        role: collab.role,
+        permissions: typeof collab.permissions === 'string' ? 
+          safeJSONParse(collab.permissions, { canEdit: false, canComment: true }) : collab.permissions,
+        invitedBy: collab.invited_by,
+        invitedAt: collab.invited_at,
+        acceptedAt: collab.accepted_at,
+        status: collab.status
+      }))
+    );
+
+    // Process creator profile image
+    const processedCreator = await S3ImageProcessor.processUserWithProfileImage({
+      id: row.creator_id,
+      username: row.creator_username,
+      email: row.creator_email,
+      role: row.creator_role,
+      subscriptionTier: row.creator_subscription_tier,
+      profileImage: row.creator_profile_image,
+      createdAt: row.creator_created_at,
+      updatedAt: row.creator_updated_at
+    });
+
     // Get audio files
     const audioFilesQuery = `
       SELECT * FROM audio_files 
@@ -379,7 +440,7 @@ router.get('/:id', [
     // Parse settings safely
     let settings;
     try {
-      settings = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings;
+      settings = typeof row.settings === 'string' ? safeJSONParse(row.settings, { allowDownload: true }) : row.settings;
     } catch (parseError) {
       console.warn(`Failed to parse settings for project ${projectId}:`, parseError);
       settings = {
@@ -395,41 +456,12 @@ router.get('/:id', [
       id: row.id,
       title: row.title,
       creatorId: row.creator_id,
-      creator: {
-        id: row.creator_id,
-        username: row.creator_username,
-        email: row.creator_email,
-        role: row.creator_role,
-        subscriptionTier: row.creator_subscription_tier,
-        profileImage: row.creator_profile_image,
-        createdAt: row.creator_created_at,
-        updatedAt: row.creator_updated_at
-      },
+      creator: processedCreator,
       status: row.status,
       deadline: row.deadline,
       shareLink: row.share_link,
       settings: settings,
-      collaborators: collaboratorsResult.rows.map(collab => ({
-        id: collab.id,
-        projectId: collab.project_id,
-        userId: collab.user_id,
-        user: {
-          id: collab.user_id,
-          username: collab.username,
-          email: collab.email,
-          role: collab.user_role,
-          subscriptionTier: collab.subscription_tier,
-          profileImage: collab.profile_image,
-          createdAt: collab.user_created_at,
-          updatedAt: collab.user_updated_at
-        },
-        role: collab.role,
-        permissions: typeof collab.permissions === 'string' ? JSON.parse(collab.permissions) : collab.permissions,
-        invitedBy: collab.invited_by,
-        invitedAt: collab.invited_at,
-        acceptedAt: collab.accepted_at,
-        status: collab.status
-      })),
+      collaborators: collaborators,
       audioFiles: audioFilesResult.rows.map(af => ({
         id: af.id,
         projectId: af.project_id,
@@ -441,7 +473,7 @@ router.get('/:id', [
         sampleRate: af.sample_rate,
         fileSize: af.file_size,
         mimeType: af.mime_type,
-        waveformData: af.waveform_data ? (typeof af.waveform_data === 'string' ? JSON.parse(af.waveform_data) : af.waveform_data) : undefined,
+        waveformData: af.waveform_data ? (typeof af.waveform_data === 'string' ? safeJSONParse(af.waveform_data, undefined) : af.waveform_data) : undefined,
         uploadedBy: af.uploaded_by,
         uploadedAt: af.uploaded_at,
         isActive: af.is_active
@@ -449,7 +481,6 @@ router.get('/:id', [
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
-
 
     res.json({
       success: true,
@@ -697,6 +728,5 @@ router.delete('/:id', [
     });
   }
 });
-
 
 export default router;

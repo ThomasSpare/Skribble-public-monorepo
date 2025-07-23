@@ -50,6 +50,13 @@ const checkSubscriptionStatus = async (req: any, res: any, next: any) => {
   if (shouldSkip) {
     return next();
   }
+  const isGuestInvite = req.headers['x-guest-invite'] === 'true';
+  const isJoinRoute = req.path.includes('/api/collaboration/join/');
+  
+  if (isGuestInvite && isJoinRoute) {
+    console.log('🎯 Bypassing subscription check for guest invite');
+    return next();
+  }
 
   // Check if user has valid subscription for protected features
   if (req.user && req.user.subscriptionStatus === 'pending') {
@@ -64,6 +71,7 @@ const checkSubscriptionStatus = async (req: any, res: any, next: any) => {
 
   next();
 };
+
 
 // Test route
 app.get('/health', (req, res) => {

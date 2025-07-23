@@ -2,6 +2,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { getCurrentUser, isAuthenticated } from '@/lib/auth-utils';
 import { 
   ArrowLeft, 
   Settings, 
@@ -105,6 +106,34 @@ export default function ProjectPage() {
   const [audioUrlLoading, setAudioUrlLoading] = useState(true);
   const [isSwitchingVersion, setIsSwitchingVersion] = useState<string | null>(null);
 
+  useEffect(() => {
+    const initializeAuth = async () => {
+      if (!isAuthenticated()) {
+        // No token found, redirect to login
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        // Get user info (from localStorage or fetch from backend)
+        const userInfo = await getCurrentUser();
+        if (userInfo) {
+          setUser(userInfo);
+          console.log('✅ User authenticated:', userInfo);
+        } else {
+          // Token invalid or expired
+          window.location.href = '/login';
+        }
+      } catch (error) {
+        console.error('Auth initialization failed:', error);
+        window.location.href = '/login';
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+  }, []);
 
   useEffect(() => {
     initializePage();
@@ -548,6 +577,13 @@ const handleDelete = async (project: Project): Promise<void> => {
       </div>
     );
   }
+   if (!user) {
+    return null; // Will redirect to login
+  }
+
+   if (!user) {
+    return null; // Will redirect to login
+  }
 
   if (error) {
     return (
@@ -564,6 +600,8 @@ const handleDelete = async (project: Project): Promise<void> => {
       </div>
     );
   }
+
+
 
   if (!project || !user) {
     return (
@@ -779,16 +817,34 @@ const handleDelete = async (project: Project): Promise<void> => {
                   <div className="flex items-center justify-between">
                     <span className="text-skribble-azure">Collaborators:</span>
                     <div className="flex -space-x-2">
-                      {project.collaborators.map((collaborator: { id: string; username: string },) => (
-                        <Image
-                          key={collaborator.id}
-                          className="rounded-full object-cover border-2 border-skribble-dark hover:border-skribble-azure transition-colors"
-                          src={`/users/${collaborator.id}/profileImage`}
-                          alt={collaborator.username}
-                          title={collaborator.username}
-                          width={28} // Set the width of the image
-                          height={28} // Set the height of the image
-                        />
+                      {project.collaborators.map((collaborator) => (
+                        <div key={collaborator.id} className="relative">
+                          {collaborator.user.profileImage ? (
+                            <Image
+                              className="rounded-full object-cover border-2 border-skribble-dark hover:border-skribble-azure transition-colors"
+                              src={collaborator.user.profileImage}
+                              alt={collaborator.user.username}
+                              title={`${collaborator.user.username} (${collaborator.role})`}
+                              width={28}
+                              height={28}
+                              onError={(e) => {
+                                // Fallback to default avatar if image fails to load
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                              }}
+                            />
+                          ) : null}
+                          
+                          {/* Fallback avatar */}
+                          <div 
+                            className={`w-7 h-7 rounded-full bg-skribble-azure/20 flex items-center justify-center border-2 border-skribble-dark hover:border-skribble-azure transition-colors ${collaborator.user.profileImage ? 'hidden' : ''}`}
+                            title={`${collaborator.user.username} (${collaborator.role})`}
+                          >
+                            <span className="text-xs font-medium text-skribble-azure">
+                              {collaborator.user.username.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
                       ))}
                       {project.collaborators.length > 3 && (
                       <div className="w-7 h-7 rounded-full bg-skribble-plum text-skribble-azure border-2 border-skribble-dark flex items-center justify-center">

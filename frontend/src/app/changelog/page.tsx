@@ -308,7 +308,7 @@ const ChangelogPage = () => {
             </p>
             <p className="text-skribble-azure/60">
               Follow our development:{' '}
-              <a href="https://x.com/SkribbleApp" className="text-skribble-azure hover:text-skribble-sky">
+              <a href="https://x.com/Skribble" className="text-skribble-azure hover:text-skribble-sky">
                 @SkribbleApp
               </a>
             </p>

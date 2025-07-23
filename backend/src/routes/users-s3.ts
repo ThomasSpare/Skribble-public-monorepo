@@ -48,33 +48,48 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
     logWithTimestamp('✅ User profile found:', user.username);
 
     // ALWAYS generate signed URL for S3 images
-    if (user.profile_image && user.profile_image.includes('s3')) {
+    if (user.profile_image) {
       try {
-        const url = new URL(user.profile_image);
-        const s3Key = url.pathname.substring(1);
-        
-        logWithTimestamp('🔗 Generating signed URL for key:', s3Key);
-        
-        if (s3Key && !s3Key.includes('undefined') && s3Key.includes('users/')) {
-          const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600); // 1 hour expiry
+        // Check if it's already a signed URL (has X-Amz- parameters)
+        if (user.profile_image.includes('X-Amz-')) {
+          // Already signed, use as-is
+          logWithTimestamp('✅ Profile image already has signed URL');
+        } else if (user.profile_image.includes('s3')) {
+          // S3 URL that needs signing
+          const url = new URL(user.profile_image);
+          const s3Key = url.pathname.substring(1); // Remove leading slash
           
-          if (signedUrl && signedUrl.includes('X-Amz-')) {
-            user.profile_image = signedUrl;
-            logWithTimestamp('✅ Signed URL generated successfully');
-            logWithTimestamp('🔍 Signed URL preview:', signedUrl.substring(0, 100) + '...');
+          logWithTimestamp('🔗 S3 key extracted:', s3Key);
+          
+          // Validate S3 key format
+          if (s3Key && 
+              !s3Key.includes('undefined') && 
+              !s3Key.includes('null') && 
+              s3Key.includes('users/') &&
+              s3Key.length > 10) {
+            
+            const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600);
+            
+            if (signedUrl && signedUrl.includes('X-Amz-')) {
+              user.profile_image = signedUrl;
+              logWithTimestamp('✅ Profile image signed URL generated');
+            } else {
+              logWithTimestamp('❌ Failed to generate valid signed URL');
+              // Use a default avatar or remove the invalid URL
+              user.profile_image = null;
+            }
           } else {
-            logWithTimestamp('⚠️ Invalid signed URL generated');
+            logWithTimestamp('❌ Invalid S3 key format, removing:', s3Key);
+            user.profile_image = null;
           }
-        } else {
-          logWithTimestamp('⚠️ Invalid S3 key format:', s3Key);
         }
+        // If it's not an S3 URL, leave it as-is (could be a regular URL or base64)
       } catch (error) {
-        logWithTimestamp('❌ Failed to generate signed URL:', error);
-        // Don't fail the request, just use original URL
+        logWithTimestamp('❌ Error processing profile image:', error);
+        user.profile_image = null; // Fallback to no image
       }
-    } else if (user.profile_image) {
-      logWithTimestamp('ℹ️ Profile image is not an S3 URL:', user.profile_image);
     }
+
 
     res.json({
       success: true,
@@ -99,6 +114,95 @@ router.get('/profile', authenticateToken, async (req: any, res: any) => {
       success: false,
       error: { 
         message: 'Failed to get profile',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }
+    });
+  }
+});
+
+router.get('/:id/profileImage', async (req: any, res: any) => {
+  try {
+    const { id } = req.params;
+    
+    logWithTimestamp('🖼️ Profile image requested for user:', id);
+
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(id)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid user ID format' }
+      });
+    }
+
+    // Get user's profile image
+    const result = await pool.query(
+      'SELECT id, username, profile_image FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      logWithTimestamp('❌ User not found for profile image:', id);
+      return res.status(404).json({
+        success: false,
+        error: { message: 'User not found' }
+      });
+    }
+
+    const user = result.rows[0];
+    logWithTimestamp('✅ User found for profile image:', user.username);
+
+    let profileImageUrl = user.profile_image;
+
+    // Process S3 URLs to generate signed URLs
+    if (profileImageUrl && profileImageUrl.includes('s3')) {
+      try {
+        const url = new URL(profileImageUrl);
+        const s3Key = url.pathname.substring(1); // Remove leading slash
+        
+        logWithTimestamp('🔗 Processing S3 URL for profile image:', s3Key);
+        
+        // Validate S3 key format
+        if (s3Key && 
+            !s3Key.includes('undefined') && 
+            !s3Key.includes('null') && 
+            s3Key.includes('users/') &&
+            s3Key.length > 10) {
+          
+          const signedUrl = await s3UploadService.getSignedDownloadUrl(s3Key, 3600); // 1 hour expiry
+          
+          if (signedUrl && signedUrl.includes('X-Amz-')) {
+            profileImageUrl = signedUrl;
+            logWithTimestamp('✅ Profile image signed URL generated');
+          } else {
+            logWithTimestamp('❌ Failed to generate valid signed URL');
+            profileImageUrl = null;
+          }
+        } else {
+          logWithTimestamp('❌ Invalid S3 key format:', s3Key);
+          profileImageUrl = null;
+        }
+      } catch (error) {
+        logWithTimestamp('❌ Error processing S3 profile image URL:', error);
+        profileImageUrl = null;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        userId: user.id,
+        username: user.username,
+        profileImage: profileImageUrl
+      }
+    });
+
+  } catch (error: any) {
+    logWithTimestamp('❌ Get profile image error:', error);
+    res.status(500).json({
+      success: false,
+      error: { 
+        message: 'Failed to get profile image',
         details: process.env.NODE_ENV === 'development' ? error.message : undefined
       }
     });

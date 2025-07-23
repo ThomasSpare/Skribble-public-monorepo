@@ -1,9 +1,11 @@
 [build]
-buildpacks = ["https://github.com/jonathanong/heroku-buildpack-ffmpeg-latest.git"]
 builder = "nixpacks"
 
 [build.nixpacksConfig]
-[build.nixpacksConfig.build]
+[build.nixpacksConfig.phases.setup]
+nixPkgs = ["nodejs_18", "ffmpeg"]
+
+[build.nixpacksConfig.phases.build]
 cmds = [
   "npm install --no-workspaces --legacy-peer-deps",
   "npm run build"

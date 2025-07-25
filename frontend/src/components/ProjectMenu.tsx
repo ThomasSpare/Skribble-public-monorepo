@@ -1,7 +1,7 @@
 // src/components/ProjectMenu.tsx - Updated interface
 
 import React from 'react';
-import { MoreVertical, Trash2, Share, Users, Calendar } from 'lucide-react';
+import { Trash2, Share, Users, Calendar } from 'lucide-react';
 
 // Updated Project interface to match dashboard
 interface Project {
@@ -56,7 +56,7 @@ export default function ProjectMenu({
   };
 
   return (
-    <div className="absolute right-0 top-8 w-48 bg-skribble-plum border border-skribble-azure/20 rounded-lg shadow-xl z-50">
+    <div className="absolute right-8 bottom-0 w-48 bg-skribble-plum border border-skribble-azure/20 rounded-lg shadow-xl z-50">
       <div className="py-2">
         <button
           onClick={() => handleAction(() => onInvite(project))}

@@ -422,21 +422,7 @@ const handleVersionChange = async (versionData: any) => {
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
-  
-  const copyShareLink = async () => {
-    if (project) {
-      const shareUrl = `${window.location.origin}/share/${project.shareLink}`;
-      try {
-        await navigator.clipboard.writeText(shareUrl);
-        // Show success toast (you could add a toast library)
-        alert('Share link copied to clipboard!');
-      } catch (error) {
-        console.error('Failed to copy share link:', error);
-        // Fallback: prompt user to copy manually
-        prompt('Copy this share link:', shareUrl);
-      }
-    }
-  };
+
   
   const generateViewerLink = async () => {
     try {
@@ -506,23 +492,6 @@ const handleDelete = async (project: Project): Promise<void> => {
       alert('Failed to delete project');
     }
   };
-  
-  const handleMenuToggle = (projectId: string) => {
-   setProjects(prev => 
-     prev.map(p => ({
-       ...p,
-       showMenu: p.id === projectId ? !p.showMenu : false
-     }))
-   );
-  };
-  const handleMenuClose = (projectId: string) => {
-    setProjects(prev => 
-      prev.map(p => 
-        p.id === projectId ? { ...p, showMenu: false } : p
-      )
-    );
-  };
-
 
 
   const handleInvite = async (project: Project): Promise<void> => {
@@ -680,7 +649,6 @@ const handleDelete = async (project: Project): Promise<void> => {
                     </button>
                     {/* Collaborators Menu */}
                     <CollaboratorsMenuPortal>
-                      <div className="absolute right-4 top-2 mt-2 z-[9999]">
                         <CollaboratorsMenu
                           projectId={projectId}
                           currentUserId={user?.id || ''}
@@ -694,7 +662,6 @@ const handleDelete = async (project: Project): Promise<void> => {
                             } : null);
                           }}
                         />
-                      </div>
                     </CollaboratorsMenuPortal>
                     </div>
                         <div className="relative">
@@ -722,7 +689,7 @@ const handleDelete = async (project: Project): Promise<void> => {
                             >
                             <div 
                               onClick={e => e.stopPropagation()} 
-                              className="absolute right-12 mt-2 z-[99999]"
+                              className="absolute top-60 right-20 mt-2 z-[99999]"
                             >
                               <ProjectMenu
                               project={project}
@@ -880,7 +847,6 @@ const handleDelete = async (project: Project): Promise<void> => {
                 </div>
               </div>
             </div>
-            <AuthDebug/> {/* Debug component to show auth state */}
             {/* Current Audio File Info */}
             {currentAudioFile && (
               <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 w-full">

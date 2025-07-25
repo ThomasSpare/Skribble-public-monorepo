@@ -114,7 +114,7 @@ export default function GuestJoinPage() {
       if (data.success) {
         setSuccess(true);
         setTimeout(() => {
-          router.push(`/projects/${data.data?.projectId}`);
+          router.push(`/project/${data.data?.projectId}`);
         }, 2000);
       } else {
         if (response.status === 401) {
@@ -162,8 +162,8 @@ export default function GuestJoinPage() {
         
         // Show success message with trial info
         setTimeout(() => {
-          router.push(`/projects/${data.data?.projectId}`);
-        }, 3000);
+          router.push(`/project/${data.data?.projectId}`);
+        }, 2000);
       } else {
         setError(data.error?.message || 'Failed to create guest account');
       }

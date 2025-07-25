@@ -281,13 +281,6 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
         <div className="flex items-center justify-between p-6 border-b border-skribble-azure/20">
           <h2 className="text-2xl font-madimi text-skribble-sky">Upload Audio</h2>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => setShowDebug(!showDebug)}
-              className="p-2 text-skribble-azure hover:text-skribble-sky transition-colors"
-              title="Toggle Debug Info"
-            >
-              <Bug className="w-4 h-4" />
-            </button>
             {onClose && (
               <button 
                 onClick={onClose}
@@ -316,7 +309,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
           )}
 
           {/* Debug Panel */}
-          {showDebug && (
+          {/* {showDebug && (
             <div className="bg-skribble-dark/30 rounded-xl p-4 border border-skribble-azure/20">
               <h3 className="text-sm font-medium text-skribble-azure mb-2">Debug Information</h3>
               <div className="bg-black/20 rounded p-2 max-h-40 overflow-y-auto">
@@ -335,7 +328,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
                 Clear Debug Log
               </button>
             </div>
-          )}
+          )} */}
 
           {/* File Drop Zone */}
           {!selectedFile && (

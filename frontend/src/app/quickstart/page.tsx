@@ -12,7 +12,6 @@ import {
   Mic, 
   Download,
   Keyboard,
-  Smartphone,
   HelpCircle,
   ArrowRight,
   Clock,
@@ -238,9 +237,12 @@ export default function QuickstartPage() {
                   Join a Project
                 </h3>
                 <ul className="text-skribble-azure space-y-2 text-sm">
-                  <li>• <strong>No account required!</strong> Click the private link</li>
+                  <li>• <strong>No account required!</strong></li>
+                  <li>•  Paste the share link you received in your browser</li>
                   <li>• Or create a free account for extra features</li>
                   <li>• You'll see the project with audio and waveform</li>
+                  <li>• You can Make annotations and voice notes</li>
+                  <li>• Bookmark the project page so you can return to it !</li>
                 </ul>
               </div>
 
@@ -369,7 +371,7 @@ export default function QuickstartPage() {
                 },
                 {
                   icon: Mic,
-                  title: 'Voice Notes',
+                  title: 'Voice Notes (free for artists)',
                   features: ['Click the 🎤 Voice Note button', 'Record feedback (up to 2 minutes)', 'Perfect for explaining complex musical ideas']
                 },
                 {

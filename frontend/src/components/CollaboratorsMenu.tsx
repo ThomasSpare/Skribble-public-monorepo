@@ -231,7 +231,7 @@ const fetchCollaborators = async () => {
   if (!isOpen) return null;
 
   return (
-    <div className="absolute right-0 top-full mt-2 w-96 bg-skribble-plum/90 backdrop-blur-md rounded-xl border border-skribble-azure/20 shadow-lg z-50" ref={menuRef}>
+    <div className="absolute right-0 top-12 mt-2 w-96 bg-skribble-plum/90 backdrop-blur-md rounded-xl border border-skribble-azure/20 shadow-lg z-50" ref={menuRef}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-skribble-azure/20">
         <div className="flex items-center gap-2">

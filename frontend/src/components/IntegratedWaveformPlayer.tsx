@@ -223,8 +223,22 @@ export default function IntegratedWaveformPlayer({
   };
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 10;
-  const ANNOTATION_BUBBLE_HEIGHT = 32;
-  const ANNOTATION_BUBBLE_WIDTH = 36;
+  
+  // Responsive annotation bubble sizing
+  const getAnnotationBubbleDimensions = () => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+    if (isMobile) {
+      // On mobile, use smaller bubbles that are proportional to the mobile canvas
+      return {
+        width: 24, // Smaller for mobile
+        height: 20  // Smaller for mobile
+      };
+    }
+    return { width: 36, height: 32 }; // Desktop sizes
+  };
+  
+  const ANNOTATION_BUBBLE_HEIGHT = getAnnotationBubbleDimensions().height;
+  const ANNOTATION_BUBBLE_WIDTH = getAnnotationBubbleDimensions().width;
 
   // Enable audio on any user interaction
   useEffect(() => {
@@ -762,7 +776,7 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
     
     return {
       left,
-      top: ANNOTATION_BUBBLE_HEIGHT + 15
+      top: getAnnotationBubbleDimensions().height + 15
     };
   };
 
@@ -935,6 +949,10 @@ const cycleGridMode = () => {
     annotation: AnnotationType, 
     isHovered: boolean
   ) => {
+    // Get responsive dimensions
+    const bubbleDimensions = getAnnotationBubbleDimensions();
+    const bubbleHeight = bubbleDimensions.height;
+    
     const lineColor = getAnnotationColor(annotation);
     const lineWidth = isHovered ? 3 : 2;
     const alpha = isHovered ? 0.9 : 0.6;
@@ -946,7 +964,7 @@ const cycleGridMode = () => {
     
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.moveTo(x, ANNOTATION_BUBBLE_HEIGHT + 8);
+    ctx.moveTo(x, bubbleHeight + 8);
     ctx.lineTo(x, height - 5);
     ctx.stroke();
     ctx.setLineDash([]);
@@ -957,7 +975,7 @@ const cycleGridMode = () => {
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x, ANNOTATION_BUBBLE_HEIGHT + 8);
+      ctx.moveTo(x, bubbleHeight + 8);
       ctx.lineTo(x, height - 5);
       ctx.stroke();
     }
@@ -971,7 +989,12 @@ const cycleGridMode = () => {
     annotation: AnnotationType, 
     isHovered: boolean
   ) => {
-    const bubbleX = x - ANNOTATION_BUBBLE_WIDTH / 2;
+    // Get responsive dimensions
+    const bubbleDimensions = getAnnotationBubbleDimensions();
+    const bubbleWidth = bubbleDimensions.width;
+    const bubbleHeight = bubbleDimensions.height;
+    
+    const bubbleX = x - bubbleWidth / 2;
     const bubbleY = 5;
     const bubbleColor = getAnnotationColor(annotation);
     const scale = isHovered ? 1.1 : 1;
@@ -979,9 +1002,9 @@ const cycleGridMode = () => {
     ctx.save();
     
     if (isHovered) {
-      ctx.translate(x, bubbleY + ANNOTATION_BUBBLE_HEIGHT / 2);
+      ctx.translate(x, bubbleY + bubbleHeight / 2);
       ctx.scale(scale, scale);
-      ctx.translate(-x, -(bubbleY + ANNOTATION_BUBBLE_HEIGHT / 2));
+      ctx.translate(-x, -(bubbleY + bubbleHeight / 2));
     }
     
     ctx.fillStyle = bubbleColor;
@@ -990,13 +1013,13 @@ const cycleGridMode = () => {
     ctx.shadowOffsetY = 2;
     
     ctx.beginPath();
-    ctx.roundRect(bubbleX, bubbleY, ANNOTATION_BUBBLE_WIDTH, ANNOTATION_BUBBLE_HEIGHT - 6, 8);
+    ctx.roundRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight - 6, 8);
     ctx.fill();
     
     ctx.beginPath();
-    ctx.moveTo(x - 6, bubbleY + ANNOTATION_BUBBLE_HEIGHT - 6);
-    ctx.lineTo(x, bubbleY + ANNOTATION_BUBBLE_HEIGHT + 2);
-    ctx.lineTo(x + 6, bubbleY + ANNOTATION_BUBBLE_HEIGHT - 6);
+    ctx.moveTo(x - 6, bubbleY + bubbleHeight - 6);
+    ctx.lineTo(x, bubbleY + bubbleHeight + 2);
+    ctx.lineTo(x + 6, bubbleY + bubbleHeight - 6);
     ctx.closePath();
     ctx.fill();
     
@@ -1005,7 +1028,7 @@ const cycleGridMode = () => {
     ctx.shadowOffsetY = 0;
     
     drawAnnotationIcon(ctx, x, bubbleY + 4, annotation.annotationType, isHovered);
-    drawPriorityIndicator(ctx, bubbleX + ANNOTATION_BUBBLE_WIDTH - 8, bubbleY + 4, annotation.priority);
+    drawPriorityIndicator(ctx, bubbleX + bubbleWidth - 8, bubbleY + 4, annotation.priority);
     
     ctx.restore();
   };
@@ -1229,17 +1252,18 @@ const drawWaveform = useCallback(() => {
 
     for (const annotation of visibleAnnotations) {
       const x = annotation.screenX * rect.width;
-      const bubbleX = x - ANNOTATION_BUBBLE_WIDTH / 2;
+      const bubbleDimensions = getAnnotationBubbleDimensions();
+      const bubbleX = x - bubbleDimensions.width / 2;
       const bubbleY = 5;
       
       const isOverBubble = mouseX >= bubbleX && 
-                          mouseX <= bubbleX + ANNOTATION_BUBBLE_WIDTH && 
+                          mouseX <= bubbleX + bubbleDimensions.width && 
                           mouseY >= bubbleY && 
-                          mouseY <= bubbleY + ANNOTATION_BUBBLE_HEIGHT;
+                          mouseY <= bubbleY + bubbleDimensions.height;
       
       const isOverLine = mouseX >= x - 4 && 
                         mouseX <= x + 4 && 
-                        mouseY >= bubbleY + ANNOTATION_BUBBLE_HEIGHT;
+                        mouseY >= bubbleY + bubbleDimensions.height;
 
       if (isOverBubble || isOverLine) {
         foundHover = {
@@ -1714,8 +1738,6 @@ useEffect(() => {
     try {
       // Extract clean filename from S3 URL
       const cleanFileName = extractCleanFilename(audioUrl, title);
-      console.log('🎵 Original URL:', audioUrl);
-      console.log('🎵 Clean filename:', cleanFileName);
       
       // Use your existing exportForDAW function
       const result = await exportForDAW(audioUrl, annotations, title, cleanFileName, format);
@@ -1845,9 +1867,10 @@ const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     
     for (const annotation of visibleAnnotations) {
       const annotationX = annotation.screenX * rect.width;
-      const bubbleX = annotationX - ANNOTATION_BUBBLE_WIDTH / 2;
+      const bubbleDimensions = getAnnotationBubbleDimensions();
+      const bubbleX = annotationX - bubbleDimensions.width / 2;
 
-      if (touchX >= bubbleX && touchX <= bubbleX + ANNOTATION_BUBBLE_WIDTH) {
+      if (touchX >= bubbleX && touchX <= bubbleX + bubbleDimensions.width) {
         tappedAnnotation = annotation;
         break;
       }

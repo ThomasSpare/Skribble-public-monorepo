@@ -748,10 +748,6 @@ const handleDelete = async (project: Project): Promise<void> => {
             disableAnnotationFetching={false}  // ✅ Enable annotation fetching
             initialAnnotations={[]}  // ✅ Start with empty array
             onVersionChange={handleVersionChange}
-            onTimeUpdate={(currentTime) => {
-              // Optional: Track playback time
-              console.log('Current time:', currentTime);
-            }}
             onLoadComplete={(duration) => {
               console.log('🎵 ProjectPage: Audio loaded successfully, duration:', duration);
               setAudioUrlLoading(false);

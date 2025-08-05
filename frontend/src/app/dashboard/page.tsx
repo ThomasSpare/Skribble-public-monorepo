@@ -122,6 +122,27 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
+  // Close mobile menu when clicking outside or pressing escape
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    if (mobileMenuOpen) {
+      document.addEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.body.style.overflow = 'unset';
+    };
+  }, [mobileMenuOpen]);
+
   // Initialize dashboard on mount
   useEffect(() => {
     initializeDashboard();
@@ -557,32 +578,62 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark">
-      {/* Header */}
-      <div className="bg-skribble-plum/30 backdrop-blur-md border-b border-skribble-azure/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <div className="flex items-center gap-6">
-            {/* Animated Logo - Same as landing page but smaller */}
-            <div className="relative">
-              <h1 className="font-madimi text-xl text-skribble-sky">
-                Skribble
-              </h1>
-              <div className="absolute -top-2 -right-3 bg-skribble-azure rounded-lg rounded-bl-sm px-1.5 py-0.5 shadow-lg animate-float">
-                <div className="flex items-center gap-0.5">
-                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-pulse"></div>
-                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                  <div className="w-0.5 h-0.5 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                </div>
+{/* Header */}
+<header className="sticky top-0 z-40 bg-skribble-dark/95 backdrop-blur-md border-b border-skribble-azure/20">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+    <div className="flex items-center gap-3">
+      {/* Logo - Larger on mobile */}
+      <div className="flex-shrink-0">
+        <Link href="/dashboard" className="flex items-center gap-2">
+          <div className="relative">
+            <h1 className="font-madimi text-2xl md:text-2xl text-skribble-sky">
+              Skribble
+            </h1>
+            <div className="absolute -top-2 -right-3 bg-skribble-azure rounded-lg px-1.5 py-0.5 shadow-lg animate-float">
+              <div className="flex items-center gap-0.5">
+                <div className="w-0.5 h-0.5 bg-white rounded-full animate-pulse"></div>
+                <div className="w-0.5 h-0.5 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-0.5 h-0.5 bg-white rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
               </div>
             </div>
-            </div>
+          </div>
+        </Link>
+      </div>
 
-            {/* Navigation */}
-            <div className="md:hidden relative">
+      {/* Mobile Search - Always visible on mobile */}
+      <div className="md:hidden flex-1 max-w-xs mx-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-skribble-azure" />
+          <input
+            type="text"
+            placeholder="Search projects..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-skribble-dark/50 border border-skribble-azure/20 rounded-lg text-white placeholder-skribble-azure/60 focus:outline-none focus:border-skribble-azure focus:ring-1 focus:ring-skribble-azure text-sm"
+          />
+        </div>
+      </div>
+
+      {/* Mobile Profile Image - Standalone */}
+      <div className="md:hidden flex-shrink-0">
+        {user.profileImage ? (
+          <img 
+            src={user.profileImage} 
+            alt={user.username}
+            className="w-8 h-8 rounded-full border border-skribble-azure/30 object-cover"
+          />
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-skribble-azure to-skribble-purple flex items-center justify-center text-white font-bold text-xs">
+            {user.username.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Menu Button - Just the menu icon */}
+      <div className="md:hidden relative">
         <button
-          className="text-skribble-sky hover:text-skribble-azure transition-colors p-2"
-          onClick={() => setMobileMenuOpen((open) => !open)}
+          className="flex items-center justify-center text-skribble-azure hover:text-skribble-sky transition-colors p-2 relative z-50 touch-manipulation"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           aria-label="Open mobile menu"
           aria-expanded={mobileMenuOpen}
         >
@@ -590,70 +641,118 @@ export default function DashboardPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
+        
+        {/* Mobile Dropdown Menu - Fixed positioning */}
         {mobileMenuOpen && (
-          <div className="absolute right-0 mt-2 bg-skribble-dark rounded-lg shadow-lg flex flex-col gap-2 p-4 md:hidden z-50">
-            <Link href="#features" className="text-skribble-sky hover:text-skribble-azure transition-colors">
-              Features
-            </Link>
-            <Link href="quickstart" className="text-skribble-sky hover:text-skribble-azure transition-colors">
-              Quickstart
-            </Link>
+          <>
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+              onClick={() => setMobileMenuOpen(false)}
+            />
             
-            <Link href="#pricing" className="text-skribble-sky hover:text-skribble-azure transition-colors">
-              Pricing
-            </Link>
-            <Link 
-            href="/login" 
-            className="text-skribble-sky hover:text-skribble-azure transition-colors"
-          >
-            Sign In
-          </Link>
-          <Link
-            className="text-skribble-sky hover:text-skribble-azure transition-colors" 
-            href="/register" 
-          >Register</Link>
-            <Link href="#about" className="text-skribble-sky hover:text-skribble-azure transition-colors">
-              About
-            </Link>
-          </div>
+            {/* Menu Content - Enhanced visibility */}
+            <div className="fixed right-2 top-16 bg-skribble-plum/100 backdrop-blur-md rounded-lg shadow-2xl border border-skribble-azure/30 p-4 z-50 min-w-[280px] max-w-[calc(100vw-1rem)] animate-slide-up">
+              
+              {/* User Profile Info - Mobile */}
+              <div className="flex flex-col gap-3 border-b border-skribble-azure/20 pb-4 mb-4">
+                <div className="flex items-center gap-3">
+                  {user.profileImage ? (
+                    <img 
+                      src={user.profileImage} 
+                      alt={user.username}
+                      className="w-10 h-10 rounded-full border-2 border-skribble-azure/30 object-cover"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-skribble-azure to-skribble-purple flex items-center justify-center text-white font-bold text-sm">
+                      {user.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-skribble-sky font-medium text-sm truncate">{user.username}</h3>
+                    <p className="text-skribble-azure text-xs truncate">{user.email}</p>
+                  </div>
+                </div>
+                
+                {/* User Role & Subscription */}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="px-2 py-1 bg-skribble-purple/30 text-skribble-sky rounded-full capitalize">
+                    {user.role}
+                  </span>
+                  <span className="px-2 py-1 bg-skribble-azure/20 text-skribble-azure rounded-full capitalize">
+                    {user.subscriptionTier} Plan
+                  </span>
+                </div>
+              </div>
+              
+              {/* Menu Items */}
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    setShowSettings(true);
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-3 px-3 py-3 text-skribble-azure hover:text-skribble-sky hover:bg-skribble-plum/30 rounded-lg transition-colors text-left min-h-[44px] touch-manipulation"
+                >
+                  <Settings className="w-5 h-5" />
+                  <span className="font-medium">Account Settings</span>
+                </button>
+                
+                <button
+                  onClick={() => {
+                    handleLogout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="flex items-center gap-3 px-3 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-colors text-left min-h-[44px] touch-manipulation"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span className="font-medium">Sign Out</span>
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
-            {/* Search */}
-            <div className="flex-1 max-w-lg mx-8">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-skribble-azure" />
-                <input
-                  type="text"
-                  placeholder="Search projects..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-skribble-dark/50 border border-skribble-azure/20 rounded-lg text-white placeholder-skribble-azure focus:outline-none focus:border-skribble-azure focus:ring-1 focus:ring-skribble-azure"
-                />
-              </div>
-            </div>
 
-            {/* User Menu */}
-            <div className="flex items-center gap-4">
-              <span className="text-skribble-azure">Welcome, {user.username}</span>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 text-skribble-azure hover:text-skribble-sky transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-              <button
-                  onClick={() => setShowSettings(true)}
-                  className="p-2 rounded-lg hover:bg-skribble-plum/30 text-skribble-azure transition-colors"
-                  title="Settings"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
-            </div>
+      {/* Desktop Navigation - Hidden on mobile */}
+      <div className="hidden md:flex items-center gap-4 flex-1 justify-end">
+        {/* Search - Desktop */}
+        <div className="flex-1 max-w-lg mx-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-skribble-azure" />
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-skribble-dark/50 border border-skribble-azure/20 rounded-lg text-white placeholder-skribble-azure focus:outline-none focus:border-skribble-azure focus:ring-1 focus:ring-skribble-azure"
+            />
           </div>
         </div>
+
+        {/* User Menu - Desktop */}
+        <div className="flex items-center gap-4 flex-shrink-0">
+          <span className="text-skribble-azure text-sm hidden lg:block">Welcome, {user.username}</span>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-skribble-azure hover:text-skribble-sky transition-colors text-sm"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="hidden lg:block">Logout</span>
+          </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 rounded-lg hover:bg-skribble-plum/30 text-skribble-azure transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
       </div>
+    </div>
+  </div>
+</header>
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

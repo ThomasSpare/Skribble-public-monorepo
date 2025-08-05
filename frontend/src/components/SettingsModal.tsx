@@ -1158,9 +1158,9 @@ const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
                         </div>
 
                         {[
-                          { key: 'showEmail', label: 'Show email in profile', desc: 'Allow others to see your email address' },
-                          { key: 'allowDirectMessages', label: 'Allow direct messages', desc: 'Let other users send you direct messages' },
-                          { key: 'indexInSearch', label: 'Include in search results', desc: 'Allow your profile to appear in search results' }
+                          { key: 'showEmail' as const, label: 'Show email in profile', desc: 'Allow others to see your email address' },
+                          { key: 'allowDirectMessages' as const, label: 'Allow direct messages', desc: 'Let other users send you direct messages' },
+                          { key: 'indexInSearch' as const, label: 'Include in search results', desc: 'Allow your profile to appear in search results' }
                         ].map(({ key, label, desc }) => (
                           <div key={key} className="flex items-center justify-between gap-4">
                             <div className="flex-1">
@@ -1170,7 +1170,7 @@ const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
                             <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
                               <input
                                 type="checkbox"
-                                checked={privacySettings[key as keyof PrivacySettings]}
+                                checked={privacySettings[key]}
                                 onChange={(e) => setPrivacySettings({
                                   ...privacySettings,
                                   [key]: e.target.checked

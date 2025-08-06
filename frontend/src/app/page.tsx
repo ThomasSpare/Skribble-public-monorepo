@@ -282,13 +282,16 @@ export default function LandingPage() {
                   ))}
                 </ul>
 
-                <button className={`w-full py-3 rounded-full font-medium transition-all duration-300 ${
-                  plan.popular
-                    ? 'bg-gradient-to-r from-skribble-azure to-skribble-purple text-white hover:shadow-lg hover:shadow-skribble-azure/25 hover:scale-105'
-                    : 'border border-skribble-azure text-skribble-azure hover:bg-skribble-azure hover:text-white'
-                }`}>
+                <Link 
+                  href={`/register?plan=${plan.name.toLowerCase()}`}
+                  className={`w-full py-3 rounded-full font-medium transition-all duration-300 block text-center ${
+                    plan.popular
+                      ? 'bg-gradient-to-r from-skribble-azure to-skribble-purple text-white hover:shadow-lg hover:shadow-skribble-azure/25 hover:scale-105'
+                      : 'border border-skribble-azure text-skribble-azure hover:bg-skribble-azure hover:text-white'
+                  }`}
+                >
                   Get Started
-                </button>
+                </Link>
               </div>
             ))}
           </div>

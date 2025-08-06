@@ -104,14 +104,29 @@ export default function AnnotationItem({
         <div className="flex items-center gap-3">
           {/* User Avatar */}
           <div className="relative">
-            <img
-              src={annotation.user?.profileImage || '/api/placeholder/32/32'}
-              alt={annotation.user?.username || 'User'}
-              className="w-8 h-8 rounded-full border border-skribble-azure/20"
-              onError={(e) => {
-                e.currentTarget.src = '/api/placeholder/32/32';
-              }}
-            />
+            {annotation.user?.profileImage ? (
+              <img
+                src={annotation.user.profileImage}
+                alt={annotation.user?.username || 'User'}
+                className="w-8 h-8 rounded-full border border-skribble-azure/20 object-cover"
+                onError={(e) => {
+                  // Hide the broken image and show fallback avatar
+                  e.currentTarget.style.display = 'none';
+                  const fallbackDiv = e.currentTarget.nextElementSibling as HTMLElement;
+                  if (fallbackDiv) {
+                    fallbackDiv.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            {/* Fallback avatar */}
+            <div 
+              className={`w-8 h-8 rounded-full border border-skribble-azure/20 bg-gradient-to-br from-skribble-azure to-skribble-purple flex items-center justify-center text-white font-bold text-xs ${
+                annotation.user?.profileImage ? 'hidden' : 'flex'
+              }`}
+            >
+              {(annotation.user?.username || 'U').charAt(0).toUpperCase()}
+            </div>
             {annotation.user?.role === 'producer' && (
               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-skribble-azure rounded-full border border-skribble-dark-plum" 
                    title="Producer" />

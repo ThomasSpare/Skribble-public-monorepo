@@ -8,6 +8,29 @@ import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, Messa
 const ChangelogPage = () => {
   const updates = [
     {
+      version: "1.0.1",
+      date: "August 5, 2025",
+      title: "📱 Mobile Waveform Experience Overhaul",
+      type: "patch", 
+      quote: "Great design is invisible. When it works, you don't notice it. - Jared Spool",
+      features: [
+        { icon: Smartphone, title: "Mobile Waveform Optimization", description: "Crisp, high-resolution waveform rendering with proper pixel ratio scaling" },
+        { icon: Settings, title: "Responsive Annotation Bubbles", description: "Intelligently sized annotation markers that scale with canvas dimensions" },
+        { icon: Music, title: "Enhanced Mobile Ruler", description: "Optimized time markers with proper spacing to prevent clutter" },
+        { icon: Shield, title: "Touch Interaction Fixes", description: "Resolved passive event listener issues and improved tap-to-seek functionality" },
+        { icon: Users, title: "Profile Image Fallbacks", description: "Elegant initial-based avatars replace broken placeholder requests" },
+        { icon: Settings, title: "Mobile UI Spacing", description: "Improved spacing between ruler, timestamps, and controls for better readability" }
+      ],
+      technical: [
+        "Fixed canvas pixel ratio scaling for sharp mobile rendering",
+        "Dynamic annotation bubble sizing based on container dimensions", 
+        "Removed preventDefault() calls to fix passive event listener warnings",
+        "Replaced broken /api/placeholder endpoints with CSS-based avatars",
+        "Mobile-optimized time ruler intervals (doubled spacing)",
+        "Enhanced ResizeObserver for responsive canvas updates"
+      ]
+    },
+    {
       version: "1.0.0",
       date: "July 19, 2025",
       title: "🚀 Official Launch - The Future of Music Collaboration",
@@ -88,6 +111,7 @@ const ChangelogPage = () => {
     switch (type) {
       case 'major': return 'from-green-500 to-emerald-600';
       case 'minor': return 'from-skribble-azure to-skribble-purple';
+      case 'patch': return 'from-orange-500 to-amber-600';
       default: return 'from-skribble-purple to-skribble-plum';
     }
   };
@@ -96,6 +120,7 @@ const ChangelogPage = () => {
     switch (type) {
       case 'major': return <Rocket className="w-5 h-5" />;
       case 'minor': return <Zap className="w-5 h-5" />;
+      case 'patch': return <Smartphone className="w-5 h-5" />;
       default: return <Settings className="w-5 h-5" />;
     }
   };
@@ -161,35 +186,35 @@ const ChangelogPage = () => {
           
           {/* Latest Update Highlight */}
           <div className="mb-16">
-            <div className="bg-gradient-to-r from-green-500/20 to-emerald-600/20 backdrop-blur-sm rounded-2xl border border-green-500/20 p-8 mb-8">
+            <div className="bg-gradient-to-r from-orange-500/20 to-amber-600/20 backdrop-blur-sm rounded-2xl border border-orange-500/20 p-8 mb-8">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg p-2">
-                  <Rocket className="w-6 h-6 text-white" />
+                <div className="bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg p-2">
+                  <Smartphone className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-madimi text-white">Version 1.0.0</h2>
-                  <p className="text-green-200">July 19, 2025</p>
+                  <h2 className="text-2xl font-madimi text-white">Version 1.0.1</h2>
+                  <p className="text-orange-200">August 5, 2025</p>
                 </div>
               </div>
               
               <h3 className="text-xl font-semibold text-white mb-3">
-                🚀 Official Launch - The Future of Music Collaboration
+                📱 Mobile Waveform Experience Overhaul
               </h3>
               
-              <blockquote className="italic text-green-100 mb-6 border-l-4 border-green-400 pl-4">
-                "The best way to predict the future is to invent it." - Alan Kay
+              <blockquote className="italic text-orange-100 mb-6 border-l-4 border-orange-400 pl-4">
+                "Great design is invisible. When it works, you don't notice it." - Jared Spool
               </blockquote>
 
               <div className="grid md:grid-cols-2 gap-4 mb-6">
                 {updates[0].features.map((feature, index) => (
                   <div key={index} className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
                     <div className="flex items-start gap-3">
-                      <div className="bg-green-500/30 rounded-lg p-2 mt-1">
-                        <feature.icon className="w-4 h-4 text-green-200" />
+                      <div className="bg-orange-500/30 rounded-lg p-2 mt-1">
+                        <feature.icon className="w-4 h-4 text-orange-200" />
                       </div>
                       <div>
                         <h4 className="font-medium text-white mb-1">{feature.title}</h4>
-                        <p className="text-sm text-green-100">{feature.description}</p>
+                        <p className="text-sm text-orange-100">{feature.description}</p>
                       </div>
                     </div>
                   </div>
@@ -200,8 +225,8 @@ const ChangelogPage = () => {
                 <h4 className="font-medium text-white mb-3">Technical Implementation</h4>
                 <div className="grid md:grid-cols-2 gap-2">
                   {updates[0].technical?.map((tech, index) => (
-                    <div key={index} className="flex items-center gap-2 text-green-100 text-sm">
-                      <div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div>
+                    <div key={index} className="flex items-center gap-2 text-orange-100 text-sm">
+                      <div className="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
                       {tech}
                     </div>
                   ))}

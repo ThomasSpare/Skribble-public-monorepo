@@ -224,21 +224,32 @@ export default function IntegratedWaveformPlayer({
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 10;
   
-  // Responsive annotation bubble sizing
+  // Responsive annotation bubble sizing based on canvas dimensions
   const getAnnotationBubbleDimensions = () => {
+    const container = waveformContainerRef.current;
+    if (!container) return { width: 36, height: 32 }; // Default desktop sizes
+    
+    const containerWidth = container.clientWidth;
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+    
     if (isMobile) {
-      // On mobile, use smaller bubbles that are proportional to the mobile canvas
+      // Scale bubbles based on the container width ratio
+      // Desktop baseline: ~1200px container = 36px bubble
+      // Mobile: ~750px+ container (200vw) should have proportionally sized bubbles
+      const scaleFactor = Math.min(1, containerWidth / 1200);
+      const baseWidth = 36;
+      const baseHeight = 32;
+      
       return {
-        width: 24, // Smaller for mobile
-        height: 20  // Smaller for mobile
+        width: Math.max(18, Math.floor(baseWidth * scaleFactor * 0.7)), // 70% of scaled size, min 18px
+        height: Math.max(16, Math.floor(baseHeight * scaleFactor * 0.7))  // 70% of scaled size, min 16px
       };
     }
+    
     return { width: 36, height: 32 }; // Desktop sizes
   };
   
-  const ANNOTATION_BUBBLE_HEIGHT = getAnnotationBubbleDimensions().height;
-  const ANNOTATION_BUBBLE_WIDTH = getAnnotationBubbleDimensions().width;
+  // Note: Don't create constants here - use getAnnotationBubbleDimensions() directly for dynamic sizing
 
   // Enable audio on any user interaction
   useEffect(() => {
@@ -676,25 +687,26 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
     return samples;
   }, [waveformData, duration, zoomLevel, scrollOffset]);
 
-  // Calculate time markers for the ruler
+  // Calculate time markers for the ruler with mobile optimization
   const getTimeMarkers = useCallback(() => {
     const visibleDuration = duration / zoomLevel;
     const startTime = scrollOffset;
     const endTime = startTime + visibleDuration;
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
     
     let interval: number;
     if (visibleDuration <= 10) {
-      interval = 0.5;
+      interval = isMobile ? 1 : 0.5; // Less cluttered on mobile
     } else if (visibleDuration <= 30) {
-      interval = 1;
+      interval = isMobile ? 2 : 1;
     } else if (visibleDuration <= 60) {
-      interval = 5;
+      interval = isMobile ? 10 : 5;
     } else if (visibleDuration <= 300) {
-      interval = 10;
+      interval = isMobile ? 20 : 10;
     } else if (visibleDuration <= 600) {
-      interval = 30;
+      interval = isMobile ? 60 : 30;
     } else {
-      interval = 60;
+      interval = isMobile ? 120 : 60;
     }
     
     const markers = [];
@@ -1160,38 +1172,52 @@ const drawWaveform = useCallback(() => {
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) return;
 
-  // Update canvas size to match container
+  // Update canvas size to match container with pixel ratio for crisp rendering
   const container = waveformContainerRef.current;
   if (container) {
-    canvas.width = container.clientWidth;
-    canvas.height = CANVAS_HEIGHT;
+    const pixelRatio = window.devicePixelRatio || 1;
+    const containerWidth = container.clientWidth;
+    const containerHeight = CANVAS_HEIGHT;
+    
+    // Set internal canvas size (accounting for pixel ratio)
+    canvas.width = containerWidth * pixelRatio;
+    canvas.height = containerHeight * pixelRatio;
+    
+    // Set display size (CSS size)
+    canvas.style.width = containerWidth + 'px';
+    canvas.style.height = containerHeight + 'px';
+    
+    // Scale context for crisp rendering
+    ctx.scale(pixelRatio, pixelRatio);
   }
 
   const { width, height } = canvas;
+  const displayWidth = canvas.style.width ? parseInt(canvas.style.width) : width;
+  const displayHeight = canvas.style.height ? parseInt(canvas.style.height) : height;
   const visibleWaveform = getVisibleWaveform();
   const visibleDuration = duration / zoomLevel;
   const progress = duration > 0 ? (currentTime - scrollOffset) / visibleDuration : 0;
   
   // Clear canvas with background
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, displayWidth, displayHeight);
   
   // Draw grid first (if enabled)
   if (gridMode !== 'none') {
-  drawGridEnhanced(ctx, width, height, visibleDuration);
-}
+    drawGridEnhanced(ctx, displayWidth, displayHeight, visibleDuration);
+  }
   
   // Draw waveform with performance optimization
   if (visibleWaveform.length > 0) {
-    const barWidth = width / visibleWaveform.length;
-    const centerY = height / 2;
+    const barWidth = displayWidth / visibleWaveform.length;
+    const centerY = displayHeight / 2;
     
     // Create paths for batch rendering
     const backgroundPath = new Path2D();
     const progressPath = new Path2D();
     
     visibleWaveform.forEach((sample, i) => {
-      const barHeight = sample * height * 0.7;
+      const barHeight = sample * displayHeight * 0.7;
       const x = i * barWidth;
       const y = centerY - barHeight / 2;
       const w = Math.max(1, barWidth - 1);
@@ -1216,25 +1242,44 @@ const drawWaveform = useCallback(() => {
   
   // Draw playhead
   if (currentTime >= scrollOffset && currentTime <= scrollOffset + visibleDuration) {
-    const playheadX = ((currentTime - scrollOffset) / visibleDuration) * width;
+    const playheadX = ((currentTime - scrollOffset) / visibleDuration) * displayWidth;
     
     ctx.strokeStyle = '#C6D8FF';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, height);
+    ctx.lineTo(playheadX, displayHeight);
     ctx.stroke();
     
     ctx.fillStyle = '#C6D8FF';
     ctx.beginPath();
-    ctx.arc(playheadX, height - 10, 4, 0, Math.PI * 2);
+    ctx.arc(playheadX, displayHeight - 10, 4, 0, Math.PI * 2);
     ctx.fill();
   }
   
   // Draw annotations on top
-  drawAnnotations(ctx, width, height);
+  drawAnnotations(ctx, displayWidth, displayHeight);
   
 }, [waveformData, currentTime, duration, zoomLevel, scrollOffset, gridMode, bpm, gridOffset]);
+
+  // Watch for container size changes and redraw for responsive sizing
+  useEffect(() => {
+    const container = waveformContainerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      // Force redraw when container size changes (for responsive annotation bubbles)
+      requestAnimationFrame(() => {
+        drawWaveform();
+      });
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [drawWaveform]);
 
   // Enhanced mouse tracking for hover effects (FIXED)
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1310,7 +1355,17 @@ const drawWaveform = useCallback(() => {
     const progress = mouseX / rect.width;
     const visibleDuration = duration / zoomLevel;
     const newTime = scrollOffset + (progress * visibleDuration);
+    
+    // Add visual click feedback
+    setClickFeedback({
+      x: mouseX,
+      timestamp: Date.now()
+    });
+    
     seekTo(newTime);
+    
+    // Clear click feedback after animation
+    setTimeout(() => setClickFeedback(null), 800);
   };
 
   // Enhanced seek function with visual feedback
@@ -1807,7 +1862,7 @@ const isExportFormatAvailable = (format: string): boolean => {
 };
 
 const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-  e.preventDefault();
+  // Don't preventDefault - let React handle passive events
   
   const canvas = canvasRef.current;
   if (!canvas || !isAudioReady) return;
@@ -1827,7 +1882,7 @@ const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) =>
 
 
 const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-  e.preventDefault();
+  // Don't preventDefault - let React handle passive events
   
   if (!isDragging || !canvasRef.current || !dragStart) return;
   
@@ -1851,13 +1906,15 @@ const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => 
 }, [isDragging, dragStart, duration, zoomLevel]);
 
 const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-  e.preventDefault();
+  // Don't preventDefault - let React handle passive events
 
   const canvas = canvasRef.current;
   if (!canvas || !isAudioReady) return;
 
   // If it was a tap (not a drag), seek to that position
-  if (isDragging && dragStart && Math.abs(e.changedTouches[0].clientX - dragStart.x) < 10) {
+  // Increased threshold for mobile to handle touch variations
+  const touchThreshold = 15; // Increased from 10 to 15 pixels
+  if (isDragging && dragStart && Math.abs(e.changedTouches[0].clientX - dragStart.x) < touchThreshold) {
     const rect = canvas.getBoundingClientRect();
     const touchX = e.changedTouches[0].clientX - rect.left;
     
@@ -1883,7 +1940,17 @@ const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
       const progress = touchX / rect.width;
       const visibleDuration = duration / zoomLevel;
       const newTime = scrollOffset + (progress * visibleDuration);
+      
+      // Add visual click feedback for mobile
+      setClickFeedback({
+        x: touchX,
+        timestamp: Date.now()
+      });
+      
       seekTo(newTime);
+      
+      // Clear click feedback after animation
+      setTimeout(() => setClickFeedback(null), 800);
     }
     
     // Provide haptic feedback
@@ -1898,7 +1965,7 @@ const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
             
 // Mobile-optimized double-tap to zoom
 const handleDoubleTap = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
-  e.preventDefault();
+  // Don't preventDefault - let React handle passive events
   
   const canvas = canvasRef.current;
   if (!canvas) return;
@@ -2188,8 +2255,6 @@ return (
         >
           <canvas
           ref={canvasRef}
-          width={800}
-          height={CANVAS_HEIGHT}
           className={`bg-skribble-dark/30 sm:rounded-lg border-t border-b sm:border border-skribble-azure/10 transition-all duration-200 waveform-canvas gesture-enabled mobile-canvas ${
             isDragging ? 'cursor-grabbing' : 
             hoveredAnnotation ? 'cursor-pointer' : 
@@ -2286,7 +2351,7 @@ return (
               className="absolute pointer-events-none z-40"
               style={{
                 left: clickFeedback.x - 15,
-                top: (typeof window !== 'undefined' && window.innerWidth < 640 ? 160 : CANVAS_HEIGHT) / 2 - 15,
+                top: CANVAS_HEIGHT / 2 - 15,
                 width: 30,
                 height: 30
               }}
@@ -2350,7 +2415,7 @@ return (
       </div>
 
       {/* Time Ruler - Mobile responsive */}
-      <div className="relative h-6 sm:h-8 mx-3 sm:mx-6 mb-3 sm:mb-4">
+      <div className="relative h-6 sm:h-8 mx-3 sm:mx-6 mb-6 sm:mb-4">
         <div className="absolute inset-0 bg-skribble-dark/20 rounded-lg border-t border-skribble-azure/10">
           {getTimeMarkers().map((marker, index) => (
             <div
@@ -2385,8 +2450,8 @@ return (
                 display: currentTime >= scrollOffset && currentTime <= scrollOffset + (duration / zoomLevel) ? 'block' : 'none'
               }}
             >
-              <div className="absolute top-full mt-1 transform -translate-x-1/2">
-                <div className="bg-skribble-azure text-white text-xs px-1 py-0.5 rounded font-mono whitespace-nowrap">
+              <div className="absolute top-full mt-2 sm:mt-1 transform -translate-x-1/2">
+                <div className="bg-skribble-azure text-white text-xs px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
                   {formatRulerTime(currentTime)}
                 </div>
               </div>
@@ -2396,9 +2461,9 @@ return (
       </div>
 
       {/* Mobile-First Controls */}
-      <div className="p-3 sm:p-6 pt-1 sm:pt-5">
+      <div className="p-3 sm:p-6 pt-4 sm:pt-5">
         {/* Mobile: Stack controls vertically */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-0 sm:items-center sm:justify-between">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-0 sm:items-center sm:justify-between">
           
           {/* Time Display - Larger on mobile */}
           <div className="text-sm sm:text-base text-skribble-azure font-mono text-center sm:text-left">

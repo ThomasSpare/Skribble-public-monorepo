@@ -724,8 +724,8 @@ body {
 
 /* Advanced mobile gestures */
 .gesture-enabled {
-  /* Enable pinch zoom */
-  touch-action: pan-x pinch-zoom;
+  /* Allow touch manipulation (tap, pan-x) without preventDefault */
+  touch-action: manipulation;
 
   /* Disable text selection during gestures */
   -webkit-user-select: none;
@@ -1077,7 +1077,7 @@ body {
     /* Force wider canvas for horizontal scrolling */
     min-width: 200vw !important;
     width: 200vw !important;
-    height: 160px !important;
+    height: 200px !important; /* Match desktop height for consistent proportions */
   }
 
   /* Ensure the container allows horizontal scrolling */

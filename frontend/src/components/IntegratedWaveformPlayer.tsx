@@ -2710,7 +2710,7 @@ return (
             onWheel={handleWheel}
             onClick={handleCanvasClick}
             onMouseLeave={(e) => {
-              handleMouseLeave(e);
+              handleMouseLeave();
               // End any drag operation when mouse leaves canvas
               if (isMouseDragging) {
                 setIsMouseDragging(false);

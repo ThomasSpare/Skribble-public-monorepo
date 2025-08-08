@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, X, Info, VolumeX, Loader2, AlertCircle, Zap, Sparkles, Check, ZoomIn, ZoomOut, Home, Grid, User } from 'lucide-react';
+import { Play, Pause, Clock, SkipBack, SkipForward, History, Volume2, X, Palette, RotateCcw, Sun, VolumeX, Loader2, AlertCircle, Sparkles, Check, ZoomIn, ZoomOut, Home, Grid, User } from 'lucide-react';
 import AnnotationSystem from './AnnotationSystem';
 import TempoGridControls from './TempoGridControls';
 import VersionControl from './VersionControl';
@@ -66,6 +66,12 @@ interface HoveredAnnotation {
   createdAt: string;   
 }
 
+interface GradientShaderSettings {
+  pattern: 'linear' | 'radial' | 'conic' | 'wave' | 'energy';
+  intensity: number; // 1-3
+  enabled: boolean;
+}
+
 
 
 export default function IntegratedWaveformPlayer({ 
@@ -107,7 +113,18 @@ export default function IntegratedWaveformPlayer({
   const [pausedByUser, setPausedByUser] = useState(false);
   const [shouldResumeFromCursor, setShouldResumeFromCursor] = useState(false);
 
-
+  // Mouse drag state
+  const [isMouseDragging, setIsMouseDragging] = useState(false);
+  const [mouseDragStart, setMouseDragStart] = useState({ x: 0, offset: 0 });
+  const [dragButton, setDragButton] = useState<number>(0); // Track which button is pressed
+  
+  // Momentum scrolling state
+  const [isInertiaScrolling, setIsInertiaScrolling] = useState(false);
+  const [velocity, setVelocity] = useState(0);
+  const [lastMoveTime, setLastMoveTime] = useState(0);
+  const [lastMouseX, setLastMouseX] = useState(0);
+  const [justCompletedDrag, setJustCompletedDrag] = useState(false);
+  const inertiaAnimationRef = useRef<number | null>(null);
 
   // Annotation state
   const [showAnnotations, setShowAnnotations] = useState(true);
@@ -142,12 +159,18 @@ export default function IntegratedWaveformPlayer({
   const [tapTimes, setTapTimes] = useState<number[]>([]);
   const [gridOffset, setGridOffset] = useState(0);
 
-
-
-
   // Tempo grid and beat detection state
   const [gridOffsetMs, setGridOffsetMs] = useState(0);
   const [detectedBeats, setDetectedBeats] = useState<number[]>([]);
+
+  // Gradient shader settings
+  const [gradientSettings, setGradientSettings] = useState<GradientShaderSettings>({
+  pattern: 'linear',
+  intensity: 2,
+  enabled: true
+});
+const [showGradientMenu, setShowGradientMenu] = useState(false);
+
 
 // DAW export options
   const DAW_EXPORT_OPTIONS = [
@@ -334,6 +357,15 @@ export default function IntegratedWaveformPlayer({
 
   fetchUserTierInfo();
 }, []);
+
+  // Cleanup momentum scrolling animation on unmount
+  useEffect(() => {
+    return () => {
+      if (inertiaAnimationRef.current) {
+        cancelAnimationFrame(inertiaAnimationRef.current);
+      }
+    };
+  }, []);
 
 const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
   const tierFormats: Record<string, DAWExportFormat[]> = {
@@ -594,14 +626,11 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
         };
   
         const onLoadStart = () => {
-          console.log('Audio load started');
+          // Audio load started
         };
   
         const onProgress = () => {
-          console.log('Audio loading progress:', {
-            buffered: audio.buffered.length > 0 ? audio.buffered.end(0) : 0,
-            duration: audio.duration
-          });
+          // Audio loading progress
         };
   
         audio.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
@@ -750,6 +779,28 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
       return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
   };
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredAnnotation(null);
+    setMousePosition(null);
+    setClickFeedback(null);
+  }, []);
+
+  const seekTo = useCallback((time: number) => {
+    if (!audioRef.current || !isAudioReady) return;
+    
+    // Don't seek during momentum scrolling to prevent cursor jumping
+    if (isInertiaScrolling) {
+      return;
+    }
+    
+    const audio = audioRef.current;
+    const clampedTime = Math.max(0, Math.min(time, duration));
+    audio.currentTime = clampedTime;
+    
+    // Update last cursor position for Tab functionality (manual seeking)
+    setLastCursorPosition(clampedTime);
+  }, [duration, isAudioReady, isInertiaScrolling]);
 
   const formatTime = (time: number) => {
     const minutes = Math.floor(time / 60);
@@ -1169,7 +1220,7 @@ const drawWaveform = useCallback(() => {
   const canvas = canvasRef.current;
   if (!canvas || waveformData.length === 0) return;
 
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const ctx = canvas.getContext('2d', { alpha: true });
   if (!ctx) return;
 
   // Update canvas size to match container with pixel ratio for crisp rendering
@@ -1199,8 +1250,7 @@ const drawWaveform = useCallback(() => {
   const progress = duration > 0 ? (currentTime - scrollOffset) / visibleDuration : 0;
   
   // Clear canvas with background
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(0, 0, displayWidth, displayHeight);
+  ctx.clearRect(0, 0, displayWidth, displayHeight);
   
   // Draw grid first (if enabled)
   if (gridMode !== 'none') {
@@ -1230,12 +1280,22 @@ const drawWaveform = useCallback(() => {
     });
     
     // Batch render background waveform
-    ctx.fillStyle = '#6B5CA5';
+    const backgroundGradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
+    backgroundGradient.addColorStop(0, '#ff9e00');    // orange-peel
+    backgroundGradient.addColorStop(0.5, '#ff8500');  // ut-orange  
+    backgroundGradient.addColorStop(1, '#ff7900');    // safety-orange
+
+    ctx.fillStyle = backgroundGradient;
     ctx.fill(backgroundPath);
-    
-    // Batch render progress waveform
+
+    // Batch render progress waveform (brighter orange gradient)
     if (progress > 0) {
-      ctx.fillStyle = 'deepskyblue';
+      const progressGradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
+      progressGradient.addColorStop(0, '#ff6d00');    // pumpkin (brightest)
+      progressGradient.addColorStop(0.5, '#ff7900');  // safety-orange
+      progressGradient.addColorStop(1, '#ff9100');    // princeton-orange
+      
+      ctx.fillStyle = progressGradient;
       ctx.fill(progressPath);
     }
   }
@@ -1244,17 +1304,25 @@ const drawWaveform = useCallback(() => {
   if (currentTime >= scrollOffset && currentTime <= scrollOffset + visibleDuration) {
     const playheadX = ((currentTime - scrollOffset) / visibleDuration) * displayWidth;
     
-    ctx.strokeStyle = '#C6D8FF';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ff6d00';  // pumpkin orange
+    ctx.lineWidth = 3;  // Make it slightly thicker
+    ctx.shadowColor = '#ff6d00';
+    ctx.shadowBlur = 8;
     ctx.beginPath();
     ctx.moveTo(playheadX, 0);
     ctx.lineTo(playheadX, displayHeight);
     ctx.stroke();
-    
-    ctx.fillStyle = '#C6D8FF';
+
+    ctx.fillStyle = '#ff6d00';  // pumpkin orange
+    ctx.shadowColor = '#ff6d00';
+    ctx.shadowBlur = 10;
     ctx.beginPath();
-    ctx.arc(playheadX, displayHeight - 10, 4, 0, Math.PI * 2);
+    ctx.arc(playheadX, displayHeight - 10, 5, 0, Math.PI * 2);  // Slightly larger
     ctx.fill();
+
+    // Reset shadow for other elements
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
   }
   
   // Draw annotations on top
@@ -1281,6 +1349,42 @@ const drawWaveform = useCallback(() => {
     };
   }, [drawWaveform]);
 
+  // Momentum scrolling implementation
+  const startInertiaScroll = useCallback((initialVelocity: number) => {
+    if (inertiaAnimationRef.current) {
+      cancelAnimationFrame(inertiaAnimationRef.current);
+    }
+    
+    setIsInertiaScrolling(true);
+    setVelocity(initialVelocity);
+    
+    const animate = () => {
+      setVelocity(prevVelocity => {
+        const newVelocity = prevVelocity * 0.95; // Deceleration factor
+        
+        if (Math.abs(newVelocity) < 0.1) {
+          setIsInertiaScrolling(false);
+          return 0;
+        }
+        
+        // Apply the velocity to scroll offset
+        setScrollOffset(prevOffset => {
+          const visibleDuration = duration / zoomLevel;
+          const newOffset = Math.max(0, Math.min(
+            duration - visibleDuration,
+            prevOffset - newVelocity
+          ));
+          return newOffset;
+        });
+        
+        inertiaAnimationRef.current = requestAnimationFrame(animate);
+        return newVelocity;
+      });
+    };
+    
+    inertiaAnimationRef.current = requestAnimationFrame(animate);
+  }, [duration, zoomLevel]);
+
   // Enhanced mouse tracking for hover effects (FIXED)
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -1292,120 +1396,156 @@ const drawWaveform = useCallback(() => {
     
     setMousePosition({ x: mouseX, y: mouseY });
 
-    const visibleAnnotations = getVisibleAnnotations();
-    let foundHover: HoveredAnnotation | null = null;
-
-    for (const annotation of visibleAnnotations) {
-      const x = annotation.screenX * rect.width;
-      const bubbleDimensions = getAnnotationBubbleDimensions();
-      const bubbleX = x - bubbleDimensions.width / 2;
-      const bubbleY = 5;
+    // Handle drag scrolling for right-click
+    if (isMouseDragging && dragButton === 2 && mouseDragStart) {
+      // Calculate velocity for momentum scrolling
+      const currentTime = Date.now();
+      const deltaX = mouseX - mouseDragStart.x;
+      const deltaXFromLast = mouseX - lastMouseX;
+      const deltaTime = currentTime - lastMoveTime;
       
-      const isOverBubble = mouseX >= bubbleX && 
-                          mouseX <= bubbleX + bubbleDimensions.width && 
-                          mouseY >= bubbleY && 
-                          mouseY <= bubbleY + bubbleDimensions.height;
-      
-      const isOverLine = mouseX >= x - 4 && 
-                        mouseX <= x + 4 && 
-                        mouseY >= bubbleY + bubbleDimensions.height;
-
-      if (isOverBubble || isOverLine) {
-        foundHover = {
-          id: annotation.id,
-          x: x,
-          timestamp: annotation.timestamp,
-          text: annotation.text,
-          user: annotation.user?.username || 'Unknown User',
-          type: annotation.annotationType,
-          priority: annotation.priority,
-          status: annotation.status,
-          createdAt: annotation.createdAt
-        };
-        break;
+      if (deltaTime > 0) {
+        const visibleDuration = duration / zoomLevel;
+        const timePerPixel = visibleDuration / rect.width;
+        const velocityPixelsPerMs = deltaXFromLast / Math.max(deltaTime, 1);
+        const currentVelocity = velocityPixelsPerMs * timePerPixel * 16; // Convert to units per frame
+        setVelocity(currentVelocity);
       }
+      
+      setLastMouseX(mouseX);
+      setLastMoveTime(currentTime);
+      
+      const visibleDuration = duration / zoomLevel;
+      const timePerPixel = visibleDuration / rect.width;
+      const deltaTimeTotal = deltaX * timePerPixel;
+      
+      // Update scroll offset for smooth panning
+      const newScrollOffset = Math.max(0, Math.min(
+        duration - visibleDuration,
+        mouseDragStart.offset - deltaTimeTotal
+      ));
+      
+      setScrollOffset(newScrollOffset);
+      return; // Don't check for annotation hovers while dragging
     }
 
-    setHoveredAnnotation(foundHover);
-  }, [getVisibleAnnotations]);
+    // Only check for annotation hovers if not dragging
+    if (!isMouseDragging) {
+      const visibleAnnotations = getVisibleAnnotations();
+      let foundHover: HoveredAnnotation | null = null;
 
-  // Enhanced mouse leave handler (FIXED)
-  const handleMouseLeave = useCallback(() => {
-  setHoveredAnnotation(null);
-  setMousePosition(null);
-}, []);
+      for (const annotation of visibleAnnotations) {
+        const x = annotation.screenX * rect.width;
+        const bubbleDimensions = getAnnotationBubbleDimensions();
+        const bubbleX = x - bubbleDimensions.width / 2;
+        const bubbleY = 5;
+        
+        const isOverBubble = mouseX >= bubbleX && 
+                            mouseX <= bubbleX + bubbleDimensions.width && 
+                            mouseY >= bubbleY && 
+                            mouseY <= bubbleY + bubbleDimensions.height;
+        
+        const isOverLine = mouseX >= x - 4 && 
+                          mouseX <= x + 4 && 
+                          mouseY >= bubbleY + bubbleDimensions.height;
 
-  // Enhanced canvas click handler (FIXED for both issues)
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDragging) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas || duration === 0) return;
+        if (isOverBubble || isOverLine) {
+          foundHover = {
+            id: annotation.id,
+            x: x,
+            timestamp: annotation.timestamp,
+            text: annotation.text,
+            user: annotation.user?.username || 'Unknown User',
+            type: annotation.annotationType,
+            priority: annotation.priority,
+            status: annotation.status,
+            createdAt: annotation.createdAt
+          };
+          break;
+        }
+      }
 
+      setHoveredAnnotation(foundHover);
+    }
+  }, [isMouseDragging, dragButton, mouseDragStart, duration, zoomLevel, getVisibleAnnotations, lastMouseX, lastMoveTime]);
+
+const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const canvas = canvasRef.current;
+  if (!canvas || !isAudioReady) return;
+  
+  // Only handle right-click (button 2) for dragging
+  if (e.button === 2) {
+    e.preventDefault(); // Prevent context menu
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-
-    // First check if we clicked on an annotation (FIXED)
-    if (hoveredAnnotation) {
-      seekTo(hoveredAnnotation.timestamp);
-      return;
+    
+    // Stop any ongoing inertia scrolling
+    if (inertiaAnimationRef.current) {
+      cancelAnimationFrame(inertiaAnimationRef.current);
+      inertiaAnimationRef.current = null;
     }
-
-    // Use rect.width for proper cursor positioning (FIXED)
-    const progress = mouseX / rect.width;
-    const visibleDuration = duration / zoomLevel;
-    const newTime = scrollOffset + (progress * visibleDuration);
+    setIsInertiaScrolling(false);
     
-    // Add visual click feedback
-    setClickFeedback({
-      x: mouseX,
-      timestamp: Date.now()
-    });
+    setIsMouseDragging(true);
+    setMouseDragStart({ x: mouseX, offset: scrollOffset });
+    setDragButton(2);
+    setLastMouseX(mouseX);
+    setLastMoveTime(Date.now());
+    setVelocity(0);
     
-    seekTo(newTime);
-    
-    // Clear click feedback after animation
-    setTimeout(() => setClickFeedback(null), 800);
-  };
+    // Change cursor to grabbing
+    canvas.style.cursor = 'grabbing';
+  }
+}, [isAudioReady, scrollOffset]);
 
-  // Enhanced seek function with visual feedback
-const seekTo = useCallback((time: number) => {
-  if (!audioRef.current || !isAudioReady) return;
-
-  const audio = audioRef.current;
-  const clampedTime = Math.max(0, Math.min(time, duration));
-
-  // 🎯 KEY FEATURE: Update last cursor position when seeking manually
-  setLastCursorPosition(clampedTime);
-  setShouldResumeFromCursor(true);
-
-  // Keep your existing visual feedback code
+const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
   const canvas = canvasRef.current;
-  if (canvas) {
-    const rect = canvas.getBoundingClientRect();
-    const visibleDuration = duration / zoomLevel;
-    const relativeTime = clampedTime - scrollOffset;
-    const x = (relativeTime / visibleDuration) * rect.width;
+  if (!canvas || !isAudioReady) return;
 
-    setClickFeedback({ x, timestamp: clampedTime });
-    setTimeout(() => setClickFeedback(null), 800);
+  // Handle right-click drag end
+  if (isMouseDragging && dragButton === 2) {
+    // If it was a very small movement, treat it as a seek (optional)
+    const mouseThreshold = 5; // pixels
+    const totalMovement = mouseDragStart ? Math.abs(e.clientX - (canvas.getBoundingClientRect().left + mouseDragStart.x)) : 0;
+    
+    if (totalMovement < mouseThreshold) {
+      // Small movement - just end the drag without momentum
+      setVelocity(0);
+    } else {
+      // Start momentum scrolling if there's sufficient velocity
+      if (Math.abs(velocity) > 0.5) {
+        startInertiaScroll(velocity);
+      }
+    }
+    
+    setIsMouseDragging(false);
+    setMouseDragStart({ x: 0, offset: 0 });
+    setDragButton(0);
+    
+    // Set flag to ignore the next click event (prevents phantom click after drag)
+    setJustCompletedDrag(true);
+    setTimeout(() => setJustCompletedDrag(false), 10); // Clear after 10ms
+    
+    // Reset cursor
+    canvas.style.cursor = hoveredAnnotation ? 'pointer' : 'crosshair';
   }
-
-  audio.currentTime = clampedTime;
-
-  // If not playing, update currentTime immediately for visual feedback
-  if (!isPlaying) {
-    setCurrentTime(clampedTime);
-  }
-
-  console.log(`🎯 Cursor positioned at: ${formatTime(clampedTime)}`);
-}, [audioRef, isAudioReady, duration, zoomLevel, scrollOffset, isPlaying, formatTime]);
+}, [isMouseDragging, dragButton, mouseDragStart, isAudioReady, hoveredAnnotation, velocity, startInertiaScroll]);
 
   // Mouse wheel zoom
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
   e.preventDefault();
   
   if (!canvasRef.current) return;
+  
+  // Stop momentum scrolling when user starts zooming
+  if (isInertiaScrolling) {
+    if (inertiaAnimationRef.current) {
+      cancelAnimationFrame(inertiaAnimationRef.current);
+      inertiaAnimationRef.current = null;
+    }
+    setIsInertiaScrolling(false);
+    setVelocity(0);
+  }
   
   const rect = canvasRef.current.getBoundingClientRect();
   const mouseX = e.clientX - rect.left;
@@ -1438,7 +1578,6 @@ const seekTo = useCallback((time: number) => {
   // Playback controls
   const togglePlayPause = async () => {
   if (!audioRef.current || !isAudioReady) {
-    console.warn('Audio not ready for playback');
     return;
   }
 
@@ -1448,25 +1587,19 @@ const seekTo = useCallback((time: number) => {
     // Ensure audio context is running
     if (audioContextRef.current?.state === 'suspended') {
       await audioContextRef.current.resume();
-      console.log('Audio context resumed for playback');
     }
 
     if (isPlaying) {
       // PAUSE: Remember we paused by user action
       audio.pause();
       setPausedByUser(true);
-      console.log('⏸️ Audio paused by user');
     } else {
       // PLAY: Check if we should resume from cursor position
       if (shouldResumeFromCursor && Math.abs(lastCursorPosition - audio.currentTime) > 0.1) {
-        console.log(`▶️ Resuming from cursor position: ${formatTime(lastCursorPosition)}`);
         audio.currentTime = lastCursorPosition;
         setShouldResumeFromCursor(false);
       } else if (pausedByUser) {
-        console.log(`▶️ Resuming from pause position: ${formatTime(audio.currentTime)}`);
         // Resume from current pause position
-      } else {
-        console.log(`▶️ Starting playback from: ${formatTime(audio.currentTime)}`);
       }
 
       // Ensure audio is loaded and ready
@@ -1474,7 +1607,6 @@ const seekTo = useCallback((time: number) => {
         await audio.play();
         setPausedByUser(false);
       } else {
-        console.warn('Audio not ready, loading...');
         audio.load();
         await new Promise((resolve) => {
           audio.addEventListener('canplay', resolve, { once: true });
@@ -1652,44 +1784,30 @@ useEffect(() => {
 
 useEffect(() => {
   const handleKeyDown = (e: KeyboardEvent) => {
-    if (
-      e.code === 'Space' && 
-      !e.ctrlKey && 
-      !e.metaKey && 
-      !e.altKey && 
-      !e.shiftKey
-    ) {
-      const activeElement = document.activeElement;
-      const isInputFocused = activeElement && (
-        activeElement.tagName === 'INPUT' ||
-        activeElement.tagName === 'TEXTAREA' ||
-        (activeElement as HTMLElement).contentEditable === 'true' ||
-        activeElement.getAttribute('role') === 'textbox'
-      );
+    // Check if user is typing in an input field
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      (activeElement as HTMLElement).contentEditable === 'true' ||
+      activeElement.getAttribute('role') === 'textbox'
+    );
 
-      if (isInputFocused) {
-        return;
-      }
+    if (isInputFocused) {
+      return;
+    }
 
+    // Handle Space key - Play/Pause toggle
+    if (e.code === 'Space' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       
-      console.log('⌨️ Spacebar pressed - toggling playback');
-      
-      // 🔑 CRITICAL FIX: Use current values instead of closure values
+      // Use current values to check readiness
       const currentAudioRef = audioRef.current;
       const currentIsAudioReady = isAudioReady;
       const currentUserInteracted = userInteracted;
       const currentAudioUrl = audioUrlState;
       
-      console.log('🔍 Spacebar state check:', {
-        hasAudioRef: !!currentAudioRef,
-        isAudioReady: currentIsAudioReady,
-        userInteracted: currentUserInteracted,
-        hasAudioUrl: !!currentAudioUrl,
-        audioSrc: currentAudioRef?.src?.substring(0, 50)
-      });
-      
-      // Handle the toggle directly instead of calling the function
+      // Handle user interaction
       if (!currentUserInteracted) {
         setUserInteracted(true);
         if (currentAudioUrl && currentAudioUrl.startsWith('http')) {
@@ -1699,17 +1817,39 @@ useEffect(() => {
       }
 
       if (!currentAudioRef || !currentIsAudioReady) {
-        console.warn('⚠️ Audio not ready for spacebar playback');
         return;
       }
 
-      // Direct audio control
+      // Use the proper toggle function to maintain state sync
+      togglePlayPause().catch(() => {});
+    }
+
+    // Handle Tab key - Play from last cursor position
+    if (e.code === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      
+      const currentAudioRef = audioRef.current;
+      const currentIsAudioReady = isAudioReady;
+      const currentUserInteracted = userInteracted;
+      const currentAudioUrl = audioUrlState;
+      
+      // Handle user interaction
+      if (!currentUserInteracted) {
+        setUserInteracted(true);
+        if (currentAudioUrl && currentAudioUrl.startsWith('http')) {
+          initializeAudio(currentAudioUrl);
+        }
+        return;
+      }
+
+      if (!currentAudioRef || !currentIsAudioReady) {
+        return;
+      }
+
+      // Seek to last cursor position and start playing
+      seekTo(lastCursorPosition);
       if (currentAudioRef.paused) {
-        console.log('▶️ Spacebar play');
-        currentAudioRef.play().catch(console.error);
-      } else {
-        console.log('⏸️ Spacebar pause');
-        currentAudioRef.pause();
+        togglePlayPause().catch(() => {});
       }
     }
   };
@@ -1719,7 +1859,7 @@ useEffect(() => {
   return () => {
     document.removeEventListener('keydown', handleKeyDown);
   };
-}, []);
+}, [togglePlayPause, seekTo, lastCursorPosition]);
 
   // Animation loop
   useEffect(() => {
@@ -1754,9 +1894,21 @@ useEffect(() => {
     }
   }, [clickFeedback, drawWaveform]);
 
-  // Auto-scroll to follow playback
   useEffect(() => {
-    if (isPlaying) {
+  const handleClickOutside = (event: MouseEvent) => {
+    const target = event.target as Element;
+    if (showGradientMenu && !target.closest('.relative')) {
+      setShowGradientMenu(false);
+    }
+  };
+
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, [showGradientMenu]);
+
+  // Auto-scroll to follow playback (but not during any user scrolling interaction)
+  useEffect(() => {
+    if (isPlaying && !isInertiaScrolling && !isMouseDragging) {
       const visibleDuration = duration / zoomLevel;
       const visibleEnd = scrollOffset + visibleDuration;
       
@@ -1765,7 +1917,61 @@ useEffect(() => {
         setScrollOffset(Math.max(0, newOffset));
       }
     }
-  }, [currentTime, isPlaying, duration, zoomLevel, scrollOffset]);
+  }, [currentTime, isPlaying, duration, zoomLevel, isInertiaScrolling, isMouseDragging]);
+
+const switchGradientPattern = useCallback((pattern: 'linear' | 'radial' | 'conic' | 'wave' | 'energy') => {
+  setGradientSettings(prev => ({ ...prev, pattern }));
+}, []);
+
+const adjustIntensity = useCallback(() => {
+  setGradientSettings(prev => ({
+    ...prev,
+    intensity: (prev.intensity % 3) + 1
+  }));
+}, []);
+
+const toggleGradient = useCallback(() => {
+  setGradientSettings(prev => ({ ...prev, enabled: !prev.enabled }));
+}, []);
+
+const getGradientClassName = useCallback((): string => {
+  if (!gradientSettings.enabled) return '';
+  
+  const baseClass = 'gradient-shader-bg';
+  const intensityClass = `intensity-${gradientSettings.intensity}`;
+  
+  let patternClass = '';
+  switch (gradientSettings.pattern) {
+    case 'radial':
+      patternClass = 'pattern-1';
+      break;
+    case 'conic':
+      patternClass = 'pattern-2';
+      break;
+    case 'wave':
+      patternClass = 'pattern-3';
+      break;
+    case 'energy':
+      patternClass = 'pattern-4';
+      break;
+    default: // linear
+      patternClass = '';
+  }
+  
+  return `${baseClass} ${patternClass} ${intensityClass}`.trim();
+}, [gradientSettings]);
+
+const getGradientStyle = useCallback((): React.CSSProperties => {
+  if (!gradientSettings.enabled) return { display: 'none' };
+  
+  const opacityMap = { 1: 0.3, 2: 0.5, 3: 0.7 };
+  const blurMap = { 1: '60px', 2: '40px', 3: '20px' };
+  
+  return {
+    opacity: opacityMap[gradientSettings.intensity],
+    filter: `blur(${blurMap[gradientSettings.intensity]})`
+  };
+  }, [gradientSettings]);
 
   const handleDAWExport = async (format: DAWExportFormat) => {
     if (!userTierInfo) {
@@ -1860,6 +2066,42 @@ const isExportFormatAvailable = (format: string): boolean => {
   if (!userTierInfo) return false;
   return userTierInfo.limits.allowedExportFormats.includes(format);
 };
+
+const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Ignore right-clicks (they're for dragging), during momentum scrolling, and phantom clicks after drag
+  if (e.button === 2 || isMouseDragging || isInertiaScrolling || justCompletedDrag) {
+    return;
+  }
+  
+  const canvas = canvasRef.current;
+  if (!canvas || duration === 0) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+
+  // First check if we clicked on an annotation
+  if (hoveredAnnotation) {
+    seekTo(hoveredAnnotation.timestamp);
+    return;
+  }
+
+  // Left-click for seeking
+  const progress = mouseX / rect.width;
+  const visibleDuration = duration / zoomLevel;
+  const newTime = scrollOffset + (progress * visibleDuration);
+  
+  // Add visual click feedback
+  setClickFeedback({
+    x: mouseX,
+    timestamp: Date.now()
+  });
+  
+  seekTo(newTime);
+  
+  // Clear click feedback after animation
+  setTimeout(() => setClickFeedback(null), 800);
+};
+
 
 const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
   // Don't preventDefault - let React handle passive events
@@ -2013,12 +2255,172 @@ const handleTimeUpdate = () => {
 };
 
 const handleEnded = () => {
-  console.log('Audio ended');
   setIsPlaying(false);
   setCurrentTime(0);
   setLastCursorPosition(0);
   setPausedByUser(false);
   setShouldResumeFromCursor(false);
+};
+
+const GradientMenu = ({ 
+  className,
+  gradientSettings,
+  setGradientSettings 
+}: { 
+  className?: string;
+  gradientSettings: any;
+  setGradientSettings: any;
+}) => {
+  if (!showGradientMenu) return null;
+
+  const patterns = [
+    { 
+      key: 'linear', 
+      icon: RotateCcw, 
+      label: 'Linear',
+      description: 'Flowing diagonal gradients'
+    },
+    { 
+      key: 'radial', 
+      icon: Sun, 
+      label: 'Radial',
+      description: 'Depth-creating radial bursts'
+    },
+    { 
+      key: 'conic', 
+      icon: Sparkles, 
+      label: 'Conic',
+      description: 'Rotating energy field'
+    },
+    { 
+      key: 'wave', 
+      icon: '〰️', 
+      label: 'Wave',
+      description: 'Audio-inspired flowing waves'
+    },
+    { 
+      key: 'energy', 
+      icon: '⚡', 
+      label: 'Energy',
+      description: 'Pulsing energy core'
+    }
+  ];
+
+
+  return (
+    <div className={className || "absolute bottom-full right-0 mb-2 bg-skribble-dark/95 backdrop-blur-md border border-skribble-azure/20 rounded-lg p-4 min-w-64 z-50 shadow-xl"}>
+      {/* Header with Toggle */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Palette className="w-4 h-4" />
+          <span className="text-sm text-skribble-sky font-medium">Background Shaders</span>
+        </div>
+        <button
+          onClick={toggleGradient}
+          className={`relative w-12 h-6 rounded-full transition-all duration-300 ${
+            gradientSettings.enabled ? 'bg-skribble-azure' : 'bg-skribble-purple/50'
+          }`}
+        >
+          <div className={`absolute w-5 h-5 bg-white rounded-full top-0.5 transition-transform duration-300 shadow-md ${
+            gradientSettings.enabled ? 'translate-x-6' : 'translate-x-0.5'
+          }`} />
+        </button>
+      </div>
+      
+      {gradientSettings.enabled && (
+        <>
+          {/* Patterns - Mobile: Vertical list, Desktop: Horizontal grid */}
+          <div className="mb-3">
+            <div className="text-xs text-skribble-azure mb-2">Pattern</div>
+            {/* Mobile: Vertical layout */}
+            <div className="space-y-1 sm:hidden">
+              {patterns.map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  onClick={() => switchGradientPattern(key as any)}
+                  className={`w-full p-2 rounded text-left transition-all duration-200 border ${
+                    gradientSettings.pattern === key
+                      ? 'bg-skribble-azure/20 border-skribble-azure text-skribble-sky'
+                      : 'bg-skribble-purple/20 border-skribble-purple/30 text-skribble-azure hover:bg-skribble-purple/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {typeof Icon === 'string' ? (
+                      <span className="text-sm">{Icon}</span>
+                    ) : (
+                      <Icon className="w-3 h-3 flex-shrink-0" />
+                    )}
+                    <span className="text-xs">{label}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {/* Desktop: Horizontal grid */}
+            <div className="hidden sm:grid grid-cols-5 gap-1">
+              {patterns.map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  onClick={() => switchGradientPattern(key as any)}
+                  className={`p-2 rounded text-center transition-all duration-200 border ${
+                    gradientSettings.pattern === key
+                      ? 'bg-skribble-azure/20 border-skribble-azure text-skribble-sky'
+                      : 'bg-skribble-purple/20 border-skribble-purple/30 text-skribble-azure hover:bg-skribble-purple/30'
+                  }`}
+                  title={label}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    {typeof Icon === 'string' ? (
+                      <span className="text-sm">{Icon}</span>
+                    ) : (
+                      <Icon className="w-3 h-3" />
+                    )}
+                    <span className="text-xs leading-tight">{label}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          {/* Intensity - Mobile: Vertical, Desktop: Horizontal */}
+          <div>
+            <div className="text-xs text-skribble-azure mb-2">Intensity</div>
+            {/* Mobile: Vertical layout */}
+            <div className="space-y-1 sm:hidden">
+              {[1, 2, 3].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setGradientSettings(prev => ({ ...prev, intensity: level }))}
+                  className={`w-full py-2 px-3 rounded text-left text-xs transition-all duration-200 ${
+                    gradientSettings.intensity === level
+                      ? 'bg-skribble-azure text-white'
+                      : 'bg-skribble-purple/20 text-skribble-azure hover:bg-skribble-purple/40'
+                  }`}
+                >
+                  {['Low', 'Medium', 'High'][level - 1]}
+                </button>
+              ))}
+            </div>
+            {/* Desktop: Horizontal grid */}
+            <div className="hidden sm:grid grid-cols-3 gap-1">
+              {[1, 2, 3].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setGradientSettings(prev => ({ ...prev, intensity: level }))}
+                  className={`py-1.5 px-2 rounded text-xs transition-all duration-200 ${
+                    gradientSettings.intensity === level
+                      ? 'bg-skribble-azure text-white'
+                      : 'bg-skribble-purple/20 text-skribble-azure hover:bg-skribble-purple/40'
+                  }`}
+                >
+                  {['Low', 'Med', 'High'][level - 1]}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
 };
 
 return (
@@ -2240,42 +2642,91 @@ return (
           </div>
         )}
       </div>
+      {/* Shortcut Tips */}
+      <div className="px-3 pb-2 hidden sm:block">
+        <div className="flex items-center gap-4 text-xs text-skribble-azure/60 flex-wrap">
+          <span className="flex items-center gap-1">
+            <span className="bg-skribble-azure/10 px-1.5 py-0.5 rounded text-xs">Shift</span>
+            <span>+</span>
+            <span className="bg-skribble-azure/10 px-1.5 py-0.5 rounded text-xs">Wheel</span>
+            <span>=</span>
+            <span>Zoom</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="bg-skribble-azure/10 px-1.5 py-0.5 rounded text-xs">Right Click</span>
+            <span>=</span>
+            <span>Scroll Waveform</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="bg-skribble-azure/10 px-1.5 py-0.5 rounded text-xs">Space</span>
+            <span>=</span>
+            <span>Play/Pause</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="bg-skribble-azure/10 px-1.5 py-0.5 rounded text-xs">Tab</span>
+            <span>=</span>
+            <span>Play from Last Click</span>
+          </span>
+        </div>
+      </div>
+
       {/* FULL-WIDTH WAVEFORM SECTION - Mobile First */}
       <div className="relative">
         {/* Mobile: Remove padding for full-width effect */}
         <div 
           ref={waveformContainerRef}
-          className="relative overflow-x-auto sm:mx-3 sm:mb-4 mobile-waveform-container"
+          className="relative sm:mx-3 sm:mb-4 mobile-waveform-container"
           style={{ 
-            // Mobile: Enable horizontal scrolling with momentum
-            overflowX: 'auto',
+            minHeight: CANVAS_HEIGHT + 'px',
+            height: CANVAS_HEIGHT + 'px',
+            overflow: 'hidden',  // Hide scrollbar completely
             WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'thin'
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none'
           }}
         >
-          <canvas
-          ref={canvasRef}
-          className={`bg-skribble-dark/30 sm:rounded-lg border-t border-b sm:border border-skribble-azure/10 transition-all duration-200 waveform-canvas gesture-enabled mobile-canvas ${
-            isDragging ? 'cursor-grabbing' : 
-            hoveredAnnotation ? 'cursor-pointer' : 
-            'cursor-crosshair hover:border-skribble-azure/30'
-          }`}
-          style={{ 
-            minWidth: '100%',
-            width: '100%', // Let CSS handle responsive width
-            height: CANVAS_HEIGHT + 'px',
-            touchAction: 'pan-x pinch-zoom'
-          }}
-          // Mouse events
-          onWheel={handleWheel}
-          onClick={handleCanvasClick}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          // Touch events - your existing handlers are perfect!
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+              <div 
+          className={getGradientClassName()}
+          style={getGradientStyle()}
         />
+          <canvas
+            ref={canvasRef}
+            className={`sm:rounded-lg border-t border-b sm:border border-skribble-azure/10 transition-all duration-200 waveform-canvas gesture-enabled mobile-canvas relative z-10 ${
+              isMouseDragging ? 'cursor-grabbing' : 
+              hoveredAnnotation ? 'cursor-pointer' : 
+              'cursor-crosshair hover:border-skribble-azure/30'
+            }`}
+            style={{ 
+              minWidth: '100%',
+              width: '100%',
+              height: CANVAS_HEIGHT + 'px',
+              touchAction: 'pan-x pinch-zoom',
+              backgroundColor: 'transparent'
+            }}
+            // Mouse events for desktop
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove} 
+            onMouseUp={handleMouseUp}
+            onWheel={handleWheel}
+            onClick={handleCanvasClick}
+            onMouseLeave={(e) => {
+              handleMouseLeave(e);
+              // End any drag operation when mouse leaves canvas
+              if (isMouseDragging) {
+                setIsMouseDragging(false);
+                setMouseDragStart({ x: 0, offset: 0 });
+                setDragButton(0);
+                if (canvasRef.current) {
+                  canvasRef.current.style.cursor = 'crosshair';
+                }
+              }
+            }}
+            onContextMenu={(e) => e.preventDefault()} // Prevent right-click context menu
+            // Touch events for mobile (keep your existing ones)
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          />
 
           {/* Enhanced Annotation Tooltip - Mobile responsive */}
           {hoveredAnnotation && (
@@ -2556,6 +3007,28 @@ return (
             >
               <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
             </button>
+          </div>
+          {/* Gradient Background Controls - Mobile responsive */}
+          <div className="relative">
+            <button
+              onClick={() => setShowGradientMenu(!showGradientMenu)}
+              className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-all duration-300 hover:scale-105 ${
+                gradientSettings.enabled 
+                  ? 'bg-skribble-azure/20 border-skribble-azure text-skribble-azure' 
+                  : 'bg-skribble-purple/20 border-skribble-purple text-skribble-purple'
+              }`}
+              title="Background Shaders"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+            
+            {showGradientMenu && (
+              <GradientMenu
+                gradientSettings={gradientSettings}
+                setGradientSettings={setGradientSettings}
+                className="absolute right-0 bottom-full mb-2 w-48 sm:w-80 md:w-96 bg-skribble-dark/95 backdrop-blur-md rounded-lg shadow-xl border border-skribble-azure/20 z-50 p-3"
+              />
+            )}
           </div>
 
           {/* Tempo Grid Controls - Mobile responsive */}

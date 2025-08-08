@@ -2,11 +2,34 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, MessageCircle, Upload, Database, Smartphone, Brain, Globe, Plug } from 'lucide-react';
+import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, MessageCircle, Upload, Database, Smartphone, Brain, Globe, Plug, MousePointer, Keyboard, Palette } from 'lucide-react';
 
 
 const ChangelogPage = () => {
   const updates = [
+    {
+      version: "1.0.2",
+      date: "August 7, 2025",
+      title: "🎯 Enhanced Waveform Interaction & Workflow",
+      type: "patch", 
+      quote: "Good design is making something intelligible and memorable. Great design is making something memorable and meaningful. - Dieter Rams",
+      features: [
+        { icon: MousePointer, title: "Momentum Scrolling", description: "Smooth fade-out scrolling when right-click dragging the waveform" },
+        { icon: Keyboard, title: "Tab Loop Shortcut", description: "Press Tab to instantly return to last clicked position for section looping" },
+        { icon: Palette, title: "Compact Shader Menu", description: "Redesigned background shaders menu with horizontal layout" },
+        { icon: Settings, title: "Keyboard Shortcuts Guide", description: "Visual shortcut tips displayed above waveform for better discoverability" },
+        { icon: Music, title: "Fixed Spacebar Control", description: "Resolved spacebar play/pause getting stuck after use" },
+        { icon: Shield, title: "Smart Menu Positioning", description: "Background shaders menu always opens upward to avoid UI conflicts" }
+      ],
+      technical: [
+        "Implemented momentum scrolling with 0.95 deceleration factor and boundary protection",
+        "Added velocity tracking for smooth mouse drag interactions",
+        "Enhanced seekTo() function to record manual cursor positions for Tab functionality", 
+        "Fixed phantom click events after right-click drag operations",
+        "Redesigned GradientMenu with horizontal pattern and intensity rows",
+        "Added comprehensive keyboard shortcut display with responsive layout"
+      ]
+    },
     {
       version: "1.0.1",
       date: "August 5, 2025",
@@ -186,35 +209,35 @@ const ChangelogPage = () => {
           
           {/* Latest Update Highlight */}
           <div className="mb-16">
-            <div className="bg-gradient-to-r from-orange-500/20 to-amber-600/20 backdrop-blur-sm rounded-2xl border border-orange-500/20 p-8 mb-8">
+            <div className="bg-gradient-to-r from-skribble-azure/20 to-skribble-purple/20 backdrop-blur-sm rounded-2xl border border-skribble-azure/20 p-8 mb-8">
               <div className="flex items-center gap-3 mb-4">
-                <div className="bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg p-2">
-                  <Smartphone className="w-6 h-6 text-white" />
+                <div className="bg-gradient-to-r from-skribble-azure to-skribble-purple rounded-lg p-2">
+                  <MousePointer className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-madimi text-white">Version 1.0.1</h2>
-                  <p className="text-orange-200">August 5, 2025</p>
+                  <h2 className="text-2xl font-madimi text-white">Version 1.0.2</h2>
+                  <p className="text-skribble-sky/80">August 7, 2025</p>
                 </div>
               </div>
               
               <h3 className="text-xl font-semibold text-white mb-3">
-                📱 Mobile Waveform Experience Overhaul
+                🎯 Enhanced Waveform Interaction & Workflow
               </h3>
               
-              <blockquote className="italic text-orange-100 mb-6 border-l-4 border-orange-400 pl-4">
-                "Great design is invisible. When it works, you don't notice it." - Jared Spool
+              <blockquote className="italic text-skribble-sky/80 mb-6 border-l-4 border-skribble-azure pl-4">
+                "Good design is making something intelligible and memorable. Great design is making something memorable and meaningful." - Dieter Rams
               </blockquote>
 
               <div className="grid md:grid-cols-2 gap-4 mb-6">
                 {updates[0].features.map((feature, index) => (
                   <div key={index} className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
                     <div className="flex items-start gap-3">
-                      <div className="bg-orange-500/30 rounded-lg p-2 mt-1">
-                        <feature.icon className="w-4 h-4 text-orange-200" />
+                      <div className="bg-skribble-azure/30 rounded-lg p-2 mt-1">
+                        <feature.icon className="w-4 h-4 text-skribble-sky/90" />
                       </div>
                       <div>
                         <h4 className="font-medium text-white mb-1">{feature.title}</h4>
-                        <p className="text-sm text-orange-100">{feature.description}</p>
+                        <p className="text-sm text-skribble-sky/90">{feature.description}</p>
                       </div>
                     </div>
                   </div>
@@ -225,8 +248,8 @@ const ChangelogPage = () => {
                 <h4 className="font-medium text-white mb-3">Technical Implementation</h4>
                 <div className="grid md:grid-cols-2 gap-2">
                   {updates[0].technical?.map((tech, index) => (
-                    <div key={index} className="flex items-center gap-2 text-orange-100 text-sm">
-                      <div className="w-1.5 h-1.5 bg-orange-400 rounded-full"></div>
+                    <div key={index} className="flex items-center gap-2 text-skribble-sky/90 text-sm">
+                      <div className="w-1.5 h-1.5 bg-skribble-azure rounded-full"></div>
                       {tech}
                     </div>
                   ))}

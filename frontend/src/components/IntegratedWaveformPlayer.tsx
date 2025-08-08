@@ -1920,18 +1920,18 @@ useEffect(() => {
   }, [currentTime, isPlaying, duration, zoomLevel, isInertiaScrolling, isMouseDragging]);
 
 const switchGradientPattern = useCallback((pattern: 'linear' | 'radial' | 'conic' | 'wave' | 'energy') => {
-  setGradientSettings(prev => ({ ...prev, pattern }));
+  setGradientSettings((prev: GradientShaderSettings) => ({ ...prev, pattern }));
 }, []);
 
 const adjustIntensity = useCallback(() => {
-  setGradientSettings(prev => ({
+  setGradientSettings((prev: GradientShaderSettings) => ({
     ...prev,
     intensity: (prev.intensity % 3) + 1
   }));
 }, []);
 
 const toggleGradient = useCallback(() => {
-  setGradientSettings(prev => ({ ...prev, enabled: !prev.enabled }));
+  setGradientSettings((prev: GradientShaderSettings) => ({ ...prev, enabled: !prev.enabled }));
 }, []);
 
 const getGradientClassName = useCallback((): string => {
@@ -2389,7 +2389,7 @@ const GradientMenu = ({
               {[1, 2, 3].map((level) => (
                 <button
                   key={level}
-                  onClick={() => setGradientSettings(prev => ({ ...prev, intensity: level }))}
+                  onClick={() => setGradientSettings((prev: GradientShaderSettings) => ({ ...prev, intensity: level }))}
                   className={`w-full py-2 px-3 rounded text-left text-xs transition-all duration-200 ${
                     gradientSettings.intensity === level
                       ? 'bg-skribble-azure text-white'
@@ -2405,7 +2405,7 @@ const GradientMenu = ({
               {[1, 2, 3].map((level) => (
                 <button
                   key={level}
-                  onClick={() => setGradientSettings(prev => ({ ...prev, intensity: level }))}
+                  onClick={() => setGradientSettings((prev: GradientShaderSettings) => ({ ...prev, intensity: level }))}
                   className={`py-1.5 px-2 rounded text-xs transition-all duration-200 ${
                     gradientSettings.intensity === level
                       ? 'bg-skribble-azure text-white'

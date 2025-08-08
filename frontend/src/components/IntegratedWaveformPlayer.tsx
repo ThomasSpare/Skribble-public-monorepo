@@ -1964,12 +1964,12 @@ const getGradientClassName = useCallback((): string => {
 const getGradientStyle = useCallback((): React.CSSProperties => {
   if (!gradientSettings.enabled) return { display: 'none' };
   
-  const opacityMap = { 1: 0.3, 2: 0.5, 3: 0.7 };
-  const blurMap = { 1: '60px', 2: '40px', 3: '20px' };
+  const opacityMap: Record<number, number> = { 1: 0.3, 2: 0.5, 3: 0.7 };
+  const blurMap: Record<number, string> = { 1: '60px', 2: '40px', 3: '20px' };
   
   return {
-    opacity: opacityMap[gradientSettings.intensity],
-    filter: `blur(${blurMap[gradientSettings.intensity]})`
+    opacity: opacityMap[gradientSettings.intensity] || 0.5,
+    filter: `blur(${blurMap[gradientSettings.intensity] || '40px'})`
   };
   }, [gradientSettings]);
 

@@ -24,6 +24,9 @@ backend/build/
 backend/dist/
 backend/*.tsbuildinfo
 
+# Frontend builds continued
+frontend/*.tsbuildinfo
+
 # Logs (all services)
 logs/
 *.log

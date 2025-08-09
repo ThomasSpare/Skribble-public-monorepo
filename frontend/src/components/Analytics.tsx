@@ -7,7 +7,7 @@ export default function Analytics({ path }: { path?: string }) {
     const trackPageView = async () => {
       try {
         // Skip tracking in development mode or if explicitly disabled
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV !== 'production') {
           console.log('📊 Analytics tracking disabled in development mode');
           return;
         }
@@ -44,7 +44,7 @@ export default function Analytics({ path }: { path?: string }) {
           // Store the session ID for future requests
           localStorage.setItem('analytics_session', data.sessionId);
           
-          if (process.env.NODE_ENV === 'development') {
+          if (process.env.NODE_ENV !== 'production') {
             console.log('📊 Analytics tracked:', {
               path: path || window.location.pathname,
               sessionId: data.sessionId,
@@ -57,7 +57,7 @@ export default function Analytics({ path }: { path?: string }) {
         }
       } catch (error) {
         // Fail silently in production to avoid disrupting user experience
-        if (process.env.NODE_ENV === 'development') {
+        if (process.env.NODE_ENV !== 'production') {
           console.error('📊 Analytics tracking error:', error);
         }
       }

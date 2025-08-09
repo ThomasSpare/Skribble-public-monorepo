@@ -18,7 +18,7 @@ import {
   Cell
 } from 'recharts'
 import DashboardLogin from '../../components/DashboardLogin'
-import { AnalyticsSummary } from '../../../../shared/types'
+import { AnalyticsSummary } from '../../types'
 
 interface TimeRangeOption {
   value: string

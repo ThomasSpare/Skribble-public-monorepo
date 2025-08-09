@@ -1,6 +1,7 @@
 // backend/src/routes/users-s3.ts - COMPLETE VERSION with all endpoints
 import express from 'express';
 import { authenticateToken } from '../middleware/auth';
+import { userSubscriptionCacheMiddleware, invalidateCacheMiddleware } from '../middleware/cache';
 import { uploadImageS3, uploadImageToS3 } from '../middleware/upload-s3'; 
 import { s3UploadService } from '../services/s3-upload';
 import { body, validationResult } from 'express-validator';
@@ -935,7 +936,7 @@ router.post('/generate-referral-code', authenticateToken, async (req: any, res: 
   }
 });
 
-router.get('/subscription', authenticateToken, async (req: any, res: any) => {
+router.get('/subscription', authenticateToken, userSubscriptionCacheMiddleware(1800), async (req: any, res: any) => {
   try {
     const userId = req.user.userId;
     

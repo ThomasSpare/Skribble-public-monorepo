@@ -2,6 +2,7 @@
 import express, { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
+import { invalidateCacheMiddleware } from '../middleware/cache';
 import { stripe } from '../config/stripe';
 import { UserModel } from '../models/User';
 import { pool } from '../config/database';
@@ -195,6 +196,7 @@ router.get('/referral-stats', authenticateToken, async (req: Request, res: Respo
 // Handle successful subscription (webhook or manual confirmation)
 router.post('/subscription-success', [
   authenticateToken,
+  invalidateCacheMiddleware(['user:subscription:*']), // Invalidate user subscription caches
   body('subscriptionId').notEmpty(),
   body('tier').isIn(['indie', 'producer', 'studio'])
 ], async (req: Request, res: Response) => {
@@ -264,7 +266,7 @@ router.post('/subscription-success', [
 });
 
 // Cancel subscription
-router.post('/cancel-subscription', authenticateToken, async (req: Request, res: Response) => {
+router.post('/cancel-subscription', authenticateToken, invalidateCacheMiddleware(['user:subscription:*']), async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     
@@ -482,6 +484,7 @@ router.post('/create-checkout-session', [
 
 // Handle successful checkout (called by Stripe webhook or redirect)
 router.post('/checkout-success', [
+  invalidateCacheMiddleware(['user:subscription:*']), // Invalidate user subscription caches
   body('sessionId').notEmpty()
 ], async (req: Request, res: Response) => {
   try {

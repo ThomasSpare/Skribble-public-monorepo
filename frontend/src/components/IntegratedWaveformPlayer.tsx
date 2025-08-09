@@ -96,6 +96,7 @@ export default function IntegratedWaveformPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [waveformData, setWaveformData] = useState<number[]>([]);
   const [isGeneratingWaveform, setIsGeneratingWaveform] = useState(false);
+  const [waveformStatus, setWaveformStatus] = useState<'loading' | 'cached' | 'generating' | 'ready'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [isAudioReady, setIsAudioReady] = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
@@ -327,6 +328,36 @@ const [showGradientMenu, setShowGradientMenu] = useState(false);
     };
   }, [audioUrl, userInteracted]);
 
+  // Start waveform preloading for the project
+  useEffect(() => {
+    if (projectId && userInteracted) {
+      // Start preloading in background - don't await
+      preloadProjectWaveforms().catch(error => {
+        console.warn('Background waveform preloading failed:', error);
+      });
+    }
+  }, [projectId, userInteracted]);
+
+  // Fetch optimized waveform when zoom level changes
+  useEffect(() => {
+    if (audioFileId && userInteracted && waveformData.length === 0) {
+      // Don't trigger if we already have waveform data
+      return;
+    }
+
+    if (audioFileId && userInteracted && zoomLevel !== 1) {
+      // Fetch optimized waveform for new zoom level
+      fetchWaveformFromCache(zoomLevel).then(result => {
+        if (result?.waveformData) {
+          console.log(`🔍 Loaded optimized waveform for zoom level ${zoomLevel}`);
+          setWaveformData(result.waveformData);
+        }
+      }).catch(error => {
+        console.warn('Failed to load optimized waveform for zoom level:', zoomLevel, error);
+      });
+    }
+  }, [zoomLevel, audioFileId, userInteracted]);
+
   useEffect(() => {
   const fetchUserTierInfo = async () => {
     try {
@@ -457,77 +488,269 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
       }
     }
   };
-  
+  // Fetch waveform from backend Redis cache
+  const fetchWaveformFromCache = async (zoom: number = 1) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No authentication token');
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/${audioFileId}?zoom=${zoom}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch waveform: ${response.status}`);
+      }
+
+      const result = await response.json();
+      if (result.success && result.data?.waveformData) {
+        return {
+          waveformData: result.data.waveformData,
+          metadata: result.data.metadata
+        };
+      }
+      
+      throw new Error('Invalid waveform response');
+    } catch (error) {
+      console.error('Error fetching cached waveform:', error);
+      return null;
+    }
+  };
+
+  // Check waveform generation status
+  const checkWaveformStatus = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/status/${audioFileId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) return null;
+      
+      const result = await response.json();
+      return result.success ? result.data : null;
+    } catch (error) {
+      console.error('Error checking waveform status:', error);
+      return null;
+    }
+  };
+
+  // Start waveform preloading for the project
+  const preloadProjectWaveforms = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/preload/${projectId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('🚀 Started waveform preloading for project');
+    } catch (error) {
+      console.error('Error starting waveform preloading:', error);
+    }
+  };
+
+  // Regenerate waveform (force refresh)
+  const regenerateWaveform = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      setIsGeneratingWaveform(true);
+      setWaveformStatus('generating');
+
+      // Call backend regeneration endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/regenerate/${audioFileId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        console.log('✅ Waveform regeneration requested');
+        // Fetch the new waveform
+        const newWaveform = await fetchWaveformFromCache(zoomLevel);
+        if (newWaveform) {
+          setWaveformData(newWaveform.waveformData);
+          setWaveformStatus('cached');
+          console.log('✅ New waveform loaded from cache');
+        }
+      } else {
+        throw new Error('Failed to regenerate waveform');
+      }
+    } catch (error) {
+      console.error('Error regenerating waveform:', error);
+      // Fallback to client-side generation
+      await generateWaveformClientSide();
+    } finally {
+      setIsGeneratingWaveform(false);
+      if (waveformData.length > 0) {
+        setWaveformStatus('ready');
+      }
+    }
+  };
+
+  // Client-side fallback waveform generation
+  const generateWaveformClientSide = async () => {
+    try {
+      // Create a new AudioContext specifically for waveform generation
+      let tempAudioContext;
+      try {
+        tempAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        
+        // Resume the context if needed
+        if (tempAudioContext.state === 'suspended') {
+          await tempAudioContext.resume();
+        }
+        
+      } catch (contextError) {
+        console.error('Failed to create temp AudioContext:', contextError);
+        throw new Error('AudioContext creation failed');
+      }
+      
+      const response = await fetch(audioUrl);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
+      }
+      
+      const arrayBuffer = await response.arrayBuffer(); 
+      const audioBuffer = await tempAudioContext.decodeAudioData(arrayBuffer);
+      const actualDuration = audioBuffer.duration;
+      setDuration(actualDuration);
+      onLoadComplete?.(actualDuration);
+      
+      const channelData = audioBuffer.getChannelData(0);
+      const samples = Math.floor(actualDuration * 50);
+      const blockSize = Math.floor(channelData.length / samples);
+      const waveform: number[] = [];
+      
+      for (let i = 0; i < samples; i++) {
+        const start = i * blockSize;
+        const end = start + blockSize;
+        let sum = 0;
+        let count = 0;
+        
+        for (let j = start; j < end && j < channelData.length; j++) {
+          sum += Math.abs(channelData[j]);
+          count++;
+        }
+        
+        if (count > 0) {
+          waveform.push(sum / count);
+        }
+      }
+      
+      const max = Math.max(...waveform);
+      const normalizedWaveform = max > 0 ? waveform.map(sample => sample / max) : waveform;
+      
+      setWaveformData(normalizedWaveform);
+      setWaveformStatus('ready');
+      await tempAudioContext.close();
+      
+    } catch (error) {
+      console.error('Error in client-side waveform generation:', error);
+      
+      // Create a fallback waveform
+      const fallbackDuration = audioRef.current?.duration || 180;
+      const fallbackSamples = Math.floor(fallbackDuration * 50);
+      const fallback = Array.from({ length: fallbackSamples }, () => Math.random() * 0.5 + 0.25);
+      setWaveformData(fallback);
+      setDuration(fallbackDuration);
+      onLoadComplete?.(fallbackDuration);
+    }
+  };
   
   const generateWaveform = async () => {
-  if (!userInteracted) {
-    return;
-  }
+    if (!userInteracted) {
+      return;
+    }
 
-  try {    
-    // Create a new AudioContext specifically for waveform generation
-    let tempAudioContext;
     try {
-      tempAudioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      setIsGeneratingWaveform(true);
+      setWaveformStatus('loading');
+
+      // First, try to get waveform from backend cache
+      console.log('🔍 Fetching waveform from Redis cache...');
+      const cachedResult = await fetchWaveformFromCache(zoomLevel);
       
-      // Resume the context if needed
-      if (tempAudioContext.state === 'suspended') {
-        await tempAudioContext.resume();
+      if (cachedResult) {
+        console.log('✅ Waveform loaded from cache');
+        setWaveformData(cachedResult.waveformData);
+        setWaveformStatus('cached');
+        
+        if (cachedResult.metadata?.duration) {
+          setDuration(cachedResult.metadata.duration);
+          onLoadComplete?.(cachedResult.metadata.duration);
+        }
+        return;
       }
+
+      // If not cached, check if generation is in progress
+      console.log('❌ Waveform not cached, checking generation status...');
+      const status = await checkWaveformStatus();
       
-    } catch (contextError) {
-      console.error('Failed to create temp AudioContext:', contextError);
-      throw new Error('AudioContext creation failed');
-    }
-    
-    const response = await fetch(audioUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch audio: ${response.status} ${response.statusText}`);
-    }
-    
-    const arrayBuffer = await response.arrayBuffer(); 
-    const audioBuffer = await tempAudioContext.decodeAudioData(arrayBuffer);
-    const actualDuration = audioBuffer.duration;
-    setDuration(actualDuration);
-    onLoadComplete?.(actualDuration);
-    
-    const channelData = audioBuffer.getChannelData(0);
-    const samples = Math.floor(actualDuration * 50);
-    const blockSize = Math.floor(channelData.length / samples);
-    const waveform: number[] = [];
-    
-    for (let i = 0; i < samples; i++) {
-      const start = i * blockSize;
-      const end = start + blockSize;
-      let sum = 0;
-      let count = 0;
-      
-      for (let j = start; j < end && j < channelData.length; j++) {
-        sum += Math.abs(channelData[j]);
-        count++;
+      if (status?.status === 'pending') {
+        console.log('⏳ Waveform generation in progress, polling for updates...');
+        setWaveformStatus('generating');
+        
+        // Poll for completion (with timeout)
+        let attempts = 0;
+        const maxAttempts = 30; // 30 seconds max wait
+        
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          
+          const pollResult = await fetchWaveformFromCache(zoomLevel);
+          if (pollResult) {
+            console.log('✅ Waveform generation completed');
+            setWaveformData(pollResult.waveformData);
+            setWaveformStatus('cached');
+            
+            if (pollResult.metadata?.duration) {
+              setDuration(pollResult.metadata.duration);
+              onLoadComplete?.(pollResult.metadata.duration);
+            }
+            return;
+          }
+          
+          attempts++;
+        }
+        
+        console.warn('⚠️ Waveform generation timed out, falling back to client-side generation');
       }
+
+      // Fallback to client-side generation if backend cache fails
+      console.log('🔄 Falling back to client-side waveform generation...');
+      setWaveformStatus('generating');
+      await generateWaveformClientSide();
       
-      if (count > 0) {
-        waveform.push(sum / count);
+    } catch (error) {
+      console.error('Error in waveform generation process:', error);
+      await generateWaveformClientSide();
+    } finally {
+      setIsGeneratingWaveform(false);
+      if (waveformData.length > 0) {
+        setWaveformStatus('ready');
       }
     }
-    
-    const max = Math.max(...waveform);
-    const normalizedWaveform = max > 0 ? waveform.map(sample => sample / max) : waveform;
-    
-    setWaveformData(normalizedWaveform);
-    await tempAudioContext.close();
-    
-  } catch (error) {
-    console.error('Error generating waveform:', error);
-    
-    // Create a fallback waveform
-    const fallbackDuration = audioRef.current?.duration || 180;
-    const fallbackSamples = Math.floor(fallbackDuration * 50);
-    const fallback = Array.from({ length: fallbackSamples }, () => Math.random() * 0.5 + 0.25);
-    setWaveformData(fallback);
-    setDuration(fallbackDuration);  }
-};
+  };
 
 
   const setupWebAudio = async () => {
@@ -2447,8 +2670,15 @@ return (
               {isGeneratingWaveform && (
                 <div className="flex items-center gap-1">
                   <Loader2 className="w-3 h-3 sm:w-4 sm:h-4 animate-spin text-skribble-azure" />
-                  <span className="text-skribble-azure hidden sm:inline">Generating waveform...</span>
-                  <span className="text-skribble-azure sm:hidden">Loading...</span>
+                  <span className="text-skribble-azure hidden sm:inline">
+                    {waveformStatus === 'loading' && 'Loading from cache...'}
+                    {waveformStatus === 'generating' && 'Generating waveform...'}
+                    {waveformStatus === 'cached' && 'Loaded from cache ✓'}
+                    {waveformStatus === 'ready' && 'Ready ✓'}
+                  </span>
+                  <span className="text-skribble-azure sm:hidden">
+                    {waveformStatus === 'generating' ? 'Generating...' : 'Loading...'}
+                  </span>
                 </div>
               )}
             </div>

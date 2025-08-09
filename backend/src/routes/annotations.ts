@@ -2,12 +2,117 @@
 import express, { Request, Response } from 'express';
 import { body, validationResult, param, query } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
+import { annotationsCacheMiddleware, invalidateCacheMiddleware } from '../middleware/cache';
 import { AnnotationModel } from '../models/Annotation';
 import { pool } from '../config/database';
+import { CachedProjectModel } from '../models/CachedProject';
 
 const router = express.Router();
 interface CustomError extends Error {
   message: string;
+}
+
+// Helper function to notify project members about annotation events
+async function notifyProjectMembers(
+  audioFileId: string, 
+  eventType: 'new_comment' | 'annotation_resolved' | 'mention', 
+  actorUserId: string,
+  annotationText?: string,
+  mentionedUserIds?: string[]
+) {
+  try {
+    // Get project and collaborators info
+    const projectQuery = await pool.query(`
+      SELECT 
+        p.id as project_id,
+        p.title,
+        p.creator_id,
+        af.filename,
+        actor.username as actor_username
+      FROM audio_files af
+      JOIN projects p ON af.project_id = p.id
+      JOIN users actor ON actor.id = $2
+      WHERE af.id = $1
+    `, [audioFileId, actorUserId]);
+
+    if (projectQuery.rows.length === 0) return;
+
+    const { project_id, title, creator_id, filename, actor_username } = projectQuery.rows[0];
+
+    // Get all collaborators (excluding the actor)
+    const collaboratorsQuery = await pool.query(`
+      SELECT DISTINCT user_id
+      FROM project_collaborators 
+      WHERE project_id = $1 AND user_id != $2 AND status = 'accepted'
+      UNION
+      SELECT creator_id as user_id
+      FROM projects
+      WHERE id = $1 AND creator_id != $2
+    `, [project_id, actorUserId]);
+
+    const collaboratorIds = collaboratorsQuery.rows.map(row => row.user_id);
+
+    // Create notifications based on event type
+    let notificationTitle = '';
+    let notificationMessage = '';
+
+    switch (eventType) {
+      case 'new_comment':
+        notificationTitle = 'New annotation added';
+        notificationMessage = `${actor_username} added an annotation to ${filename} in "${title}"`;
+        break;
+      case 'annotation_resolved':
+        notificationTitle = 'Annotation resolved';
+        notificationMessage = `${actor_username} resolved an annotation in ${filename} for "${title}"`;
+        break;
+      case 'mention':
+        notificationTitle = 'You were mentioned';
+        notificationMessage = `${actor_username} mentioned you in an annotation on ${filename} in "${title}"`;
+        break;
+    }
+
+    // Send notifications to collaborators (but not mentions - they get handled separately)
+    if (eventType !== 'mention' && collaboratorIds.length > 0) {
+      for (const collaboratorId of collaboratorIds) {
+        await CachedProjectModel.createNotification({
+          userId: collaboratorId,
+          projectId: project_id,
+          type: eventType,
+          title: notificationTitle,
+          message: notificationMessage,
+          data: { 
+            audioFileId, 
+            annotationText: annotationText?.substring(0, 100),
+            actorUsername: actor_username 
+          }
+        });
+      }
+    }
+
+    // Send mention notifications
+    if (eventType === 'mention' && mentionedUserIds && mentionedUserIds.length > 0) {
+      for (const mentionedUserId of mentionedUserIds) {
+        if (mentionedUserId !== actorUserId) { // Don't notify yourself
+          await CachedProjectModel.createNotification({
+            userId: mentionedUserId,
+            projectId: project_id,
+            type: 'mention',
+            title: notificationTitle,
+            message: notificationMessage,
+            data: { 
+              audioFileId, 
+              annotationText: annotationText?.substring(0, 100),
+              actorUsername: actor_username 
+            }
+          });
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error notifying project members:', error);
+    // Don't throw error - notifications shouldn't break the main flow
+  }
 }
 
 // Test route
@@ -22,6 +127,7 @@ router.get('/test', (req, res) => {
 // Create a new annotation
 router.post('/', [ // filepath: backend/src/routes/annotations.ts
   authenticateToken,
+  invalidateCacheMiddleware(['annotations:*']), // Invalidate all annotation caches
   body('audioFileId').isUUID().withMessage('Valid audio file ID is required'),
   body('timestamp').isFloat({ min: 0 }).withMessage('Timestamp must be a positive number'),
   body('text').isLength({ min: 1, max: 1000 }).trim().withMessage('Text must be 1-1000 characters'),
@@ -63,6 +169,14 @@ router.post('/', [ // filepath: backend/src/routes/annotations.ts
     // Call the AnnotationModel.create method to save the annotation
     const newAnnotation = await AnnotationModel.create(annotationData);
 
+    // Create notifications for project members
+    await notifyProjectMembers(audioFileId, 'new_comment', userId, text);
+    
+    // Handle mentions if any
+    if (mentions && mentions.length > 0) {
+      await notifyProjectMembers(audioFileId, 'mention', userId, text, mentions);
+    }
+
     // Send the newly created annotation in the response
     res.status(201).json({
       success: true,
@@ -84,6 +198,7 @@ router.post('/', [ // filepath: backend/src/routes/annotations.ts
 // Get annotations for an audio file
 router.get('/audio/:audioFileId', [
   authenticateToken,
+  annotationsCacheMiddleware(900), // Cache for 15 minutes
   param('audioFileId').isUUID()
 ], async (req: Request, res: Response) => {
   try {
@@ -243,6 +358,7 @@ router.get('/:id', [
 // Update annotation
 router.put('/:id', [
   authenticateToken,
+  invalidateCacheMiddleware(['annotations:*']), // Invalidate all annotation caches
   param('id').isUUID(),
   body('text').optional().isLength({ min: 1, max: 1000 }).trim(),
   body('status').optional().isIn(['pending', 'in-progress', 'resolved', 'approved']),
@@ -327,6 +443,7 @@ router.put('/:id', [
 // Delete annotation
 router.delete('/:id', [
   authenticateToken,
+  invalidateCacheMiddleware(['annotations:*']), // Invalidate all annotation caches
   param('id').isUUID()
 ], async (req: Request, res: Response) => {
   try {
@@ -466,6 +583,7 @@ router.get('/:id/replies', [
 // Resolve annotation
 router.patch('/:id/resolve', [
   authenticateToken,
+  invalidateCacheMiddleware(['annotations:*']), // Invalidate all annotation caches
   param('id').isUUID()
 ], async (req: Request, res: Response) => {
   try {
@@ -523,6 +641,9 @@ router.patch('/:id/resolve', [
         }
       });
     }
+
+    // Notify project members about resolution
+    await notifyProjectMembers(existingAnnotation.audioFileId, 'annotation_resolved', userId);
 
     res.json({
       success: true,

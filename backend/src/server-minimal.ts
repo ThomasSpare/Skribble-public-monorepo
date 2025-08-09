@@ -1,9 +1,12 @@
 // backend/src/server-minimal.ts
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+import redisCacheService from './services/redis-cache';
+import redisService from './services/redis-service';
 
 dotenv.config();
 
@@ -18,6 +21,9 @@ import stripeRoutes from './routes/stripe';
 import versionRoutes from './routes/versions';
 import voiceNotesRoutes from './routes/voiceNotes';
 import contactRoutes from './routes/contact';
+import projectsCachedRoutes from './routes/projects-cached';
+import waveformRoutes from './routes/waveforms';
+import analyticsRoutes from './routes/analytics';
 
 const app = express();
 const server = createServer(app);
@@ -34,7 +40,13 @@ const PORT = process.env.PORT || 5000;
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
 // Basic middleware for other routes
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-guest-invite"]
+}));
+app.use(cookieParser());
 app.use(express.json());
 
 // Middleware to check subscription status for protected routes
@@ -43,6 +55,7 @@ const checkSubscriptionStatus = async (req: any, res: any, next: any) => {
   const skipRoutes = [
     '/api/auth',
     '/api/stripe',
+    '/api/analytics',
     '/health'
   ];
 
@@ -72,6 +85,58 @@ const checkSubscriptionStatus = async (req: any, res: any, next: any) => {
   next();
 };
 
+// Test Redis functionality
+app.get('/api/test/redis', async (req, res) => {
+  try {
+    // Test basic operations
+    const testKey = 'test:' + Date.now();
+    const testData = {
+      message: 'Hello Redis!',
+      timestamp: new Date(),
+      random: Math.random()
+    };
+const setResult = await redisService.set(testKey, testData, 60);
+    
+    // Test GET
+    const getData = await redisService.get(testKey);
+    
+    // Test health check
+    const isHealthy = await redisService.healthCheck();
+    
+    // Test waveform caching
+    const mockWaveform = [0.1, 0.5, 0.8, 0.3, 0.9, 0.2];
+    await redisService.cacheWaveform('test-audio-123', mockWaveform);
+    const cachedWaveform = await redisService.getWaveform('test-audio-123');
+
+    res.json({
+      success: true,
+      redis: {
+        connected: isHealthy,
+        connectionInfo: redisService.getConnectionInfo()
+      },
+      tests: {
+        basicCache: {
+          set: setResult,
+          get: getData,
+          matches: JSON.stringify(testData) === JSON.stringify(getData)
+        },
+        waveformCache: {
+          original: mockWaveform,
+          cached: cachedWaveform,
+          matches: JSON.stringify(mockWaveform) === JSON.stringify(cachedWaveform)
+        }
+      },
+      message: '🎉 Redis is working perfectly!'
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      message: '❌ Redis test failed'
+    });
+  }
+});
 
 // Test route
 app.get('/health', (req, res) => {
@@ -85,6 +150,17 @@ app.get('/health', (req, res) => {
       referral_system: true,
       mandatory_subscriptions: true
     }
+  });
+});
+// Redis health check endpoint
+app.get('/api/health/redis', async (req, res) => {
+  const isHealthy = await redisService.healthCheck();
+  const connectionInfo = redisService.getConnectionInfo();
+  
+  res.json({
+    redis: isHealthy ? 'connected' : 'disconnected',
+    connectionInfo,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -109,11 +185,22 @@ app.get('/api/test/s3', async (req, res) => {
 // API Routes - Order matters!
 app.use('/api/auth', authRoutes);
 app.use('/api/stripe', stripeRoutes); // Stripe routes before subscription check
+app.use('/api/analytics', analyticsRoutes); // Analytics routes (public tracking + protected dashboard)
 app.use(checkSubscriptionStatus); // Apply subscription check after auth and stripe routes
 
+// Redis cached routes (specific paths first)
+app.use('/api/waveforms', waveformRoutes);
+
+// Upload routes (before projects to avoid conflicts)
 app.use('/api/upload', uploadRoutes);
-app.use('/api/projects', versionRoutes);
-app.use('/api/projects', projectRoutes);
+
+// Project routes with specific ordering for caching
+// More specific routes first, then general routes
+app.use('/api/projects', versionRoutes); // Handles /api/projects/:id/versions/*
+app.use('/api/projects', projectsCachedRoutes); // Handles cached GET requests like /api/projects/:id
+app.use('/api/projects', projectRoutes); // Handles remaining project operations
+
+// Other API routes
 app.use('/api/annotations', annotationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/collaboration', collaborationRoutes);
@@ -199,12 +286,19 @@ app.use((req, res) => {
 
 console.log('🔄 Socket.IO events configured');
 
-// Graceful shutdown
+// Graceful shutdown for server
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   server.close(() => {
     console.log('Process terminated');
   });
+});
+
+// Graceful shutdown for Redis connection
+process.on('SIGTERM', async () => {
+  console.log('🔄 Graceful shutdown starting...');
+  await redisCacheService.disconnect();
+  process.exit(0);
 });
 
 // Start server

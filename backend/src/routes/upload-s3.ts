@@ -5,12 +5,63 @@ import { uploadAudioS3, uploadAudioToS3 } from '../middleware/upload-s3';
 import { s3UploadService } from '../services/s3-upload';
 import { pool } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
+import { CachedProjectModel } from '../models/CachedProject';
 
 const router = express.Router();
 
 const logWithTimestamp = (message: string, data?: any) => {
   console.log(`[${new Date().toISOString()}] ${message}`, data || '');
 };
+
+// Helper function to notify project members about audio uploads
+async function notifyAudioUpload(projectId: string, uploaderUserId: string, filename: string) {
+  try {
+    // Get project details and collaborators
+    const projectQuery = await pool.query(`
+      SELECT p.title, p.creator_id, uploader.username as uploader_username
+      FROM projects p
+      JOIN users uploader ON uploader.id = $2
+      WHERE p.id = $1
+    `, [projectId, uploaderUserId]);
+
+    if (projectQuery.rows.length === 0) return;
+
+    const { title, creator_id, uploader_username } = projectQuery.rows[0];
+
+    // Get all collaborators (excluding the uploader)
+    const collaboratorsQuery = await pool.query(`
+      SELECT DISTINCT user_id
+      FROM project_collaborators 
+      WHERE project_id = $1 AND user_id != $2 AND status = 'accepted'
+      UNION
+      SELECT creator_id as user_id
+      FROM projects
+      WHERE id = $1 AND creator_id != $2
+    `, [projectId, uploaderUserId]);
+
+    const collaboratorIds = collaboratorsQuery.rows.map(row => row.user_id);
+
+    // Create notifications for all project members
+    for (const collaboratorId of collaboratorIds) {
+      await CachedProjectModel.createNotification({
+        userId: collaboratorId,
+        projectId,
+        type: 'version_updated',
+        title: 'New audio file uploaded',
+        message: `${uploader_username} uploaded a new audio file "${filename}" to "${title}"`,
+        data: { 
+          filename,
+          uploaderUsername: uploader_username 
+        }
+      });
+    }
+
+    logWithTimestamp(`✅ Sent ${collaboratorIds.length} upload notifications for project: ${projectId}`);
+  } catch (error) {
+    console.error('❌ Error notifying audio upload:', error);
+    // Don't throw error - notifications shouldn't break the main flow
+  }
+}
 
 // Health check - test S3 connection
 router.get('/test-s3', async (req, res) => {
@@ -190,6 +241,9 @@ router.post('/project', authenticateToken, (req: Request, res: Response) => {
         // Commit transaction
         await client.query('COMMIT');
         logWithTimestamp('✅ Transaction committed successfully');
+
+        // Send notifications to project collaborators about new upload
+        await notifyAudioUpload(project.id, userId, req.file.originalname);
 
         // ENHANCED: Test the created S3 key immediately
         try {

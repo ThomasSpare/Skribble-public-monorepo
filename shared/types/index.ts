@@ -289,6 +289,92 @@ export interface UserAnalytics {
   preferredRole: 'producer' | 'artist';
 }
 
+// Website Analytics Types
+export interface PageView {
+  id: string;
+  timestamp: Date;
+  path: string;
+  referrer?: string;
+  userAgent: string;
+  ipAddress: string;
+  country?: string;
+  city?: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  browser: string;
+  os: string;
+  screenResolution?: string;
+  sessionId: string;
+  isUniqueVisitor: boolean;
+}
+
+export interface AnalyticsSession {
+  id: string;
+  createdAt: Date;
+  updatedAt: Date;
+  pageCount: number;
+  duration: number; // in seconds
+  ipAddress: string;
+  userAgent: string;
+}
+
+export interface AnalyticsSummary {
+  totalPageViews: number;
+  totalUniqueVisitors: number;
+  avgDailyViews: number;
+  avgSessionDuration: number;
+  topCountries: CountryStat[];
+  topPages: PageStat[];
+  topReferrers: ReferrerStat[];
+  deviceBreakdown: DeviceStat[];
+  browserBreakdown: BrowserStat[];
+  dailyStats: DailyStat[];
+}
+
+export interface CountryStat {
+  country: string;
+  views: number;
+  uniqueVisitors: number;
+  percentage: number;
+}
+
+export interface PageStat {
+  path: string;
+  views: number;
+  uniqueVisitors: number;
+  avgTimeOnPage: number;
+}
+
+export interface ReferrerStat {
+  referrer: string;
+  views: number;
+  percentage: number;
+}
+
+export interface DeviceStat {
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  views: number;
+  percentage: number;
+}
+
+export interface BrowserStat {
+  browser: string;
+  views: number;
+  percentage: number;
+}
+
+export interface DailyStat {
+  date: string;
+  views: number;
+  uniqueVisitors: number;
+  sessions: number;
+}
+
+export interface AnalyticsTimeRange {
+  period: 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
+  startDate?: Date;
+  endDate?: Date;
+}
+
 // Error types
 export interface AppError extends Error {
   statusCode: number;

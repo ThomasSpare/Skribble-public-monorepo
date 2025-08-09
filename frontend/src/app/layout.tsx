@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import Analytics from '../components/Analytics'
 
 export const metadata: Metadata = {
   title: 'Skribble - Music Collaboration Platform',
@@ -19,6 +20,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body>
+        <Analytics />
         {children}
       </body>
     </html>

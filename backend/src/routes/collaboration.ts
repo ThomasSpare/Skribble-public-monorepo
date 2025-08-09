@@ -8,9 +8,62 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { S3ImageProcessor } from '../utils/s3ImageProcessor';
+import { CachedProjectModel } from '../models/CachedProject';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+// Helper function to notify about new collaborators
+async function notifyCollaboratorJoined(projectId: string, newCollaboratorUserId: string, newCollaboratorUsername?: string) {
+  try {
+    // Get project details and user info
+    const projectQuery = await pool.query(`
+      SELECT 
+        p.title, 
+        p.creator_id,
+        u.username as collaborator_username
+      FROM projects p, users u
+      WHERE p.id = $1 AND u.id = $2
+    `, [projectId, newCollaboratorUserId]);
+
+    if (projectQuery.rows.length === 0) return;
+
+    const { title, creator_id, collaborator_username } = projectQuery.rows[0];
+    const actualUsername = newCollaboratorUsername || collaborator_username;
+
+    // Get all existing collaborators (excluding the new one)
+    const collaboratorsQuery = await pool.query(`
+      SELECT DISTINCT user_id
+      FROM project_collaborators 
+      WHERE project_id = $1 AND user_id != $2 AND status = 'accepted'
+      UNION
+      SELECT creator_id as user_id
+      FROM projects
+      WHERE id = $1 AND creator_id != $2
+    `, [projectId, newCollaboratorUserId]);
+
+    const collaboratorIds = collaboratorsQuery.rows.map(row => row.user_id);
+
+    // Create notifications for all existing project members
+    for (const collaboratorId of collaboratorIds) {
+      await CachedProjectModel.createNotification({
+        userId: collaboratorId,
+        projectId,
+        type: 'collaborator_joined',
+        title: 'New collaborator joined',
+        message: `${actualUsername} joined the project "${title}"`,
+        data: { 
+          newCollaboratorUsername: actualUsername
+        }
+      });
+    }
+
+    console.log(`✅ Sent ${collaboratorIds.length} collaboration notifications for project: ${projectId}`);
+  } catch (error) {
+    console.error('❌ Error notifying collaborator joined:', error);
+    // Don't throw error - notifications shouldn't break the main flow
+  }
+}
 
 // JWT payload interface
 interface JWTPayload {
@@ -303,6 +356,9 @@ router.post('/guest-join', [
 
       await client.query('COMMIT');
 
+      // Send notifications about new collaborator
+      await notifyCollaboratorJoined(invite.project_id, userId, username);
+
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -581,6 +637,9 @@ router.post('/join/:token', [
       await client.query('COMMIT');
 
       console.log(`✅ Successfully added user ${userId} as collaborator to project ${invite.project_id}`);
+
+      // Send notifications about new collaborator
+      await notifyCollaboratorJoined(invite.project_id, userId);
 
       res.json({
         success: true,

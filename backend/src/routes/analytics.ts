@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { analyticsService } from '../services/analytics-service';
 import bcrypt from 'bcryptjs';
-import { AnalyticsTimeRange } from '../../../shared/types';
+import { AnalyticsTimeRange } from '../types';
 
 const router = Router();
 

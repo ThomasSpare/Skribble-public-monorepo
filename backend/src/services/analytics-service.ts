@@ -12,7 +12,7 @@ import {
   BrowserStat,
   DailyStat,
   AnalyticsTimeRange 
-} from '../../../shared/types';
+} from '../types';
 
 class AnalyticsService {
   private pool: Pool;

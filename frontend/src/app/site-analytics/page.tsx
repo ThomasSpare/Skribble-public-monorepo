@@ -46,7 +46,7 @@ export default function SiteAnalyticsPage() {
     setIsLoading(true)
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin
-      const response = await fetch(`${apiUrl}/analytics/auth/dashboard`, {
+      const response = await fetch(`${apiUrl}/api/analytics/auth/dashboard`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ export default function SiteAnalyticsPage() {
     
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin
-      const response = await fetch(`${apiUrl}/analytics/stats?period=${timeRange}`, {
+      const response = await fetch(`${apiUrl}/api/analytics/stats?period=${timeRange}`, {
         credentials: 'include'
       })
 
@@ -101,7 +101,7 @@ export default function SiteAnalyticsPage() {
   const handleLogout = async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin
-      await fetch(`${apiUrl}/analytics/auth/logout`, {
+      await fetch(`${apiUrl}/api/analytics/auth/logout`, {
         method: 'POST',
         credentials: 'include'
       })

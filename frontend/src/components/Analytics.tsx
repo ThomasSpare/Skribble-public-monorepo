@@ -21,7 +21,7 @@ export default function Analytics({ path }: { path?: string }) {
         // Get API URL from environment or default to current origin
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
         
-        const response = await fetch(`${apiUrl}/api/analytics/track`, {
+        const response = await fetch(`${apiUrl}/analytics/track`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

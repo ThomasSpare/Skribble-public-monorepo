@@ -6,7 +6,7 @@ import { AnalyticsTimeRange } from '../types';
 const router = Router();
 
 // Password for dashboard access - you should change this hash
-const DASHBOARD_PASSWORD_HASH = '$2b$12$mHQ4hmf/JkdI9FwETBQ7cOELQp9qtc3k/uEfifjMHnBHzIBpqK5Ba';
+const DASHBOARD_PASSWORD_HASH = '$2b$12$rHjilEmJVChoHO0XDCDfxeeomp2OfY99MY.1dq62A1WkkSCVSUoqW';
 
 // Middleware to get client IP address
 function getClientIP(req: Request): string {

@@ -71,6 +71,8 @@ router.post('/auth/dashboard', async (req: Request, res: Response) => {
   try {
     const { password } = req.body;
 
+    console.log('Analytics auth attempt:', { password: password?.substring(0, 3) + '***', timestamp: new Date().toISOString() });
+
     if (!password) {
       return res.status(400).json({
         success: false,
@@ -80,6 +82,8 @@ router.post('/auth/dashboard', async (req: Request, res: Response) => {
 
     // Temporary simple check - replace with bcrypt later
     const isValid = password === 'zmakqo0202' || await bcrypt.compare(password, DASHBOARD_PASSWORD_HASH);
+    
+    console.log('Password validation result:', { isValid, receivedPassword: password === 'zmakqo0202' });
 
     if (isValid) {
       // Set authentication cookie
@@ -177,6 +181,15 @@ router.post('/update-daily-stats', requireDashboardAuth, async (req: Request, re
       error: 'Failed to update daily stats'
     });
   }
+});
+
+// Test endpoint to verify deployment
+router.get('/test-deployment', (req: Request, res: Response) => {
+  res.json({
+    message: 'Analytics routes updated successfully',
+    timestamp: new Date().toISOString(),
+    passwordCheck: 'zmakqo0202' === 'zmakqo0202' ? 'PASS' : 'FAIL'
+  });
 });
 
 // Health check endpoint

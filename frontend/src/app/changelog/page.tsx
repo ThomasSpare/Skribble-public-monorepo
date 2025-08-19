@@ -12,6 +12,7 @@ const ChangelogPage = () => {
       date: "August 18, 2025",
       title: "Professional DAW Export Suite",
       type: "major", 
+      quote: "Music is the soundtrack of your life. - Dick Clark",
       features: [
         { icon: Download, title: "WAV + Cue Points Export", description: "Professional WAV files with embedded cue points for annotations, compatible with all major DAWs" },
         { icon: Music, title: "Individual Voice Note Tracks", description: "Export voice notes as separate audio tracks positioned at exact timestamps" },

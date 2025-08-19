@@ -247,6 +247,42 @@ class S3UploadService {
   }
 
   /**
+   * Get file content directly as Buffer from S3
+   */
+  async getFileBuffer(key: string): Promise<Buffer> {
+    try {
+      logWithTimestamp('📥 Getting file content from S3:', { key });
+      
+      const command = new GetObjectCommand({
+        Bucket: this.bucketName,
+        Key: key
+      });
+
+      const response = await this.s3Client.send(command);
+      
+      if (!response.Body) {
+        throw new Error('No file content received from S3');
+      }
+
+      // Convert response body to buffer using AWS SDK v3 method
+      const streamToBuffer = async (stream: any): Promise<Buffer> => {
+        const chunks: Uint8Array[] = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        return Buffer.concat(chunks);
+      };
+
+      const buffer = await streamToBuffer(response.Body);
+      logWithTimestamp('✅ File content retrieved successfully:', { size: buffer.length });
+      return buffer;
+    } catch (error) {
+      logWithTimestamp('❌ Failed to get file content:', { key, error: error.message });
+      throw error;
+    }
+  }
+
+  /**
    * Check if S3 is properly configured
    * FIXED: Use correct key for deletion
    */

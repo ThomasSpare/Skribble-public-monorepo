@@ -70,6 +70,14 @@ export interface CollaboratorPermissions {
   canVoiceNote?: boolean;
 }
 
+export interface DAWMarker {
+  start: number; // in seconds
+  end?: number; // in seconds, optional for single markers
+  label: string;
+  color?: string; // Optional color for the marker
+  type?: 'section' | 'comment' | 'issue'; // Type of marker
+}
+
 export interface AudioFile {
   id: string;
   projectId: string;
@@ -233,7 +241,7 @@ export interface FileUploadProgress {
 export interface ExportRequest {
   projectId: string;
   audioFileId: string;
-  format: 'wav_with_cues' | 'reaper_project' | 'pro_tools' | 'logic_pro' | 'ableton' | 'marker_file';
+  format: 'wav_with_cues' | 'reaper_project' | 'pro_tools' | 'logic_pro' | 'marker_file';
   includeAnnotations: boolean;
   includeVoiceNotes: boolean;
 }

@@ -377,7 +377,7 @@ export default function QuickstartPage() {
                 {
                   icon: Download,
                   title: 'DAW Export',
-                  features: ['Export to Reaper (.rpp)', 'Pro Tools (.ptxt)', 'Logic Pro (.logic)', 'Ableton Live (.als)', 'Universal (.wav with cue points)']
+                  features: ['Export to Reaper (.rpp)', 'Pro Tools (.ptxt)', 'Logic Pro (.logic)', 'Universal (.wav with cue points)']
                 }
               ].map((feature, index) => (
                 <div key={index} className="bg-skribble-plum/20 backdrop-blur-sm rounded-xl p-6 border border-skribble-azure/10">
@@ -447,6 +447,76 @@ export default function QuickstartPage() {
                     </kbd>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+
+          {/* DAW Export */}
+          <div>
+            <h2 className="font-madimi text-4xl text-skribble-sky mb-8 text-center flex items-center justify-center gap-3">
+              <Download className="w-8 h-8" />
+              Export to DAW
+            </h2>
+            
+            <div className="bg-gradient-to-r from-skribble-azure/20 to-skribble-purple/20 backdrop-blur-sm rounded-xl p-8 border border-skribble-azure/20 mb-12">
+              <div className="text-center mb-8">
+                <h3 className="font-medium text-skribble-sky text-2xl mb-3">🎵 Professional DAW Integration</h3>
+                <p className="text-skribble-azure text-lg">Export your projects with all annotations and voice notes for professional mixing and mastering</p>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-skribble-dark/30 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Music className="w-6 h-6 text-skribble-azure" />
+                    <h4 className="font-medium text-skribble-sky">WAV + Cue Points</h4>
+                  </div>
+                  <ul className="text-skribble-azure text-sm space-y-2">
+                    <li>• Professional WAV with embedded markers</li>
+                    <li>• All annotations become cue points</li>
+                    <li>• Works with Pro Tools, Logic, Reaper</li>
+                    <li>• Converts any format to WAV</li>
+                  </ul>
+                </div>
+
+                <div className="bg-skribble-dark/30 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Mic className="w-6 h-6 text-skribble-purple" />
+                    <h4 className="font-medium text-skribble-sky">Voice Note Tracks</h4>
+                  </div>
+                  <ul className="text-skribble-azure text-sm space-y-2">
+                    <li>• Each voice note as separate track</li>
+                    <li>• Perfect timestamp positioning</li>
+                    <li>• Multiple file download</li>
+                    <li>• Professional A&R workflow</li>
+                  </ul>
+                </div>
+
+                <div className="bg-skribble-dark/30 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Settings className="w-6 h-6 text-skribble-azure" />
+                    <h4 className="font-medium text-skribble-sky">Smart Processing</h4>
+                  </div>
+                  <ul className="text-skribble-azure text-sm space-y-2">
+                    <li>• Intelligent annotation grouping</li>
+                    <li>• Full text preservation for zoom</li>
+                    <li>• User attribution in markers</li>
+                    <li>• Priority-based organization</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-skribble-azure/10 border border-skribble-azure/30 rounded-lg p-6">
+                <h4 className="font-medium text-skribble-sky mb-3">🚀 How to Export</h4>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <ul className="text-skribble-azure text-sm space-y-2">
+                    <li><strong>1.</strong> Open your project</li>
+                    <li><strong>2.</strong> Click "Export to DAW" in project menu</li>
+                  </ul>
+                  <ul className="text-skribble-azure text-sm space-y-2">
+                    <li><strong>3.</strong> Choose WAV + Cue Points format</li>
+                    <li><strong>4.</strong> Download files and import to your DAW</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>

@@ -24,6 +24,7 @@ import contactRoutes from './routes/contact';
 import projectsCachedRoutes from './routes/projects-cached';
 import waveformRoutes from './routes/waveforms';
 import analyticsRoutes from './routes/analytics';
+import exportRoutes from './routes/export';
 
 const app = express();
 const server = createServer(app);
@@ -206,6 +207,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/collaboration', collaborationRoutes);
 app.use('/api/voice-notes', voiceNotesRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/export', exportRoutes);
 
 // Static file serving for uploads
 app.use('/uploads', express.static('./uploads'));

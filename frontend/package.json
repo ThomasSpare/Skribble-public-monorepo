@@ -12,8 +12,10 @@
   "dependencies": {
     "@headlessui/react": "^1.7.0",
     "@heroicons/react": "^2.0.0",
+    "@types/jszip": "^3.4.0",
     "ffmpeg": "^0.0.4",
     "framer-motion": "^10.16.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.294.0",
     "next": "14.2.15",
     "react": "^18.2.0",
@@ -34,6 +36,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@types/react-dropzone": "^4.2.2",
+    "@types/jszip": "^3.4.1",
     "autoprefixer": "^10.4.21",
     "eslint": "^8.0.0",
     "eslint-config-next": "14.2.15",

@@ -174,47 +174,31 @@ const [showGradientMenu, setShowGradientMenu] = useState(false);
 
 
 // DAW export options
-  const DAW_EXPORT_OPTIONS = [
+const DAW_EXPORT_OPTIONS = [
   { 
     value: 'wav-cues' as DAWExportFormat, 
     label: 'WAV + Cue Points', 
-    description: 'Embeds annotations directly in audio file', 
+    description: 'Works with Reaper and other DAWs that support WAV markers', 
     icon: '🎵',
     tierRequired: 'indie',
-    detail: 'Annotations appear as markers when opened in any DAW'
+    detail: 'Converts to WAV with embedded markers - annotations appear in Reaper timeline'
+  },
+  { 
+    value: 'aaf-professional' as DAWExportFormat, 
+    label: 'MIDI + Audio Package', 
+    description: 'Professional workflow - works with Pro Tools, Logic, Cubase', 
+    icon: '🎯',
+    tierRequired: 'producer',
+    detail: 'MIDI markers + original audio - reliable import for Pro Tools and professional DAWs'
   },
   { 
     value: 'reaper-rpp' as DAWExportFormat, 
     label: 'Reaper Project', 
-    description: 'Complete RPP project file with markers', 
+    description: 'Complete Reaper project with audio', 
     icon: '🎛️',
     tierRequired: 'producer',
-    detail: 'Ready-to-import Reaper project with timeline markers'
+    detail: 'Ready-to-open Reaper project file with all tracks and markers positioned'
   },
-  { 
-    value: 'logic-markers' as DAWExportFormat, 
-    label: 'Logic Pro Markers', 
-    description: 'Logic marker import file', 
-    icon: '🍎',
-    tierRequired: 'producer',
-    detail: 'Import directly into Logic Pro timeline'
-  },
-  { 
-    value: 'pro-tools-ptxt' as DAWExportFormat, 
-    label: 'Pro Tools Session', 
-    description: 'Session markers (.ptxt)', 
-    icon: '🔧',
-    tierRequired: 'producer',
-    detail: 'Pro Tools compatible session markers'
-  },
-  { 
-    value: 'ableton-als' as DAWExportFormat, 
-    label: 'Ableton Live', 
-    description: 'Live set with locators', 
-    icon: '🎚️',
-    tierRequired: 'producer',
-    detail: 'Ableton Live set with timeline locators'
-  }
 ];
 
   const getVisibleAnnotations = useCallback(() => {
@@ -401,9 +385,9 @@ const [showGradientMenu, setShowGradientMenu] = useState(false);
 const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
   const tierFormats: Record<string, DAWExportFormat[]> = {
     free: [], // No exports for free
-    indie: ['wav-cues'], // Only WAV with cues for Indie
-    producer: ['wav-cues', 'reaper-rpp', 'logic-markers', 'pro-tools-ptxt', 'ableton-als'], // All formats
-    studio: ['wav-cues', 'reaper-rpp', 'logic-markers', 'pro-tools-ptxt', 'ableton-als'] // All formats
+    indie: ['wav-cues'], // Universal WAV with cues for Indie
+    producer: ['wav-cues', 'aaf-professional', 'reaper-rpp'], // All 3 proven methods
+    studio: ['wav-cues', 'aaf-professional', 'reaper-rpp'] // All 3 proven methods
   };
   return tierFormats[tier] || [];
 };
@@ -496,7 +480,7 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
         throw new Error('No authentication token');
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/${audioFileId}?zoom=${zoom}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/waveforms/${audioFileId}?zoom=${zoom}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -528,7 +512,7 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
       const token = localStorage.getItem('token');
       if (!token) return null;
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/status/${audioFileId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/waveforms/status/${audioFileId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -551,7 +535,7 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/preload/${projectId}`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/waveforms/preload/${projectId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -575,7 +559,7 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
       setWaveformStatus('generating');
 
       // Call backend regeneration endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/waveforms/regenerate/${audioFileId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/waveforms/regenerate/${audioFileId}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -2197,6 +2181,12 @@ const getGradientStyle = useCallback((): React.CSSProperties => {
   }, [gradientSettings]);
 
   const handleDAWExport = async (format: DAWExportFormat) => {
+    if (!audioUrl || !annotations || !title) {
+      alert('❌ Missing required data for export. Please refresh and try again.');
+      return;
+    }
+    
+
     if (!userTierInfo) {
       alert('❌ Unable to determine your subscription tier. Please refresh and try again.');
       return;
@@ -2223,20 +2213,34 @@ const getGradientStyle = useCallback((): React.CSSProperties => {
       // Extract clean filename from S3 URL
       const cleanFileName = extractCleanFilename(audioUrl, title);
       
-      // Use your existing exportForDAW function
+      
+      // Use existing exportForDAW function for other formats
       const result = await exportForDAW(audioUrl, annotations, title, cleanFileName, format);
       
       const formatLabel = DAW_EXPORT_OPTIONS.find(opt => opt.value === format)?.label || format;
       
-      // Special message for Reaper export explaining the process
-      if (format === 'reaper-rpp') {
-        alert(`✅ Successfully exported ${result.markerCount} annotations as ${formatLabel}!\n\n` +
-              `📁 To use in Reaper:\n` +
-              `1. Download your original audio file from Skribble\n` +
-              `2. Rename it to: ${cleanFileName}\n` +
-              `3. Place it in the same folder as the .rpp file\n` +
-              `4. Open the .rpp file in Reaper\n\n` +
-              `💡 Tip: The .rpp file expects "${cleanFileName}" - make sure your audio file has exactly this name!`);
+      // Special messages for different export types
+      if (format === 'aaf-professional') {
+        alert(`✅ Successfully exported ${result.markerCount} annotations as MIDI + Audio Package!\n\n` +
+              `🎯 Professional DAW Package Contents:\n` +
+              `• Original audio file (preserved format)\n` +
+              `• MIDI file with precise markers\n` +
+              `• Clean text labels (no emojis)\n` +
+              `• Professional timing accuracy\n\n` +
+              `📁 Import Instructions:\n` +
+              `1. Create new session in your DAW\n` +
+              `2. Import → Audio to Track (select audio file)\n` +
+              `3. Import → MIDI to Track (select .mid file)\n` +
+              `4. All markers appear automatically!\n\n` +
+              `✅ Works with: Pro Tools, Logic Pro, Cubase, Nuendo & more!`);
+      } else if (format === 'reaper-rpp') {
+        alert(`✅ Successfully exported ${result.markerCount} annotations as Reaper Project!\n\n` +
+              `📁 Complete Reaper Project Package:\n` +
+              `• .rpp project file\n` +
+              `• Audio files included\n` +
+              `• Voice notes on separate tracks\n` +
+              `• All markers positioned on timeline\n\n` +
+              `💡 Extract the ZIP and open the .rpp file in Reaper!`);
       } else {
         alert(`✅ Successfully exported ${result.markerCount} annotations as ${formatLabel}!`);
       }

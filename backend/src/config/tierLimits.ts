@@ -12,12 +12,24 @@ const TIER_LIMITS = {
   producer: {
     maxProjects: 20,
     maxCollaborators: 10,
-    allowedExportFormats: ['wav_with_cues', 'reaper_project', 'pro_tools', 'logic_pro', 'ableton']
+    allowedExportFormats: [
+      'wav_with_cues', 
+      'reaper_project', 
+      'aaf_professional',
+      'pro_tools', 
+      'logic_pro', 
+    ]
   },
   studio: {
     maxProjects: -1, // unlimited
     maxCollaborators: 20,
-    allowedExportFormats: ['wav_with_cues', 'reaper_project', 'pro_tools', 'logic_pro', 'ableton']
+    allowedExportFormats: [
+      'wav_with_cues', 
+      'reaper_project', 
+      'aaf_professional',
+      'pro_tools', 
+      'logic_pro', 
+    ]
   }
 };
 

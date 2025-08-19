@@ -70,6 +70,7 @@ const DocsPage = () => {
     { id: 'overview', label: 'Overview', icon: Book },
     { id: 'quickstart', label: 'Quick Start', icon: Play },
     { id: 'features', label: 'Core Features', icon: Settings },
+    { id: 'export', label: 'DAW Export', icon: Download },
     { id: 'advanced', label: 'Advanced Features', icon: Zap },
     { id: 'api', label: 'API Reference', icon: Code },
     { id: 'specs', label: 'Specifications', icon: Music },
@@ -406,6 +407,96 @@ socket.on('annotation-created', (annotation) => {
                         <li>• User presence indicators</li>
                         <li>• Instant notifications</li>
                       </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DAW Export Section */}
+            {activeSection === 'export' && (
+              <div className="space-y-8">
+                <div>
+                  <h2 className="text-3xl font-madimi text-skribble-sky mb-6">🎵 DAW Export Features</h2>
+                  
+                  <div className="grid gap-6">
+                    <div className="bg-skribble-dark/30 rounded-lg p-6">
+                      <h3 className="text-xl font-madimi text-skribble-sky mb-3">🎧 WAV + Cue Points Export</h3>
+                      <p className="text-skribble-azure mb-4">
+                        Export your projects as professional WAV files with embedded cue points for all annotations.
+                      </p>
+                      <ul className="space-y-2 text-skribble-azure mb-4">
+                        <li>• Professional WAV files with embedded BWF/RIFF cue points</li>
+                        <li>• All annotation types supported (comments, issues, approvals)</li>
+                        <li>• Smart grouping of closely-spaced annotations</li>
+                        <li>• Full text preservation for detailed DAW views</li>
+                        <li>• Compatible with Pro Tools, Logic Pro, Reaper, and more</li>
+                      </ul>
+                      <div className="bg-skribble-azure/10 border border-skribble-azure/30 rounded-lg p-4">
+                        <p className="text-sm text-skribble-azure">
+                          <strong>Supported Formats:</strong> Converts MP3, M4A, FLAC, AIFF, and OGG to WAV with cue points
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-skribble-dark/30 rounded-lg p-6">
+                      <h3 className="text-xl font-madimi text-skribble-sky mb-3">🎤 Individual Voice Note Tracks</h3>
+                      <p className="text-skribble-azure mb-4">
+                        Export voice notes as separate audio tracks positioned at exact timestamps.
+                      </p>
+                      <ul className="space-y-2 text-skribble-azure mb-4">
+                        <li>• Each voice note exported as individual WAV file</li>
+                        <li>• Perfect timestamp alignment with main audio</li>
+                        <li>• Full-length tracks with silent audio before/after voice note</li>
+                        <li>• Multiple file download for easy DAW import</li>
+                        <li>• Professional A&R workflow compatibility</li>
+                      </ul>
+                      <div className="bg-skribble-azure/10 border border-skribble-azure/30 rounded-lg p-4">
+                        <p className="text-sm text-skribble-azure">
+                          <strong>Example:</strong> Project with 2 voice notes exports 3 files: main audio + 2 voice tracks
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-skribble-dark/30 rounded-lg p-6">
+                      <h3 className="text-xl font-madimi text-skribble-sky mb-3">🎹 MIDI + Audio Package</h3>
+                      <p className="text-skribble-azure mb-4">
+                        Export complete project packages with MIDI data and audio files.
+                      </p>
+                      <ul className="space-y-2 text-skribble-azure">
+                        <li>• MIDI files with tempo and marker information</li>
+                        <li>• Audio stems and project files</li>
+                        <li>• Session data for major DAWs</li>
+                        <li>• Complete project reconstruction capability</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-skribble-dark/30 rounded-lg p-6">
+                      <h3 className="text-xl font-madimi text-skribble-sky mb-3">🎛️ Reaper Project Export</h3>
+                      <p className="text-skribble-azure mb-4">
+                        Generate complete Reaper project files (.rpp) with markers and audio.
+                      </p>
+                      <ul className="space-y-2 text-skribble-azure">
+                        <li>• Native .rpp project file generation</li>
+                        <li>• All annotations converted to Reaper markers</li>
+                        <li>• Audio file linking and organization</li>
+                        <li>• One-click project import in Reaper</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-skribble-azure/20 to-skribble-purple/20 border border-skribble-azure/30 rounded-lg p-6">
+                      <h3 className="text-xl font-madimi text-skribble-sky mb-3">🚀 How to Export</h3>
+                      <div className="space-y-3 text-skribble-azure">
+                        <p><strong>1.</strong> Open your project in Skribble</p>
+                        <p><strong>2.</strong> Click the "Export to DAW" button in the project menu</p>
+                        <p><strong>3.</strong> Choose your preferred format:</p>
+                        <ul className="ml-6 space-y-1">
+                          <li>• <strong>WAV + Cue Points</strong> - For annotation markers</li>
+                          <li>• <strong>MIDI + Audio Package</strong> - For complete project data</li>
+                          <li>• <strong>Reaper Project</strong> - For native Reaper import</li>
+                        </ul>
+                        <p><strong>4.</strong> Download your files and import into your DAW</p>
+                      </div>
                     </div>
                   </div>
                 </div>

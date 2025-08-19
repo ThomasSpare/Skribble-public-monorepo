@@ -238,7 +238,7 @@ export interface FileUploadProgress {
 export interface ExportRequest {
   projectId: string;
   audioFileId: string;
-  format: 'wav_with_cues' | 'reaper_project' | 'pro_tools' | 'logic_pro' | 'ableton' | 'marker_file';
+  format: 'wav_with_cues' | 'reaper_project' | 'pro_tools' | 'logic_pro' | 'marker_file';
   includeAnnotations: boolean;
   includeVoiceNotes: boolean;
 }

@@ -105,15 +105,23 @@ npm run migrate:s3:cleanup  # Clean up local files after S3 migration
 ### Frontend Components
 - `WaveformPlayer` - Audio playback with visualization using WaveSurfer.js
 - `AnnotationSystem` - Real-time annotation management
-- `ProjectMenu` - Project settings and collaboration management
+- `ProjectMenu` - Project settings and collaboration management with DAW export functionality
 - `VoiceNoteRecorder` - Voice annotation recording
 - `SettingsModal` - User account and subscription management
 
 ### Backend Services
 - `s3-upload.ts` - AWS S3 file management
+- `export.ts` - Professional DAW export with WAV cue points and voice note tracks
 - Authentication middleware with role-based permissions
 - Database connection pooling and transaction management
 - Real-time Socket.IO event handling
+
+### Export Features
+- **WAV + Cue Points**: Professional WAV files with embedded annotation markers
+- **Voice Note Tracks**: Individual audio tracks for each voice note at exact timestamps
+- **Multi-Format Support**: Converts MP3, M4A, FLAC, AIFF, OGG to WAV with cue points
+- **Smart Annotation Processing**: Intelligent grouping and formatting of closely-spaced comments
+- **DAW Compatibility**: Works with Pro Tools, Logic Pro, Reaper, and other professional DAWs
 
 ## Environment Configuration
 

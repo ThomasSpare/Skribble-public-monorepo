@@ -8,11 +8,32 @@ import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, Messa
 const ChangelogPage = () => {
   const updates = [
     {
+      version: "2.0.0",
+      date: "August 18, 2025",
+      title: "Professional DAW Export Suite",
+      type: "major", 
+      features: [
+        { icon: Download, title: "WAV + Cue Points Export", description: "Professional WAV files with embedded cue points for annotations, compatible with all major DAWs" },
+        { icon: Music, title: "Individual Voice Note Tracks", description: "Export voice notes as separate audio tracks positioned at exact timestamps" },
+        { icon: Settings, title: "Smart Annotation Formatting", description: "Intelligent grouping and numbering of closely-spaced annotations for better readability" },
+        { icon: Upload, title: "Multi-Format Audio Support", description: "Convert MP3, M4A, FLAC, AIFF, and OGG files to WAV with embedded cue points" },
+        { icon: Users, title: "Enhanced Marker Details", description: "Full annotation text preserved for zoom views in DAWs with user attribution" },
+        { icon: Rocket, title: "Multiple File Downloads", description: "Simultaneous download of main audio plus individual voice note tracks" }
+      ],
+      technical: [
+        "Implemented FFmpeg-based audio format conversion with cue point embedding",
+        "Created individual voice note track generation with precise timestamp positioning", 
+        "Added WAV file structure manipulation for professional cue point integration",
+        "Built smart annotation grouping algorithm for closely-spaced comments",
+        "Developed base64 multi-file download system for separate track delivery",
+        "Enhanced frontend to handle JSON responses with multiple audio files"
+      ]
+    },
+    {
       version: "1.0.2",
       date: "August 7, 2025",
       title: "🎯 Enhanced Waveform Interaction & Workflow",
       type: "patch", 
-      quote: "Good design is making something intelligible and memorable. Great design is making something memorable and meaningful. - Dieter Rams",
       features: [
         { icon: MousePointer, title: "Momentum Scrolling", description: "Smooth fade-out scrolling when right-click dragging the waveform" },
         { icon: Keyboard, title: "Tab Loop Shortcut", description: "Press Tab to instantly return to last clicked position for section looping" },
@@ -35,7 +56,6 @@ const ChangelogPage = () => {
       date: "August 5, 2025",
       title: "📱 Mobile Waveform Experience Overhaul",
       type: "patch", 
-      quote: "Great design is invisible. When it works, you don't notice it. - Jared Spool",
       features: [
         { icon: Smartphone, title: "Mobile Waveform Optimization", description: "Crisp, high-resolution waveform rendering with proper pixel ratio scaling" },
         { icon: Settings, title: "Responsive Annotation Bubbles", description: "Intelligently sized annotation markers that scale with canvas dimensions" },
@@ -58,13 +78,12 @@ const ChangelogPage = () => {
       date: "July 19, 2025",
       title: "🚀 Official Launch - The Future of Music Collaboration",
       type: "major",
-      quote: "The best way to predict the future is to invent it. - Alan Kay",
       features: [
         { icon: Music, title: "Core Audio Engine", description: "Professional-grade audio playback with millisecond precision" },
         { icon: MessageCircle, title: "Annotation System", description: "Timestamped comments, voice notes, and section markers" },
         { icon: Users, title: "Real-time Collaboration", description: "Live cursor tracking and instant notifications" },
         { icon: Settings, title: "Version Control", description: "Track changes across multiple versions (v1.0, v1.1, v2.0)" },
-        { icon: Download, title: "DAW Integration", description: "Export to Reaper, Pro Tools, Logic Pro, and Ableton Live" },
+        { icon: Download, title: "DAW Integration", description: "Export to Reaper, Pro Tools, and Logic Pro" },
         { icon: Shield, title: "Subscription System", description: "Indie ($7), Producer ($19), and Studio ($49) tiers" }
       ],
       technical: [
@@ -212,16 +231,16 @@ const ChangelogPage = () => {
             <div className="bg-gradient-to-r from-skribble-azure/20 to-skribble-purple/20 backdrop-blur-sm rounded-2xl border border-skribble-azure/20 p-8 mb-8">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-gradient-to-r from-skribble-azure to-skribble-purple rounded-lg p-2">
-                  <MousePointer className="w-6 h-6 text-white" />
+                  <Download className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-madimi text-white">Version 1.0.2</h2>
-                  <p className="text-skribble-sky/80">August 7, 2025</p>
+                  <h2 className="text-2xl font-madimi text-white">Version 2.0.0</h2>
+                  <p className="text-skribble-sky/80">August 18, 2025</p>
                 </div>
               </div>
               
               <h3 className="text-xl font-semibold text-white mb-3">
-                🎯 Enhanced Waveform Interaction & Workflow
+                🎵 Professional DAW Export Suite
               </h3>
               
               <blockquote className="italic text-skribble-sky/80 mb-6 border-l-4 border-skribble-azure pl-4">

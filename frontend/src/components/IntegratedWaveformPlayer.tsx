@@ -993,11 +993,11 @@ const getExportFormatsForTier = (tier: string): DAWExportFormat[] => {
     setClickFeedback(null);
   }, []);
 
-  const seekTo = useCallback((time: number) => {
+  const seekTo = useCallback((time: number, force = false) => {
     if (!audioRef.current || !isAudioReady) return;
     
-    // Don't seek during momentum scrolling to prevent cursor jumping
-    if (isInertiaScrolling) {
+    // Don't seek during momentum scrolling to prevent cursor jumping, unless forced
+    if (isInertiaScrolling && !force) {
       return;
     }
     
@@ -2308,7 +2308,7 @@ const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
 
   // First check if we clicked on an annotation
   if (hoveredAnnotation) {
-    seekTo(hoveredAnnotation.timestamp);
+    seekTo(hoveredAnnotation.timestamp, true);
     return;
   }
 
@@ -2403,7 +2403,7 @@ const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     }
 
     if (tappedAnnotation) {
-      seekTo(tappedAnnotation.timestamp);
+      seekTo(tappedAnnotation.timestamp, true);
     } else {
       // Seek to tapped position
       const progress = touchX / rect.width;
@@ -3479,7 +3479,7 @@ return (
         <AnnotationSystem
           audioFileId={audioFileId}
           currentTime={currentTime}
-          onSeekTo={seekTo}
+          onSeekTo={(time: number) => seekTo(time, true)}
 
           currentUser={currentUser}
           onAnnotationCreated={handleAnnotationCreated}

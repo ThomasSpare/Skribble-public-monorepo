@@ -1237,7 +1237,7 @@ async function generateProToolsSessionPackage(
     const audioFilename = `${projectName}.${originalExtension}`;
     audioFolder.file(audioFilename, audioBlob);
     
-    // 2. Generate MIDI file with markers (reliable import method)
+    // 2. Generate MIDI file with markers (works for Pro Tools and Cubase)
     const midiWithMarkers = generateMIDIWithMarkers(markers, projectName);
     sessionFolder.file(`${projectName}_Markers.mid`, midiWithMarkers);
     
@@ -1298,11 +1298,42 @@ ${'='.repeat(40)}
 }
 
 /**
+ * Generate Cubase XML marker file for direct import
+ */
+function generateCubaseXMLMarkers(markers: DAWMarker[], projectName: string): string {
+  const sortedMarkers = [...markers].sort((a, b) => a.timestamp - b.timestamp);
+  
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<cubase_project_markers version="1.0">
+  <project_name>${projectName}</project_name>
+  <markers>
+`;
+
+  sortedMarkers.forEach((marker, index) => {
+    const timeInSeconds = marker.timestamp;
+    const cleanText = marker.label.replace(/[<>&"']/g, ''); // Remove XML-unsafe characters
+    
+    xml += `    <marker>
+      <id>${index + 1}</id>
+      <name>${cleanText}</name>
+      <position>${timeInSeconds.toFixed(6)}</position>
+      <type>marker</type>
+    </marker>
+`;
+  });
+
+  xml += `  </markers>
+</cubase_project_markers>`;
+
+  return xml;
+}
+
+/**
  * Generate MIDI file with markers (most reliable Pro Tools import method)
  */
 function generateMIDIWithMarkers(markers: DAWMarker[], projectName: string): Uint8Array {
-  // Simple MIDI file with marker events
-  // This is the most reliable way to get markers into Pro Tools
+  // Simple MIDI file with marker events - back to basics for Cubase compatibility
+  // Using standard tempo-based timing with higher resolution
   
   const midiData = [];
   
@@ -1311,24 +1342,28 @@ function generateMIDIWithMarkers(markers: DAWMarker[], projectName: string): Uin
   midiData.push(...[0x00, 0x00, 0x00, 0x06]); // Header length
   midiData.push(...[0x00, 0x00]); // Format 0
   midiData.push(...[0x00, 0x01]); // 1 track
-  midiData.push(...[0x03, 0xC0]); // 960 ticks per quarter note (higher resolution)
+  midiData.push(...[0x03, 0xC0]); // 960 ticks per quarter note (standard resolution)
   
   // Track header
   midiData.push(...[0x4D, 0x54, 0x72, 0x6B]); // "MTrk"
   
   const trackData = [];
   
+  // Set tempo to 120 BPM (500000 microseconds per quarter note)
+  trackData.push(0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20);
+  
   // Sort markers by timestamp to ensure proper order
   const sortedMarkers = [...markers].sort((a, b) => a.timestamp - b.timestamp);
   
-  // Add markers as MIDI marker events with correct timing
+  // Add markers as MIDI marker events with corrected timing
   let previousTicks = 0;
   
   sortedMarkers.forEach((marker, index) => {
-    // Convert seconds to MIDI ticks at 120 BPM (standard tempo)
-    // At 120 BPM: 1 beat = 0.5 seconds, 1 quarter note = 480 ticks
-    // So: 1 second = 960 ticks
-    const absoluteTicks = Math.floor(marker.timestamp * 960);
+    // Convert seconds to MIDI ticks with precise calculation
+    // At 120 BPM: 1 beat = 0.5 seconds, 1 quarter note = 960 ticks  
+    // So: 1 second = 1920 ticks (960 ticks/quarter * 2 quarters/second)
+    // Use floor for consistent timing
+    const absoluteTicks = Math.floor(marker.timestamp * 1920);
     const deltaTime = absoluteTicks - previousTicks;
     previousTicks = absoluteTicks;
     
@@ -1457,7 +1492,7 @@ ${'='.repeat(60)}
 
 📂 PACKAGE CONTENTS:
 ✅ ${projectName}.${originalExtension} - Original audio file (preserved format)
-✅ ${projectName}_Markers.mid - MIDI file with markers
+✅ ${projectName}_Markers.mid - MIDI file with markers (Pro Tools & Cubase)
 ✅ ${projectName}_Memory_Locations_Manual.txt - Manual entry guide
 ✅ This instruction file
 
@@ -1466,11 +1501,18 @@ ${'='.repeat(60)}
 METHOD 1: MIDI IMPORT (RECOMMENDED) ⭐
 1. Open Pro Tools Ultimate
 2. Create new session (match your audio sample rate)
-3. File → Import → Audio to Track
+3. IMPORTANT: Set session to 30fps SMPTE timecode for precise marker timing
+4. File → Import → Audio to Track
    - Select: ${projectName}.${originalExtension}
 4. File → Import → MIDI to Track
    - Select: ${projectName}_Markers.mid
    - All markers import automatically! ✅
+
+🎹 FOR CUBASE USERS:
+1. Import audio file first
+2. File → Import → MIDI File and select ${projectName}_Markers.mid
+3. Markers should appear directly on project timeline ✅
+4. If you see instrument tracks instead: Delete them and use Project → Markers → Import from MIDI
 
 METHOD 2: MANUAL ENTRY (BACKUP)
 1. Import audio as above

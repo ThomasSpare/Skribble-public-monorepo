@@ -1300,7 +1300,7 @@ export default function AnnotationSystem({
                 <div className="flex items-center justify-between p-3 bg-skribble-dark-plum/30 rounded-lg">
                   <span className="text-skribble-azure/80 text-sm">Timestamp:</span>
                   <span className="text-white font-mono">
-                    {Math.floor(formData.timestamp / 60)}:{(formData.timestamp % 60).toFixed(1).padStart(4, '0')}
+                    {formatTime(formData.timestamp)}
                   </span>
                 </div>
 

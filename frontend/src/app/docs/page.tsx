@@ -111,6 +111,29 @@ Content-Type: application/json
   "annotationType": "comment",
   "priority": "medium"
 }`,
+    collaboration: `// Generate reusable invite link
+POST /api/collaboration/projects/:projectId/invite-link
+Authorization: Bearer <your_token>
+Content-Type: application/json
+
+{
+  "role": "artist",
+  "permissions": {
+    "canComment": true,
+    "canEdit": false
+  },
+  "allowGuestAccess": true,
+  "expiresIn": 7
+}
+
+// Response includes reusable link that works multiple times
+{
+  "success": true,
+  "data": {
+    "inviteLink": "https://skribble.com/join/abc123...",
+    "expiresAt": "2024-12-31T23:59:59Z"
+  }
+}`,
     websocket: `// Connect to real-time events
 const socket = io('wss://api.skribble.com');
 
@@ -298,13 +321,14 @@ socket.on('annotation-created', (annotation) => {
                     <div className="bg-skribble-azure/10 border border-skribble-azure/30 rounded-lg p-6">
                       <h3 className="text-lg font-madimi text-skribble-sky mb-3">Step 3: Invite Collaborators</h3>
                       <p className="text-skribble-azure mb-4">
-                        Share your project with artists and get feedback.
+                        Share your project with artists and get feedback with reusable invite links.
                       </p>
                       <div className="bg-skribble-dark/50 rounded-lg p-4">
                         <code className="text-skribble-azure">
-                          1. Click "Share Project" button<br/>
-                          2. Generate invite link<br/>
-                          3. Send link to collaborators
+                          1. Click "Collaborator link" button<br/>
+                          2. Generate reusable invite link<br/>
+                          3. Share link via messaging, email, etc.<br/>
+                          4. Collaborators can return anytime using same link
                         </code>
                       </div>
                     </div>
@@ -344,6 +368,21 @@ socket.on('annotation-created', (annotation) => {
                         code={codeBlocks.annotation}
                         id="annotation"
                         title="Create Annotation"
+                      />
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl font-madimi text-skribble-sky mb-4">Collaboration & Invites</h3>
+                      <div className="mb-4 p-4 bg-skribble-azure/10 border border-skribble-azure/30 rounded-lg">
+                        <p className="text-skribble-azure text-sm">
+                          <strong>Reusable Links:</strong> Invite links can be used multiple times by collaborators to return to projects. 
+                          Links expire based on time, not usage.
+                        </p>
+                      </div>
+                      <CodeBlock 
+                        code={codeBlocks.collaboration}
+                        id="collaboration"
+                        title="Generate Invite Link"
                       />
                     </div>
 
@@ -402,6 +441,7 @@ socket.on('annotation-created', (annotation) => {
                         See what collaborators are doing in real-time as they listen and comment.
                       </p>
                       <ul className="space-y-2 text-skribble-azure">
+                        <li>• Reusable invite links - collaborators can return anytime</li>
                         <li>• Live playback synchronization</li>
                         <li>• Real-time comment updates</li>
                         <li>• User presence indicators</li>

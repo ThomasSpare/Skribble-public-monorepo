@@ -126,7 +126,7 @@ router.get('/invite-info/:token', [
 
     console.log(`📧 Getting invite info for token: ${token}`);
 
-    // Find valid invite with project and creator info
+    // Find valid invite with project and creator info (removed used_at check to allow reuse)
     const inviteQuery = await pool.query(`
       SELECT 
         pi.role, pi.permissions, pi.expires_at, pi.creates_guest_account,
@@ -135,7 +135,7 @@ router.get('/invite-info/:token', [
       FROM project_invites pi
       JOIN projects p ON pi.project_id = p.id
       JOIN users u ON pi.invited_by = u.id
-      WHERE pi.invite_token = $1 AND pi.expires_at > NOW() AND pi.used_at IS NULL
+      WHERE pi.invite_token = $1 AND pi.expires_at > NOW()
     `, [token]);
 
     if (inviteQuery.rows.length === 0) {
@@ -188,13 +188,13 @@ router.post('/guest-join', [
 
     console.log(`👤 Creating guest account for: ${email}, token: ${inviteToken}`);
 
-    // Find valid invite
+    // Find valid invite (removed used_at check to allow reuse)
     const inviteQuery = await pool.query(`
       SELECT pi.*, p.title, p.creator_id, u.username as inviter_name
       FROM project_invites pi
       JOIN projects p ON pi.project_id = p.id
       JOIN users u ON pi.invited_by = u.id
-      WHERE pi.invite_token = $1 AND pi.expires_at > NOW() AND pi.used_at IS NULL
+      WHERE pi.invite_token = $1 AND pi.expires_at > NOW()
     `, [inviteToken]);
 
     if (inviteQuery.rows.length === 0) {
@@ -227,14 +227,17 @@ router.post('/guest-join', [
       `, [invite.project_id, userId]);
 
       if (existingCollab.rows.length > 0) {
-        console.log(`⚠️ User ${userId} already collaborator on project ${invite.project_id}`);
+        console.log(`✅ User ${userId} returning to project ${invite.project_id} via invite link`);
         
-        // Generate token for existing user and redirect them
+        // Get the user's current subscription info
+        const userInfo = existingUser.rows[0];
+        
+        // Generate token for returning collaborator
         const payload: JWTPayload = {
           userId: String(userId),
           email: String(email),
-          role: 'artist',
-          subscriptionTier: 'indie'
+          role: userInfo.role || 'artist',
+          subscriptionTier: userInfo.subscription_tier || 'indie'
         };
 
         const token = jwt.sign(
@@ -250,7 +253,7 @@ router.post('/guest-join', [
         return res.json({
           success: true,
           data: {
-            message: `Welcome back! You're already collaborating on "${invite.title}"`,
+            message: `Welcome back! Returning to "${invite.title}"`,
             projectId: invite.project_id,
             role: invite.role,
             permissions: safeJSONParse(invite.permissions),
@@ -258,8 +261,9 @@ router.post('/guest-join', [
               id: userId,
               email: email,
               username: username,
-              temporaryAccess: true,
-              alreadyMember: true
+              temporaryAccess: false,
+              alreadyMember: true,
+              returningUser: true
             },
             token: token,
             projectInfo: {
@@ -327,7 +331,7 @@ router.post('/guest-join', [
     // At this point, we know the user doesn't exist as a collaborator
     // (either new user or existing user not on this project)
 
-    // Add user as collaborator and mark invite as used
+    // Add user as collaborator (without marking invite as used to allow reuse)
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -349,10 +353,7 @@ router.post('/guest-join', [
         invite.created_at
       ]);
 
-      // Mark invite as used
-      await client.query(`
-        UPDATE project_invites SET used_at = NOW(), used_by = $1 WHERE id = $2
-      `, [userId, invite.id]);
+      // Note: We no longer mark invites as "used" to allow reuse for returning collaborators
 
       await client.query('COMMIT');
 
@@ -574,13 +575,13 @@ router.post('/join/:token', [
 
     console.log(`🔗 Processing invite join for token: ${token}, user: ${userId}, guest: ${isGuestInvite}`);
 
-    // Find valid invite
+    // Find valid invite (removed used_at check to allow reuse)
     const inviteQuery = await pool.query(`
       SELECT pi.*, p.title, p.creator_id, u.username as inviter_name
       FROM project_invites pi
       JOIN projects p ON pi.project_id = p.id
       JOIN users u ON pi.invited_by = u.id
-      WHERE pi.invite_token = $1 AND pi.expires_at > NOW() AND pi.used_at IS NULL
+      WHERE pi.invite_token = $1 AND pi.expires_at > NOW()
     `, [token]);
 
     if (inviteQuery.rows.length === 0) {
@@ -607,7 +608,7 @@ router.post('/join/:token', [
       });
     }
 
-    // Create collaboration and mark invite as used
+    // Create collaboration (without marking invite as used to allow reuse)
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -629,10 +630,7 @@ router.post('/join/:token', [
         invite.created_at
       ]);
 
-      // Mark invite as used
-      await client.query(`
-        UPDATE project_invites SET used_at = NOW(), used_by = $1 WHERE id = $2
-      `, [userId, invite.id]);
+      // Note: We no longer mark invites as "used" to allow reuse for returning collaborators
 
       await client.query('COMMIT');
 
@@ -1534,14 +1532,14 @@ router.get('/projects/:projectId/invites', [
       });
     }
 
-    // Get pending invites
+    // Get active invites (removed used_at check since invites can now be reused)
     const invitesQuery = `
       SELECT 
         pi.*,
         u.username as inviter_name
       FROM project_invites pi
       JOIN users u ON pi.invited_by = u.id
-      WHERE pi.project_id = $1 AND pi.used_at IS NULL AND pi.expires_at > NOW()
+      WHERE pi.project_id = $1 AND pi.expires_at > NOW()
       ORDER BY pi.created_at DESC
     `;
 
@@ -1628,9 +1626,9 @@ router.delete('/projects/:projectId/invites/:inviteId', [
       });
     }
 
-    // Mark invite as used (revoked)
+    // Mark invite as revoked by setting expires_at to past date
     const revokeResult = await pool.query(
-      'UPDATE project_invites SET used_at = NOW() WHERE id = $1 RETURNING *',
+      'UPDATE project_invites SET expires_at = NOW() - INTERVAL \'1 day\' WHERE id = $1 RETURNING *',
       [inviteId]
     );
 

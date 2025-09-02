@@ -1,11 +1,12 @@
 // src/components/ProjectMenu.tsx - Mobile-Optimized Version
-import React, { useEffect } from 'react';
-import { Trash2, Share, Users, Calendar, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Trash2, Share, Users, Calendar, X, Edit3 } from 'lucide-react';
 
 // Project interface matching dashboard
 interface Project {
   id: string;
   title: string;
+  description?: string;
   creatorId?: string;
   creator?: {
     username: string;
@@ -31,6 +32,7 @@ interface ProjectMenuProps {
   onInvite: (project: Project) => Promise<void>;
   onShare: (project: Project) => Promise<void>;
   onSetDeadline?: (project: Project) => Promise<void>;
+  onDescriptionUpdate?: (project: Project, newDescription: string) => Promise<void>;
 }
 
 // Mobile-compatible sharing functions
@@ -96,9 +98,17 @@ export default function ProjectMenu({
   onDelete, 
   onInvite, 
   onShare,
-  onSetDeadline 
+  onSetDeadline,
+  onDescriptionUpdate 
 }: ProjectMenuProps) {
   const isMobile = isMobileDevice();
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [editedDescription, setEditedDescription] = useState(project.description || '');
+
+  // Update editedDescription when project changes
+  useEffect(() => {
+    setEditedDescription(project.description || '');
+  }, [project.description]);
 
   // Handle escape key and click outside to close
   useEffect(() => {
@@ -187,6 +197,25 @@ export default function ProjectMenu({
     }
   };
 
+  // Handle description editing
+  const handleDescriptionEdit = async () => {
+    if (!onDescriptionUpdate) return;
+    
+    try {
+      await onDescriptionUpdate(project, editedDescription);
+      setIsEditingDescription(false);
+      onClose();
+    } catch (error) {
+      console.error('Failed to update description:', error);
+      alert('Failed to update description. Please try again.');
+    }
+  };
+
+  const cancelDescriptionEdit = () => {
+    setEditedDescription(project.description || '');
+    setIsEditingDescription(false);
+  };
+
   // Enhanced mobile share handler
   const handleShareMobile = async () => {
     try {
@@ -253,19 +282,68 @@ export default function ProjectMenu({
         )}
 
         <div className={isMobile ? "py-2" : "py-2"}>
-          <button
-            onClick={() => handleAction(async () => {
-              if (isMobile) {
-                await handleInviteMobile();
-              } else {
-                await onInvite(project);
-              }
-            }, 'Create Collaborator Link')}
-            className={`${buttonClasses} text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky`}
-          >
-            <Users className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
-            Create Collaborator Link
-          </button>
+          {/* Description editing section */}
+          {isEditingDescription ? (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100000]">
+              <div className="bg-skribble-plum/90 backdrop-blur-md rounded-2xl border border-skribble-azure/20 w-1/2 max-w-md mx-4 p-6">
+                <div className="mb-4">
+                  <label className="block text-lg font-medium text-skribble-sky mb-3">
+                    Project Description
+                  </label>
+                  <textarea
+                    value={editedDescription}
+                    onChange={(e) => setEditedDescription(e.target.value)}
+                    className="w-full p-3 bg-skribble-dark/50 border border-skribble-azure/30 rounded-lg text-skribble-sky placeholder-skribble-azure/50 focus:outline-none focus:border-skribble-azure resize-none"
+                  rows={4}
+                  placeholder="Add a description for your project..."
+                />
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={handleDescriptionEdit}
+                    className="flex-1 px-4 py-3 bg-skribble-azure hover:bg-skribble-azure/80 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={cancelDescriptionEdit}
+                    className="flex-1 px-4 py-3 bg-skribble-dark/50 hover:bg-skribble-dark/70 text-skribble-azure border border-skribble-azure/30 rounded-lg font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Edit Description Button */}
+              {onDescriptionUpdate && (
+                <button
+                  onClick={() => setIsEditingDescription(true)}
+                  className={`${buttonClasses} text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky`}
+                >
+                  <Edit3 className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                  Edit Description
+                </button>
+              )}
+            </>
+          )}
+
+          {!isEditingDescription && (
+            <>
+              <button
+                onClick={() => handleAction(async () => {
+                  if (isMobile) {
+                    await handleInviteMobile();
+                  } else {
+                    await onInvite(project);
+                  }
+                }, 'Create Collaborator Link')}
+                className={`${buttonClasses} text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky`}
+              >
+                <Users className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                Create Collaborator Link
+              </button>
           
           <button
             onClick={() => handleAction(async () => {
@@ -281,25 +359,27 @@ export default function ProjectMenu({
             Create View-Only Link
           </button>
 
-          {onSetDeadline && (
-            <button
-              onClick={() => handleAction(() => onSetDeadline(project), 'Set Deadline')}
-              className={`${buttonClasses} text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky`}
-            >
-              <Calendar className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
-              Set Deadline
-            </button>
+              {onSetDeadline && (
+                <button
+                  onClick={() => handleAction(() => onSetDeadline(project), 'Set Deadline')}
+                  className={`${buttonClasses} text-skribble-azure hover:bg-skribble-azure/10 hover:text-skribble-sky`}
+                >
+                  <Calendar className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                  Set Deadline
+                </button>
+              )}
+              
+              <div className="border-t border-skribble-azure/10 my-1"></div>
+              
+              <button
+                onClick={() => handleAction(() => onDelete(project), 'Delete Project')}
+                className={`${buttonClasses} text-red-400 hover:bg-red-500/10 hover:text-red-300`}
+              >
+                <Trash2 className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
+                Delete Project
+              </button>
+            </>
           )}
-          
-          <div className="border-t border-skribble-azure/10 my-1"></div>
-          
-          <button
-            onClick={() => handleAction(() => onDelete(project), 'Delete Project')}
-            className={`${buttonClasses} text-red-400 hover:bg-red-500/10 hover:text-red-300`}
-          >
-            <Trash2 className={isMobile ? "w-5 h-5" : "w-4 h-4"} />
-            Delete Project
-          </button>
         </div>
 
         {/* Mobile safe area padding */}

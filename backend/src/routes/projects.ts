@@ -96,6 +96,7 @@ router.get('/', authenticateToken, async (req, res) => {
       SELECT DISTINCT 
         p.id,
         p.title,
+        p.description,
         p.creator_id,
         p.status,
         p.deadline,
@@ -216,6 +217,7 @@ router.get('/', authenticateToken, async (req, res) => {
           return {
             id: row.id,
             title: row.title,
+            description: row.description || '',
             creatorId: row.creator_id,
             creator: processedCreator,
             status: row.status,
@@ -248,6 +250,7 @@ router.get('/', authenticateToken, async (req, res) => {
           return {
             id: row.id,
             title: row.title,
+            description: row.description || '',
             creatorId: row.creator_id,
             creator: {
               id: row.creator_id,
@@ -358,6 +361,17 @@ router.get('/:id', [
     `;
 
     const projectResult = await pool.query(projectQuery, [projectId]);
+    
+    // Debug logging to see what we get from database
+    if (projectResult.rows.length > 0) {
+      console.log('🔍 Raw project row from database:', {
+        id: projectResult.rows[0].id,
+        title: projectResult.rows[0].title,
+        description: projectResult.rows[0].description,
+        hasDescriptionField: 'description' in projectResult.rows[0],
+        descriptionType: typeof projectResult.rows[0].description
+      });
+    }
 
     if (projectResult.rows.length === 0) {
       return res.status(404).json({
@@ -455,6 +469,7 @@ router.get('/:id', [
     const project = {
       id: row.id,
       title: row.title,
+      description: row.description || '',
       creatorId: row.creator_id,
       creator: processedCreator,
       status: row.status,
@@ -481,6 +496,14 @@ router.get('/:id', [
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
+
+    // Debug: Log what we're sending back
+    console.log('🚀 Sending project response:', {
+      id: project.id,
+      title: project.title,
+      description: project.description,
+      hasDescription: 'description' in project
+    });
 
     res.json({
       success: true,
@@ -724,6 +747,88 @@ router.delete('/:id', [
       error: {
         message: 'Failed to delete project',
         code: 'DELETE_PROJECT_ERROR'
+      }
+    });
+  }
+});
+
+// Update project description
+router.put('/:id/description', [
+  authenticateToken,
+  param('id').isUUID(),
+  body('description').optional().isString().trim()
+], async (req: Request, res: Response) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: 'Validation failed',
+          details: errors.array()
+        }
+      });
+    }
+
+    const projectId = req.params.id;
+    const userId = req.user!.userId;
+    const { description } = req.body;
+
+    // Check if user is the creator of the project
+    const projectQuery = `
+      SELECT creator_id, title FROM projects WHERE id = $1
+    `;
+
+    const projectResult = await pool.query(projectQuery, [projectId]);
+
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: 'Project not found',
+          code: 'PROJECT_NOT_FOUND'
+        }
+      });
+    }
+
+    const project = projectResult.rows[0];
+
+    if (project.creator_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          message: 'Only project creator can edit description',
+          code: 'PERMISSION_DENIED'
+        }
+      });
+    }
+
+    // Update the project description
+    const updateQuery = `
+      UPDATE projects 
+      SET description = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING description, updated_at
+    `;
+
+    const updateResult = await pool.query(updateQuery, [description || '', projectId]);
+
+    res.json({
+      success: true,
+      data: {
+        description: updateResult.rows[0].description,
+        updatedAt: updateResult.rows[0].updated_at,
+        message: 'Description updated successfully'
+      }
+    });
+
+  } catch (error) {
+    console.error('Update description error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Failed to update description',
+        code: 'UPDATE_DESCRIPTION_ERROR'
       }
     });
   }

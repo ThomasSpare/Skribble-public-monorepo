@@ -8,6 +8,27 @@ import { ArrowLeft, Zap, Users, Music, Shield, Rocket, Download, Settings, Messa
 const ChangelogPage = () => {
   const updates = [
     {
+      version: "2.0.1",
+      date: "August 23, 2025",
+      title: "🔗 Reusable Invite Links & Persistent Access",
+      type: "patch",
+      quote: "Great collaboration creates music that neither artist could make alone. - Unknown",
+      features: [
+        { icon: Users, title: "Reusable Invite Links", description: "Collaborators can now return to projects using the same invite link multiple times" },
+        { icon: Settings, title: "Persistent Project Access", description: "No more one-time use limitations - bookmark invite links for easy return access" },
+        { icon: Shield, title: "Improved Link Management", description: "Updated invite revocation system using expiration-based controls" },
+        { icon: MessageCircle, title: "Enhanced Collaboration Flow", description: "Returning users get seamless re-authentication and project access" }
+      ],
+      technical: [
+        "Removed 'used_at' constraints from invite validation queries",
+        "Modified guest-join and authenticated join endpoints to allow link reuse",
+        "Updated invite revocation to use expiration-based deactivation",
+        "Enhanced returning user flow with improved token generation",
+        "Updated documentation and UI to reflect reusable link behavior",
+        "Maintained all security and permission validation systems"
+      ]
+    },
+    {
       version: "2.0.0",
       date: "August 18, 2025",
       title: "Professional DAW Export Suite",
@@ -232,20 +253,20 @@ const ChangelogPage = () => {
             <div className="bg-gradient-to-r from-skribble-azure/20 to-skribble-purple/20 backdrop-blur-sm rounded-2xl border border-skribble-azure/20 p-8 mb-8">
               <div className="flex items-center gap-3 mb-4">
                 <div className="bg-gradient-to-r from-skribble-azure to-skribble-purple rounded-lg p-2">
-                  <Download className="w-6 h-6 text-white" />
+                  <Users className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-madimi text-white">Version 2.0.0</h2>
-                  <p className="text-skribble-sky/80">August 18, 2025</p>
+                  <h2 className="text-2xl font-madimi text-white">Version 2.0.1</h2>
+                  <p className="text-skribble-sky/80">August 23, 2025</p>
                 </div>
               </div>
               
               <h3 className="text-xl font-semibold text-white mb-3">
-                🎵 Professional DAW Export Suite
+                🔗 Reusable Invite Links & Persistent Access
               </h3>
               
               <blockquote className="italic text-skribble-sky/80 mb-6 border-l-4 border-skribble-azure pl-4">
-                "Good design is making something intelligible and memorable. Great design is making something memorable and meaningful." - Dieter Rams
+                "Great collaboration creates music that neither artist could make alone." - Unknown
               </blockquote>
 
               <div className="grid md:grid-cols-2 gap-4 mb-6">

@@ -216,10 +216,11 @@ export default function QuickstartPage() {
                     Invite Collaborators
                   </h3>
                   <ul className="text-skribble-azure space-y-2">
-                    <li>• Click <strong>"Share"</strong> button in your project</li>
-                    <li>• Copy private share link and send to artists</li>
-                    <li>• Or enter email addresses for invitations</li>
-                    <li>• Set permissions: View-only, Comment, or Full Edit</li>
+                    <li>• Click <strong>"Collaborator link"</strong> button in your project</li>
+                    <li>• Copy private collaborator link and send to artists</li>
+                    <li>• <strong>Reusable links</strong> - collaborators can return anytime</li>
+                    <li>• Share the link via text, email, or any messaging app</li>
+                    <li>• Links expire after 7 days by default</li>
                   </ul>
                 </div>
               </div>
@@ -238,11 +239,11 @@ export default function QuickstartPage() {
                 </h3>
                 <ul className="text-skribble-azure space-y-2 text-sm">
                   <li>• <strong>No account required!</strong></li>
-                  <li>•  Paste the share link you received in your browser</li>
+                  <li>• Paste the share link you received in your browser</li>
+                  <li>• <strong>Save the link</strong> - you can use it to return anytime</li>
                   <li>• Or create a free account for extra features</li>
                   <li>• You'll see the project with audio and waveform</li>
-                  <li>• You can Make annotations and voice notes</li>
-                  <li>• Bookmark the project page so you can return to it !</li>
+                  <li>• Make annotations and voice notes</li>
                 </ul>
               </div>
 

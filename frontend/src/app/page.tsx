@@ -173,7 +173,7 @@ export default function LandingPage() {
               {
                 icon: Users,
                 title: "Real-time Collaboration",
-                description: "See collaborators' cursors and comments in real-time as you work together."
+                description: "Invite collaborators with reusable links. See cursors and comments in real-time as you work together."
               },
               {
                 icon: Download,

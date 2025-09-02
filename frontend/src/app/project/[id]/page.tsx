@@ -37,6 +37,7 @@ export interface User {
 interface ProjectData {
   id: string;
   title: string;
+  description?: string;
   creatorId: string;
   showMenu?: boolean;
   creator: {
@@ -75,6 +76,7 @@ interface ProjectData {
 interface Project {
   id: string;
   title: string;
+  description?: string;
   creatorId?: string;
   creator?: {
     username: string;
@@ -258,6 +260,7 @@ export default function ProjectPage() {
 
       const projectData = await projectResponse.json();
         if (projectData.success) {         
+          console.log('Project data loaded:', { description: projectData.data.description, fullData: projectData.data });
           setProject(projectData.data);
         
         // Set the active audio file
@@ -539,6 +542,38 @@ const handleDelete = async (project: Project): Promise<void> => {
     }
   };
 
+  const handleDescriptionUpdate = async (proj: Project, newDescription: string): Promise<void> => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects/${proj.id}/description`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('skribble_token')}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ description: newDescription })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update the project state with new description
+        if (project) {
+          const updatedProject = { ...project, description: newDescription };
+          console.log('Updating project description:', { oldDescription: project.description, newDescription, updatedProject });
+          setProject(updatedProject);
+        }
+        
+        // Show success message
+        alert('Description updated successfully!');
+      } else {
+        throw new Error(data.error?.message || 'Failed to update description');
+      }
+    } catch (error) {
+      console.error('Error updating description:', error);
+      throw error; // Re-throw so ProjectMenu can handle it
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-skribble-dark via-skribble-plum to-skribble-dark flex items-center justify-center">
@@ -608,6 +643,9 @@ const handleDelete = async (project: Project): Promise<void> => {
               
               <div>
                 <h1 className="font-madimi text-2xl text-skribble-sky">{project.title}</h1>
+                {project.description && (
+                  <p className="text-sm text-skribble-sky/80 mb-2">{project.description}</p>
+                )}
                 <p className="text-sm text-skribble-azure">
                   by {project.creator.username} • {project.status} • 
                   {project.audioFiles.length} version{project.audioFiles.length !== 1 ? 's' : ''}
@@ -689,7 +727,7 @@ const handleDelete = async (project: Project): Promise<void> => {
                             >
                             <div 
                               onClick={e => e.stopPropagation()} 
-                              className="absolute top-60 right-20 mt-2 z-[99999]"
+                              className="absolute top-80 right-8 mt-2 z-[99999]"
                             >
                               <ProjectMenu
                               project={project}
@@ -702,6 +740,7 @@ const handleDelete = async (project: Project): Promise<void> => {
                               onInvite={handleInvite}
                               onShare={generateViewerLink}
                               onSetDeadline={handleSetDeadline}
+                              onDescriptionUpdate={handleDescriptionUpdate}
                               />
                             </div>
                             </div>

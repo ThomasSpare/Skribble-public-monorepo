@@ -44,6 +44,9 @@ export default function GuestJoinPage() {
   const [success, setSuccess] = useState<boolean>(false);
   const [needsRegistration, setNeedsRegistration] = useState<boolean>(false);
   const [projectInfo, setProjectInfo] = useState<any>(null);
+  const [showEmailCheck, setShowEmailCheck] = useState<boolean>(false);
+  const [emailToCheck, setEmailToCheck] = useState<string>('');
+  const [isCheckingEmail, setIsCheckingEmail] = useState<boolean>(false);
   
   // Guest registration form
   const [guestData, setGuestData] = useState<GuestRegistrationData>({
@@ -83,8 +86,8 @@ export default function GuestJoinPage() {
         // User is logged in, try to join normally
         await joinWithExistingAuth(existingToken);
       } else {
-        // No existing auth, show guest registration form
-        setNeedsRegistration(true);
+        // No existing auth, show email check first
+        setShowEmailCheck(true);
         setIsLoading(false);
       }
 
@@ -131,6 +134,55 @@ export default function GuestJoinPage() {
       setError('Network error');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleEmailCheck = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCheckingEmail(true);
+    setError(null);
+
+    try {
+      // Try to join with just email (existing user flow)
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/collaboration/guest-join`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: emailToCheck,
+            username: 'temp', // Will be ignored for existing users
+            inviteToken: params.token as string
+          })
+        }
+      );
+
+      const data: GuestJoinResponse = await response.json();
+
+      if (data.success && data.data) {
+        // Store the auth token
+        localStorage.setItem('skribble_token', data.data.token);
+        setSuccess(true);
+        
+        // Different message for returning users
+        setTimeout(() => {
+          router.push(`/project/${data.data?.projectId}`);
+        }, 2000);
+      } else if (data.error?.code === 'USERNAME_TAKEN') {
+        // This means user exists but we need username, show registration form
+        setGuestData(prev => ({ ...prev, email: emailToCheck }));
+        setShowEmailCheck(false);
+        setNeedsRegistration(true);
+      } else {
+        setError(data.error?.message || 'Failed to process email');
+      }
+    } catch (error) {
+      console.error('Email check error:', error);
+      setError('Network error during email check');
+    } finally {
+      setIsCheckingEmail(false);
     }
   };
 
@@ -182,6 +234,95 @@ export default function GuestJoinPage() {
           <Loader2 className="w-12 h-12 animate-spin text-blue-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-2">Processing Invitation...</h2>
           <p className="text-blue-200">Setting up your guest access</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Email check form for returning users
+  if (showEmailCheck) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-br from-blue-900 via-purple-900 to-black">
+        <div className="w-full max-w-md">
+          {/* Project Info Banner */}
+          {projectInfo && (
+            <div className="mb-6 p-4 bg-blue-600/20 border border-blue-400/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Gift className="w-5 h-5 text-blue-300" />
+                <h3 className="text-blue-200 font-medium">You're Invited!</h3>
+              </div>
+              <p className="text-blue-100 text-sm">
+                <strong>{projectInfo.creatorName}</strong> invited you to collaborate on{' '}
+                <strong>"{projectInfo.title}"</strong>
+              </p>
+            </div>
+          )}
+
+          <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-8 shadow-2xl">
+            <div className="text-center mb-6">
+              <Mail className="w-12 h-12 text-blue-300 mx-auto mb-3" />
+              <h1 className="text-2xl font-bold text-white mb-2">Welcome Back!</h1>
+              <p className="text-blue-200 text-sm">
+                Enter your email to rejoin the project
+              </p>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-600/20 border border-red-400/30 rounded-lg">
+                <p className="text-red-200 text-sm">{error}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleEmailCheck} className="space-y-4">
+              <div>
+                <label className="block text-blue-100 text-sm font-medium mb-2">Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-blue-300" />
+                  <input
+                    type="email"
+                    required
+                    value={emailToCheck}
+                    onChange={(e) => setEmailToCheck(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-blue-200 focus:border-blue-400 focus:outline-none"
+                    placeholder="Enter your registered email"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isCheckingEmail}
+                className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white py-3 rounded-lg font-medium hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isCheckingEmail ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Checking...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-5 h-5" />
+                    Continue to Project
+                  </>
+                )}
+              </button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <p className="text-blue-200 text-xs">
+                New to this project?{' '}
+                <button
+                  onClick={() => {
+                    setShowEmailCheck(false);
+                    setNeedsRegistration(true);
+                  }}
+                  className="text-blue-300 hover:text-blue-200 underline"
+                >
+                  Create free account
+                </button>
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -272,7 +413,16 @@ export default function GuestJoinPage() {
 
             <div className="mt-4 text-center">
               <p className="text-blue-200 text-xs">
-                By joining, you get 30 days of free access to collaborate on this project
+                Already have an account?{' '}
+                <button
+                  onClick={() => {
+                    setNeedsRegistration(false);
+                    setShowEmailCheck(true);
+                  }}
+                  className="text-blue-300 hover:text-blue-200 underline"
+                >
+                  Sign in with email
+                </button>
               </p>
             </div>
           </div>
@@ -305,10 +455,10 @@ export default function GuestJoinPage() {
           <CheckCircle className="w-16 h-16 text-green-400 mx-auto mb-4" />
           <h2 className="text-3xl font-bold text-white mb-2">Welcome to the Project!</h2>
           <div className="flex items-center justify-center gap-2 mb-4">
-            <Gift className="w-6 h-6 text-blue-300" />
-            <p className="text-blue-200 text-lg">30-day free trial activated</p>
+            <CheckCircle className="w-6 h-6 text-green-300" />
+            <p className="text-blue-200 text-lg">Successfully joined project</p>
           </div>
-          <p className="text-gray-300 mb-6">You now have full access to collaborate on this project</p>
+          <p className="text-gray-300 mb-6">Welcome back! Redirecting you to continue where you left off.</p>
           <div className="animate-pulse text-blue-200">Redirecting to project...</div>
         </div>
       </div>

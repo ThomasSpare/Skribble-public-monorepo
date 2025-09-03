@@ -1,6 +1,7 @@
 "use client";
 // frontend/src/app/page.tsx
-import React, { useState } from 'react';
+import React, { useState } from 'react'
+import Image from 'next/image';
 
 import Link from 'next/link';
 import { ArrowRight, Users, Zap, Download, Rocket, Music, MessageCircle, Clock, Check } from 'lucide-react';
@@ -141,6 +142,58 @@ export default function LandingPage() {
               </div>
               <span className="text-base sm:text-lg">View Quickstart Guide</span>
             </Link>
+          </div>
+
+          {/* Logo Section */}
+          <div className="flex justify-center mb-10 sm:mb-16">
+            <div className="relative group">
+              <Image 
+                className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-56 lg:h-56 drop-shadow-2xl transition-all duration-300 hover:scale-105 hover:drop-shadow-[0_0_30px_rgba(0,195,255,0.3)]" 
+                src="/Skribblelogo.png" 
+                alt="Skribble Logo" 
+                width={250} 
+                height={250} 
+                priority
+              />
+              
+              {/* Floating Chat Bubbles */}
+              <div className="absolute top-12 -left-24 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100 group-hover:animate-bounce">
+                <div className="bg-skribble-azure text-white px-3 py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg">
+                  🎵 "Sounds great!"
+                </div>
+                <div className="w-3 h-3 bg-skribble-azure rotate-45 absolute -bottom-1 left-4"></div>
+              </div>
+              
+              <div className="absolute -top-6 right-8 opacity-0 group-hover:opacity-100 transition-all duration-700 delay-200 group-hover:animate-pulse">
+                <div className="bg-skribble-purple text-white px-3 py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg">
+                  💫 "Perfect timing"
+                </div>
+                <div className="w-3 h-3 bg-skribble-purple rotate-45 absolute -bottom-1 left-4"></div>
+              </div>
+              
+              <div className="absolute top-8 -right-20 opacity-0 group-hover:opacity-100 transition-all duration-600 delay-300 group-hover:animate-bounce">
+                <div className="bg-skribble-sky text-black px-3 py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg">
+                  🔥 "Love this beat!"
+                </div>
+                <div className="w-3 h-3 bg-skribble-sky rotate-45 absolute -bottom-1 left-4"></div>
+              </div>
+              
+              <div className="absolute bottom-16 -left-20 opacity-0 group-hover:opacity-100 transition-all duration-800 delay-150 group-hover:animate-pulse">
+                <div className="bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-3 py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg">
+                  ✨ "Epic collab!"
+                </div>
+                <div className="w-3 h-3 bg-skribble-azure rotate-45 absolute -bottom-1 right-28"></div>
+              </div>
+              
+              <div className="absolute bottom-2 -right-20 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-400 group-hover:animate-bounce">
+                <div className="bg-skribble-plum text-white px-3 py-2 rounded-full text-xs sm:text-sm font-medium shadow-lg">
+                  🎶 "More reverb?"
+                </div>
+                <div className="w-3 h-3 bg-skribble-plum rotate-45 absolute -bottom-1 left-3"></div>
+              </div>
+              
+              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-skribble-azure/20 to-skribble-purple/20 blur-xl group-hover:blur-2xl transition-all duration-300 opacity-0 group-hover:opacity-100"></div>
+            </div>
           </div>
 
           {/* Demo Waveform */}

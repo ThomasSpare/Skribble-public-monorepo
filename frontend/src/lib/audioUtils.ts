@@ -1202,10 +1202,102 @@ export function generateLogicMarkers(markers: DAWMarker[], projectName: string):
 }
 
 /**
+ * Add voice note tracks from backend to the package
+ */
+async function addVoiceNoteTracksToPackage(
+  audioUrl: string,
+  annotations: any[],
+  projectName: string,
+  audioFolder: JSZip | null
+): Promise<void> {
+  if (!audioFolder) return;
+
+  try {
+    // Check if there are any voice note annotations
+    const voiceNoteAnnotations = annotations.filter(annotation => 
+      annotation.voiceNoteUrl && annotation.voiceNoteUrl.trim()
+    );
+
+    if (voiceNoteAnnotations.length === 0) {
+      console.log('📝 No voice notes found, skipping voice track generation');
+      return;
+    }
+
+    console.log(`🎤 Found ${voiceNoteAnnotations.length} voice note annotations, requesting voice tracks from backend...`);
+
+    // Get authentication token
+    const token = localStorage.getItem('skribble_token');
+    if (!token) {
+      console.warn('⚠️ No authentication token found, skipping voice note tracks');
+      return;
+    }
+
+    // Extract audio file ID from the audio URL
+    const urlParts = audioUrl.split('/');
+    const audioFileIdWithExt = urlParts[urlParts.length - 1].split('?')[0];
+    const audioFileId = audioFileIdWithExt.split('.')[0];
+
+    // Call backend to get voice note tracks
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/export/wav-with-cues`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        audioFileId: audioFileId,
+        annotations: annotations, // Pass all annotations, backend will filter voice notes
+        projectTitle: projectName,
+        format: 'wav_with_cues'
+      })
+    });
+
+    if (!response.ok) {
+      console.warn(`⚠️ Backend voice track request failed: ${response.status} ${response.statusText}`);
+      return;
+    }
+
+    // Check if response contains multiple files (voice tracks)
+    const contentType = response.headers.get('Content-Type') || '';
+    
+    if (contentType.includes('application/json')) {
+      const data = await response.json();
+      
+      if (data.success && data.files) {
+        console.log(`🎵 Backend returned ${data.files.length} files`);
+        
+        // Add voice note tracks to the Audio Files folder
+        const voiceFiles = data.files.filter((file: any) => file.type === 'voice');
+        
+        if (voiceFiles.length > 0) {
+          console.log(`🎤 Adding ${voiceFiles.length} voice note tracks to package...`);
+          
+          for (const voiceFile of voiceFiles) {
+            const voiceBuffer = Buffer.from(voiceFile.content, 'base64');
+            audioFolder.file(voiceFile.filename, voiceBuffer);
+          }
+          
+          console.log('✅ Voice note tracks added to Audio Files folder');
+        } else {
+          console.log('📝 No voice note tracks returned from backend');
+        }
+      }
+    } else {
+      console.log('📄 Backend returned single file, no voice tracks available');
+    }
+
+  } catch (error) {
+    console.warn('⚠️ Failed to fetch voice note tracks from backend:', error);
+    // Don't throw - continue with package creation without voice tracks
+  }
+}
+
+/**
  * Generate Pro Tools session package with audio and memory locations
  */
 async function generateProToolsSessionPackage(
-  audioUrl: string, 
+  audioUrl: string,
+  annotations: any[],
   markers: DAWMarker[], 
   projectName: string, 
   audioFileName: string
@@ -1226,7 +1318,7 @@ async function generateProToolsSessionPackage(
       throw new Error('Failed to create folder structure');
     }
     
-    // 1. Add audio file (preserve original format)
+    // 1. Add original audio file (preserve original format)
     console.log('📥 Adding original audio file...');
     const audioResponse = await fetch(audioUrl);
     if (!audioResponse.ok) throw new Error('Failed to fetch audio');
@@ -1236,6 +1328,10 @@ async function generateProToolsSessionPackage(
     const originalExtension = audioFileName.split('.').pop() || 'wav';
     const audioFilename = `${projectName}.${originalExtension}`;
     audioFolder.file(audioFilename, audioBlob);
+
+    // 1.5. Check for voice notes and fetch voice note tracks from backend
+    console.log('🎤 Checking for voice notes to include as separate tracks...');
+    await addVoiceNoteTracksToPackage(audioUrl, annotations, projectName, audioFolder);
     
     // 2. Generate MIDI file with markers (works for Pro Tools and Cubase)
     const midiWithMarkers = generateMIDIWithMarkers(markers, projectName);
@@ -1254,6 +1350,7 @@ async function generateProToolsSessionPackage(
     docFolder.file('PRO_TOOLS_IMPORT_GUIDE.txt', importGuide);
     
     // 5. Generate quick start guide
+    const voiceNoteCount = annotations.filter(a => a.voiceNoteUrl && a.voiceNoteUrl.trim()).length;
     const quickStart = `PRO TOOLS QUICK START - ${projectName}
 ${'='.repeat(40)}
 
@@ -1262,22 +1359,59 @@ ${'='.repeat(40)}
 1. Extract this ZIP to a folder
 2. Open Pro Tools  
 3. Create new session (match your audio sample rate)
-4. Import audio: File → Import → Audio to Track
+4. Import main audio: File → Import → Audio to Track
    Select: ${projectName}.wav (or original format)
-5. Import markers: File → Import → MIDI to Track
+5. Import voice note tracks: File → Import → Audio to Track
+   Select all voice note WAV files from Audio Files folder
+   ⭐ Each voice note imports as separate track!
+6. Import markers: File → Import → MIDI to Track
    Select: ${projectName}_Markers.mid
-   ⭐ Markers import automatically!
+   ⭐ Markers import automatically with precise SMPTE timing!
    
-✅ DONE! Audio and all markers load perfectly.
+✅ DONE! Audio, voice notes, and all markers load perfectly.
 
 📍 MARKERS: ${markers.length} Memory Locations imported
-🎵 AUDIO: Professional 48kHz/24-bit quality
-🔧 OPTIMIZED: For Pro Tools 2020.1+
+🎵 MAIN AUDIO: Professional quality preserved
+🎤 VOICE NOTES: ${voiceNoteCount > 0 ? `${voiceNoteCount} separate voice tracks` : 'No voice notes found'}
+🔧 OPTIMIZED: Pro Tools 2020.1+ & Cubase (SMPTE timing)
 
 📚 See PRO_TOOLS_IMPORT_GUIDE.txt for detailed instructions.
 `;
     docFolder.file('QUICK_START.txt', quickStart);
     
+    // 6. Generate Cubase-specific instructions
+    const cubaseInstructions = `CUBASE IMPORT GUIDE - ${projectName}
+${'='.repeat(40)}
+
+🎹 CUBASE USERS - PRECISE MARKER TIMING:
+
+The MIDI file uses SMPTE timecode (30fps) for perfect sync.
+
+📋 IMPORT STEPS:
+
+1. Create New Project in Cubase
+2. Set project frame rate to 30fps:
+   Project → Project Setup → Frame Rate → 30fps
+3. Import Audio: File → Import → Audio File
+   Select: ${projectName}.wav
+4. Import Markers: File → Import → MIDI File  
+   Select: ${projectName}_Markers.mid
+   ✅ Markers will appear precisely synced!
+
+⚠️ IMPORTANT FOR CUBASE:
+• Make sure project frame rate is 30fps BEFORE importing
+• Markers use SMPTE timing, not musical timing
+• This ensures perfect sync regardless of project tempo
+
+🎯 TROUBLESHOOTING:
+• If markers appear late: Check project frame rate (must be 30fps)
+• If markers don't import: Try Import MIDI File instead of drag-drop
+• For best results: Start with empty project, set 30fps, then import
+
+✅ RESULT: Perfect marker timing in Cubase!
+`;
+    docFolder.file('CUBASE_IMPORT_GUIDE.txt', cubaseInstructions);
+
     // Generate and download
     console.log('📦 Creating download package...');
     const zipBlob = await zip.generateAsync({
@@ -1332,8 +1466,8 @@ function generateCubaseXMLMarkers(markers: DAWMarker[], projectName: string): st
  * Generate MIDI file with markers (most reliable Pro Tools import method)
  */
 function generateMIDIWithMarkers(markers: DAWMarker[], projectName: string): Uint8Array {
-  // Simple MIDI file with marker events - back to basics for Cubase compatibility
-  // Using standard tempo-based timing with higher resolution
+  // MIDI file with SMPTE timecode for Cubase/Pro Tools compatibility
+  // Using 30fps SMPTE timing instead of tempo-based timing for precise audio sync
   
   const midiData = [];
   
@@ -1342,28 +1476,27 @@ function generateMIDIWithMarkers(markers: DAWMarker[], projectName: string): Uin
   midiData.push(...[0x00, 0x00, 0x00, 0x06]); // Header length
   midiData.push(...[0x00, 0x00]); // Format 0
   midiData.push(...[0x00, 0x01]); // 1 track
-  midiData.push(...[0x03, 0xC0]); // 960 ticks per quarter note (standard resolution)
+  // Use SMPTE timecode: 30fps, 4 ticks per frame = 120 ticks per second
+  midiData.push(...[0xE2, 0x04]); // -30fps (0xE2 = -30), 4 ticks per frame
   
   // Track header
   midiData.push(...[0x4D, 0x54, 0x72, 0x6B]); // "MTrk"
   
   const trackData = [];
   
-  // Set tempo to 120 BPM (500000 microseconds per quarter note)
-  trackData.push(0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20);
+  // No tempo events needed for SMPTE timing - time is absolute
   
   // Sort markers by timestamp to ensure proper order
   const sortedMarkers = [...markers].sort((a, b) => a.timestamp - b.timestamp);
   
-  // Add markers as MIDI marker events with corrected timing
+  // Add markers as MIDI marker events with SMPTE timing
   let previousTicks = 0;
   
   sortedMarkers.forEach((marker, index) => {
-    // Convert seconds to MIDI ticks with precise calculation
-    // At 120 BPM: 1 beat = 0.5 seconds, 1 quarter note = 960 ticks  
-    // So: 1 second = 1920 ticks (960 ticks/quarter * 2 quarters/second)
-    // Use floor for consistent timing
-    const absoluteTicks = Math.floor(marker.timestamp * 1920);
+    // Convert seconds to SMPTE ticks
+    // 30fps * 4 ticks per frame = 120 ticks per second
+    // This gives precise 1:1 timing with audio regardless of DAW tempo
+    const absoluteTicks = Math.round(marker.timestamp * 120);
     const deltaTime = absoluteTicks - previousTicks;
     previousTicks = absoluteTicks;
     
@@ -2172,7 +2305,7 @@ export async function exportForDAW(
         
         // For Pro Tools Ultimate 2025, use the proven session package approach
         // This creates Memory Locations that Pro Tools can reliably import via Session Data
-        await generateProToolsSessionPackage(audioUrl, markers, sanitizedTitle, audioFileName);
+        await generateProToolsSessionPackage(audioUrl, annotations, markers, sanitizedTitle, audioFileName);
         
         console.log('✅ AAF export completed');
         break;

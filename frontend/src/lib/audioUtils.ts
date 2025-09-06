@@ -1337,6 +1337,10 @@ async function generateProToolsSessionPackage(
     const midiWithMarkers = generateMIDIWithMarkers(markers, projectName);
     sessionFolder.file(`${projectName}_Markers.mid`, midiWithMarkers);
     
+    // 2.5. Generate Cubase XML markers as alternative for better compatibility
+    const cubaseXMLMarkers = generateCubaseXMLMarkers(markers, projectName);
+    sessionFolder.file(`${projectName}_Cubase_Markers.xml`, cubaseXMLMarkers);
+    
     // 3. Also generate Pro Tools text format for manual entry
     const memoryLocationsText = generateMemoryLocationsText(markers, projectName);
     sessionFolder.file(`${projectName}_Memory_Locations_Manual.txt`, memoryLocationsText);
@@ -1366,14 +1370,14 @@ ${'='.repeat(40)}
    ⭐ Each voice note imports as separate track!
 6. Import markers: File → Import → MIDI to Track
    Select: ${projectName}_Markers.mid
-   ⭐ Markers import automatically with precise SMPTE timing!
+   ⭐ Markers import automatically!
    
 ✅ DONE! Audio, voice notes, and all markers load perfectly.
 
 📍 MARKERS: ${markers.length} Memory Locations imported
 🎵 MAIN AUDIO: Professional quality preserved
 🎤 VOICE NOTES: ${voiceNoteCount > 0 ? `${voiceNoteCount} separate voice tracks` : 'No voice notes found'}
-🔧 OPTIMIZED: Pro Tools 2020.1+ & Cubase (SMPTE timing)
+🔧 OPTIMIZED: Pro Tools 2020.1+ & Cubase (MIDI + XML options)
 
 📚 See PRO_TOOLS_IMPORT_GUIDE.txt for detailed instructions.
 `;
@@ -1383,32 +1387,40 @@ ${'='.repeat(40)}
     const cubaseInstructions = `CUBASE IMPORT GUIDE - ${projectName}
 ${'='.repeat(40)}
 
-🎹 CUBASE USERS - PRECISE MARKER TIMING:
+🎹 CUBASE USERS - MARKER IMPORT OPTIONS:
 
-The MIDI file uses SMPTE timecode (30fps) for perfect sync.
+Two methods provided for best compatibility:
 
-📋 IMPORT STEPS:
+📋 METHOD 1 - MIDI FILE (RECOMMENDED):
 
 1. Create New Project in Cubase
-2. Set project frame rate to 30fps:
-   Project → Project Setup → Frame Rate → 30fps
+2. Set project tempo to 120 BPM (important!)
 3. Import Audio: File → Import → Audio File
    Select: ${projectName}.wav
 4. Import Markers: File → Import → MIDI File  
    Select: ${projectName}_Markers.mid
-   ✅ Markers will appear precisely synced!
+   ✅ Choose "Import as Markers" when prompted!
+
+📋 METHOD 2 - XML FILE (IF MIDI FAILS):
+
+1. Create New Project in Cubase  
+2. Import Audio: File → Import → Audio File
+   Select: ${projectName}.wav
+3. Import Markers: File → Import → Track Archive
+   Select: ${projectName}_Cubase_Markers.xml
+   ✅ Markers import directly to timeline!
 
 ⚠️ IMPORTANT FOR CUBASE:
-• Make sure project frame rate is 30fps BEFORE importing
-• Markers use SMPTE timing, not musical timing
-• This ensures perfect sync regardless of project tempo
+• If MIDI creates instrument tracks: Use METHOD 2 (XML)
+• Set project tempo to 120 BPM before MIDI import
+• For XML import: Don't change project settings
 
 🎯 TROUBLESHOOTING:
-• If markers appear late: Check project frame rate (must be 30fps)
-• If markers don't import: Try Import MIDI File instead of drag-drop
-• For best results: Start with empty project, set 30fps, then import
+• MIDI creates instruments instead of markers → Use XML method
+• Markers appear at wrong time → Check project tempo (120 BPM)
+• XML doesn't import → Try MIDI method with correct tempo
 
-✅ RESULT: Perfect marker timing in Cubase!
+✅ RESULT: Perfect marker timing in Cubase with either method!
 `;
     docFolder.file('CUBASE_IMPORT_GUIDE.txt', cubaseInstructions);
 
@@ -1466,48 +1478,57 @@ function generateCubaseXMLMarkers(markers: DAWMarker[], projectName: string): st
  * Generate MIDI file with markers (most reliable Pro Tools import method)
  */
 function generateMIDIWithMarkers(markers: DAWMarker[], projectName: string): Uint8Array {
-  // MIDI file with SMPTE timecode for Cubase/Pro Tools compatibility
-  // Using 30fps SMPTE timing instead of tempo-based timing for precise audio sync
+  // MIDI file with markers - revert to original working tempo-based method
+  // Proper track setup for Cubase marker recognition
   
   const midiData = [];
   
   // MIDI file header
   midiData.push(...[0x4D, 0x54, 0x68, 0x64]); // "MThd"
   midiData.push(...[0x00, 0x00, 0x00, 0x06]); // Header length
-  midiData.push(...[0x00, 0x00]); // Format 0
+  midiData.push(...[0x00, 0x00]); // Format 0 (single track)
   midiData.push(...[0x00, 0x01]); // 1 track
-  // Use SMPTE timecode: 30fps, 4 ticks per frame = 120 ticks per second
-  midiData.push(...[0xE2, 0x04]); // -30fps (0xE2 = -30), 4 ticks per frame
+  midiData.push(...[0x03, 0xC0]); // 960 ticks per quarter note (standard resolution)
   
   // Track header
   midiData.push(...[0x4D, 0x54, 0x72, 0x6B]); // "MTrk"
   
   const trackData = [];
   
-  // No tempo events needed for SMPTE timing - time is absolute
+  // Set track name first (important for Cubase marker recognition)
+  const trackNameText = `${projectName} Markers`;
+  const trackNameBytes = Array.from(new TextEncoder().encode(trackNameText));
+  trackData.push(0x00, 0xFF, 0x03, trackNameBytes.length, ...trackNameBytes);
+  
+  // Set tempo to 120 BPM (500000 microseconds per quarter note)
+  trackData.push(0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20);
+  
+  // Set time signature to 4/4
+  trackData.push(0x00, 0xFF, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08);
   
   // Sort markers by timestamp to ensure proper order
   const sortedMarkers = [...markers].sort((a, b) => a.timestamp - b.timestamp);
   
-  // Add markers as MIDI marker events with SMPTE timing
+  // Add markers as MIDI marker events
   let previousTicks = 0;
   
   sortedMarkers.forEach((marker, index) => {
-    // Convert seconds to SMPTE ticks
-    // 30fps * 4 ticks per frame = 120 ticks per second
-    // This gives precise 1:1 timing with audio regardless of DAW tempo
-    const absoluteTicks = Math.round(marker.timestamp * 120);
-    const deltaTime = absoluteTicks - previousTicks;
+    // Convert seconds to MIDI ticks with precise calculation
+    // At 120 BPM: 1 beat = 0.5 seconds, 1 quarter note = 960 ticks  
+    // So: 1 second = 1920 ticks (960 ticks/quarter * 2 quarters/second)
+    // Use Math.round for better precision
+    const absoluteTicks = Math.round(marker.timestamp * 1920);
+    const deltaTime = Math.max(0, absoluteTicks - previousTicks);
     previousTicks = absoluteTicks;
     
     // Variable length quantity for delta time
     const deltaBytes = encodeVariableLength(deltaTime);
     trackData.push(...deltaBytes);
     
-    // Marker meta event
-    trackData.push(0xFF, 0x06); // Marker meta event
+    // Marker meta event (0xFF 0x06)
+    trackData.push(0xFF, 0x06);
     
-    // Create clean marker text without emojis
+    // Create clean marker text without emojis for better Cubase compatibility
     const cleanText = createCleanMarkerText(marker);
     const textBytes = Array.from(new TextEncoder().encode(cleanText));
     const lengthBytes = encodeVariableLength(textBytes.length);

@@ -117,7 +117,7 @@ function getAnnotationColor(annotation: any): string {
     case 'issue': return '#ef4444';
     case 'approval': return '#22c55e';
     case 'marker': return '#f59e0b';
-    case 'voice': return '#8b5cf6';
+    case 'voice': return '#3b82f6';
     case 'section': return '#06b6d4';
     default: return '#71A9F7';
   }
@@ -1374,10 +1374,18 @@ ${'='.repeat(40)}
    
 ✅ DONE! Audio, voice notes, and all markers load perfectly.
 
-📍 MARKERS: ${markers.length} Memory Locations imported
+📍 MARKERS: ${markers.length} Color-coded Memory Locations imported
 🎵 MAIN AUDIO: Professional quality preserved
-🎤 VOICE NOTES: ${voiceNoteCount > 0 ? `${voiceNoteCount} separate voice tracks` : 'No voice notes found'}
+🎤 VOICE NOTES: ${voiceNoteCount > 0 ? `${voiceNoteCount} separate voice tracks (BLUE markers)` : 'No voice notes found'}
 🔧 OPTIMIZED: Pro Tools 2020.1+ & Cubase (MIDI + XML options)
+
+🎨 MARKER COLORS:
+🔴 Red - Critical priority & Issues
+🟠 Orange - High priority & Markers  
+🟡 Yellow - Medium priority
+🟢 Green - Low priority & Approvals
+🔵 Blue - Voice notes & Comments
+🔷 Cyan - Sections
 
 📚 See PRO_TOOLS_IMPORT_GUIDE.txt for detailed instructions.
 `;
@@ -1421,6 +1429,16 @@ Two methods provided for best compatibility:
 • XML doesn't import → Try MIDI method with correct tempo
 
 ✅ RESULT: Perfect marker timing in Cubase with either method!
+
+🎨 MARKER COLORS IN CUBASE:
+🔴 Red - Critical priority & Issues
+🟠 Orange - High priority & Markers  
+🟡 Yellow - Medium priority
+🟢 Green - Low priority & Approvals
+🔵 Blue - Voice notes & Comments
+🔷 Cyan - Sections
+
+Colors appear automatically in Cubase timeline for easy identification!
 `;
     docFolder.file('CUBASE_IMPORT_GUIDE.txt', cubaseInstructions);
 
@@ -1457,13 +1475,21 @@ function generateCubaseXMLMarkers(markers: DAWMarker[], projectName: string): st
 
   sortedMarkers.forEach((marker, index) => {
     const timeInSeconds = marker.timestamp;
-    const cleanText = marker.label.replace(/[<>&"']/g, ''); // Remove XML-unsafe characters
+    const cleanText = createColoredMarkerText(marker).replace(/[<>&"']/g, ''); // Remove XML-unsafe characters
+    const color = marker.color || '#71A9F7';
+    
+    // Convert hex color to RGB values for Cubase
+    const hexColor = color.replace('#', '');
+    const r = parseInt(hexColor.substr(0, 2), 16);
+    const g = parseInt(hexColor.substr(2, 2), 16);
+    const b = parseInt(hexColor.substr(4, 2), 16);
     
     xml += `    <marker>
       <id>${index + 1}</id>
       <name>${cleanText}</name>
       <position>${timeInSeconds.toFixed(6)}</position>
       <type>marker</type>
+      <color r="${r}" g="${g}" b="${b}"/>
     </marker>
 `;
   });
@@ -1528,13 +1554,22 @@ function generateMIDIWithMarkers(markers: DAWMarker[], projectName: string): Uin
     // Marker meta event (0xFF 0x06)
     trackData.push(0xFF, 0x06);
     
-    // Create clean marker text without emojis for better Cubase compatibility
-    const cleanText = createCleanMarkerText(marker);
+    // Create clean marker text with color prefix for Cubase/Pro Tools
+    const cleanText = createColoredMarkerText(marker);
     const textBytes = Array.from(new TextEncoder().encode(cleanText));
     const lengthBytes = encodeVariableLength(textBytes.length);
     
     trackData.push(...lengthBytes);
     trackData.push(...textBytes);
+    
+    // Add color information as custom meta event (for DAWs that support it)
+    trackData.push(0x00); // Zero delta time for color event
+    trackData.push(0xFF, 0x7F); // Custom meta event
+    const colorHex = (marker.color || '#71A9F7').replace('#', '');
+    const colorBytes = Array.from(new TextEncoder().encode(`COLOR:${colorHex}`));
+    const colorLengthBytes = encodeVariableLength(colorBytes.length);
+    trackData.push(...colorLengthBytes);
+    trackData.push(...colorBytes);
   });
   
   // End of track
@@ -1578,6 +1613,43 @@ function createCleanMarkerText(marker: DAWMarker): string {
     .trim();
   
   return `${priorityText}${typeText} (${username}): ${originalText}`;
+}
+
+/**
+ * Create colored marker text for MIDI with color indicators
+ */
+function createColoredMarkerText(marker: DAWMarker): string {
+  const username = marker.username || 'Unknown';
+  
+  // Convert type to readable text with color indicators
+  const typeText = getAnnotationTypeText(marker.annotationType || 'comment');
+  
+  // Add color-based prefixes for visual identification
+  let colorPrefix = '';
+  const color = marker.color || '#71A9F7';
+  
+  // Map colors to visual prefixes for better identification in DAWs
+  if (color === '#ef4444') colorPrefix = '🔴 '; // Red (critical/issue)
+  else if (color === '#f59e0b') colorPrefix = '🟠 '; // Orange (high/marker)
+  else if (color === '#eab308') colorPrefix = '🟡 '; // Yellow (medium)
+  else if (color === '#22c55e') colorPrefix = '🟢 '; // Green (low/approval)
+  else if (color === '#3b82f6') colorPrefix = '🔵 '; // Blue (voice notes)
+  else if (color === '#06b6d4') colorPrefix = '🔷 '; // Cyan (section)
+  else colorPrefix = '🔵 '; // Default blue
+  
+  // Priority text for important items
+  const priorityText = marker.priority === 'critical' ? '[CRITICAL] ' : 
+                      marker.priority === 'high' ? '[HIGH] ' : '';
+  
+  // Extract clean text from the original marker label
+  const originalText = marker.label
+    .replace(/🔥\s*/g, '')
+    .replace(/⚡\s*/g, '')
+    .replace(/[⚠️✅📍🎵🎤💬🔴🟠🟡🟢🔵🔷]\s*/g, '')
+    .replace(/^\w+:\s*/, '') // Remove "username: " prefix if present
+    .trim();
+  
+  return `${colorPrefix}${priorityText}${typeText} (${username}): ${originalText}`;
 }
 
 /**

@@ -554,7 +554,7 @@ const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-0 sm:p-4">
-      <div className="bg-skribble-dark border border-skribble-azure/20 w-full h-full sm:rounded-2xl sm:max-w-4xl sm:w-full sm:max-h-[90vh] sm:h-auto overflow-hidden flex flex-col">
+      <div className="bg-skribble-dark border border-skribble-azure/20 w-full h-full sm:rounded-2xl sm:max-w-4xl sm:w-full sm:max-h-[90vh] sm:h-auto overflow-hidden flex flex-col shadow-2xl shadow-skribble-dark/50">
         
         {/* Mobile-Responsive Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-skribble-azure/20 flex-shrink-0">

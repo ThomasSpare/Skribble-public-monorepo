@@ -764,7 +764,7 @@ export default function DashboardPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20">
+          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 shadow-md shadow-skribble-dark/15 hover:shadow-lg hover:shadow-skribble-azure/20 transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-skribble-azure text-sm">Active Projects</p>
@@ -774,7 +774,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20">
+          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 shadow-md shadow-skribble-dark/15 hover:shadow-lg hover:shadow-skribble-azure/20 transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-skribble-azure text-sm">Collaborators</p>
@@ -785,7 +785,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ✨ FIXED: Enhanced annotations display */}
-          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20">
+          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 shadow-md shadow-skribble-dark/15 hover:shadow-lg hover:shadow-skribble-azure/20 transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-skribble-azure text-sm">Total Annotations</p>
@@ -806,7 +806,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20">
+          <div className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 shadow-md shadow-skribble-dark/15 hover:shadow-lg hover:shadow-skribble-azure/20 transition-all duration-300">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-skribble-azure text-sm">Total Projects</p>
@@ -837,7 +837,7 @@ export default function DashboardPage() {
               </button>
               <button 
                 onClick={() => setShowUpload(true)}
-                className="flex items-center gap-2 bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-4 py-2 rounded-lg hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105"
+                className="flex items-center gap-2 bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-4 py-2 rounded-lg shadow-lg shadow-skribble-azure/25 hover:shadow-xl hover:shadow-skribble-azure/40 transition-all duration-300 hover:scale-105"
               >
                 <Plus className="w-4 h-4" />
                 New Project
@@ -862,7 +862,7 @@ export default function DashboardPage() {
                 .map((project) => (
                 <div
                   key={project.id}
-                  className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 hover:border-skribble-azure/40 transition-all duration-300 hover:transform hover:scale-105 cursor-pointer group"
+                  className="bg-skribble-plum/30 backdrop-blur-md rounded-xl p-6 border border-skribble-azure/20 hover:border-skribble-azure/40 transition-all duration-300 hover:transform hover:scale-105 cursor-pointer group shadow-lg shadow-skribble-dark/20 hover:shadow-2xl hover:shadow-skribble-azure/30"
                 >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1" onClick={() => router.push(`/project/${project.id}`)}>

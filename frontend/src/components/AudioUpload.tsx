@@ -276,7 +276,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl border border-skribble-azure/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-skribble-plum/30 backdrop-blur-md rounded-2xl border border-skribble-azure/20 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl shadow-skribble-dark/40">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-skribble-azure/20">
           <h2 className="text-2xl font-madimi text-skribble-sky">Upload Audio</h2>
@@ -334,10 +334,10 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
           {!selectedFile && (
             <div
               {...getRootProps()}
-              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all shadow-inner ${
                 isDragActive
-                  ? 'border-skribble-azure bg-skribble-azure/10'
-                  : 'border-skribble-azure/30 hover:border-skribble-azure/50'
+                  ? 'border-skribble-azure bg-skribble-azure/10 shadow-lg shadow-skribble-azure/20'
+                  : 'border-skribble-azure/30 hover:border-skribble-azure/50 hover:shadow-md hover:shadow-skribble-azure/15'
               }`}
             >
               <input {...getInputProps()} />
@@ -458,7 +458,7 @@ export default function AudioUpload({ onUploadComplete, onClose }: AudioUploadPr
               <button
                 onClick={handleUpload}
                 disabled={isUploading || !title.trim()}
-                className="flex items-center gap-2 bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-6 py-2 rounded-lg font-medium hover:shadow-lg hover:shadow-skribble-azure/25 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:transform-none"
+                className="flex items-center gap-2 bg-gradient-to-r from-skribble-azure to-skribble-purple text-white px-6 py-2 rounded-lg font-medium shadow-md shadow-skribble-azure/20 hover:shadow-xl hover:shadow-skribble-azure/40 transition-all duration-300 hover:scale-105 disabled:opacity-50 disabled:transform-none disabled:shadow-sm"
               >
                 {isUploading ? (
                   <>
